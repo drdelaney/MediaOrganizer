@@ -7,11 +7,11 @@
 
 	<title><?= esc($title) ?></title>
 	<style type="text/css">
-		<?= preg_replace('#[\r\n\t ]+#', ' ', file_get_contents(__DIR__ . DIRECTORY_SEPARATOR)) ?>
+		<?= preg_replace('#[\r\n\t ]+#', ' ', file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . 'debug.css')) ?>
 	</style>
 
 	<script type="text/javascript">
-		<?= file_get_contents(__DIR__ . DIRECTORY_SEPARATOR) ?>
+		<?= file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . 'debug.js') ?>
 	</script>
 </head>
 <body onload="init()">
