@@ -1,0 +1,47 @@
+conditionalTags:
+	PhpParser\NodeVisitor\NodeConnectingVisitor:
+		phpstan.parser.richParserNodeVisitor: true
+
+services:
+	-
+		class: Utils\PHPStan\CheckUseStatementsAfterLicenseRule
+		tags:
+			- phpstan.rules.rule
+	-
+		class: Utils\PHPStan\CheckFrameworkExceptionInstantiationViaNamedConstructorRule
+		tags:
+			- phpstan.rules.rule
+
+includes:
+	- phpstan-baseline.neon.dist
+
+parameters:
+	phpVersion: 80000
+	tmpDir: build/phpstan
+	level: 5
+	paths:
+		- app
+		- system
+		- utils/PHPStan
+	treatPhpDocTypesAsCertain: false
+	bootstrapFiles:
+		- phpstan-bootstrap.php
+	excludePaths:
+		- app/Views/errors/cli/*
+		- app/Views/errors/html/*
+		- system/Commands/Generators/Views/*
+		- system/Config/Routes.php
+		- system/Debug/Toolbar/Views/toolbar.tpl.php
+		- system/Images/Handlers/GDHandler.php
+		- system/Test/Filters/CITestStreamFilter.php
+		- system/ThirdParty/*
+		- system/Validation/Views/single.php
+	parallel:
+		processTimeout: 300.0
+	scanDirectories:
+		- system/Helpers
+	dynamicConstantNames:
+		- APP_NAMESPACE
+		- CI_DEBUG
+		- ENVIRONMENT
+		- SODIUM_LIBRARY_VERSION
