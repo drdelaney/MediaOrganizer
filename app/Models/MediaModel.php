@@ -4,12 +4,13 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
-class Media extends Model
-{
+class MediaModel extends Model {
     protected $table = 'media';
+    protected $allowedFields = [
+        'title'
+    ];
 
-    public function getTitle($title = false)
-    {
+    public function getTitle($title = false) {
         if ($title === false) {
             return $this->findAll();
         }

@@ -4,10 +4,8 @@ namespace App\Controllers;
 use App\Models\UserModel;
 use CodeIgniter\Controller;
 
-class Register extends Controller
-{
-    public function index()
-    {
+class Register extends Controller {
+    public function index() {
         //include helper form
         helper(['form']);
         $data = [];
@@ -16,8 +14,7 @@ class Register extends Controller
         echo view('loginpages/template', $data);
     }
 
-    public function save()
-    {
+    public function save() {
         //include helper form
         helper(['form']);
         //set rules validation form
@@ -28,7 +25,7 @@ class Register extends Controller
             'confpassword'  => 'matches[password]'
         ];
 
-        if($this->validate($rules)){
+        if ($this->validate($rules)) {
             $model = new UserModel();
             $data = [
                 'username'     => $this->request->getVar('username'),
@@ -37,7 +34,7 @@ class Register extends Controller
             ];
             $model->save($data);
             return redirect()->to('/login');
-        }else{
+        } else {
             $data['validation'] = $this->validator;
             echo view('register', $data);
         }
