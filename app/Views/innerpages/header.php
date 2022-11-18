@@ -6,13 +6,13 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
     <title><?=$title?></title>
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.11.2/css/all.css" />
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.2.0/css/all.css" />
     <!-- Google Fonts Roboto -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
     <!-- MDB -->
-    <link rel="stylesheet" href="css/mdb.min.css" />
+    <link rel="stylesheet" href="/css/mdb.min.css" />
     <!-- Custom styles -->
-    <link rel="stylesheet" href="css/admin.css" />
+    <link rel="stylesheet" href="/css/admin.css" />
 </head>
 
 <body>
@@ -20,34 +20,25 @@
 <header>
     <!-- Sidebar -->
     <nav id="sidebarMenu" class="collapse d-lg-block sidebar collapse bg-white">
-        <div class="position-sticky">
+    <div class="position-sticky">
+            <?php $activeNav = $activeNav ?? ''; ?>
             <div class="list-group list-group-flush mx-3 mt-4">
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple" aria-current="true">
-                    <i class="fas fa-tachometer-alt fa-fw me-3"></i><span>Main dashboard</span>
-                </a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple<?=$activeNav == 'media' ? ' active' : ''?>">
-                    <i class="fas fa-chart-area fa-fw me-3"></i><span>Media</span>
-                </a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple"><i
-                        class="fas fa-chart-line fa-fw me-3"></i><span>Lenders</span></a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple">
-                    <i class="fas fa-chart-pie fa-fw me-3"></i><span>SEO</span></a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple"><i
-                        class="fas fa-chart-bar fa-fw me-3"></i><span>Orders</span></a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple"><i
-                        class="fas fa-building fa-fw me-3"></i><span>Partners</span></a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple"><i
-                        class="fas fa-calendar fa-fw me-3"></i><span>Calendar</span></a>
-                <a href="#" class="list-group-item list-group-item-action py-2 ripple"><i
-                        class="fas fa-users fa-fw me-3"></i><span>Users</span></a>
+                <a href="#" class="list-group-item list-group-item-action py-2 ripple"<?=$activeNav == 'main' ? ' active' : ''?>">
+                    <i class="fas fa-tachometer-alt fa-fw me-3"></i><span>Main dashboard</span></a>
+                <a href="/media" class="list-group-item list-group-item-action py-2 ripple<?=$activeNav == 'media' ? ' active' : ''?>">
+                    <i class="fas fa-chart-area fa-fw me-3"></i><span>Media</span></a>
+                <a href="#" class="list-group-item list-group-item-action py-2 ripple"<?=$activeNav == 'rent' ? ' active' : ''?>">
+                    <i class="fas fa-circle-up me-3"></i><span>Rent List</span></a>
+                <a href="#" class="list-group-item list-group-item-action py-2 ripple"<?=$activeNav == 'renters' ? ' active' : ''?>">
+                    <i class="fas fa-users me-3"></i><span>Renters</span></a>
             </div>
         </div>
     </nav>
     <!-- Sidebar -->
 
     <!-- Navbar -->
-    <nav id="main-navbar" class="navbar navbar-expand-md navbar-light bg-light fixed-top">
-        <!-- Container wrapper -->
+    <nav id="main-navbar" class="navbar navbar-expand-lg navbar-light bg-white fixed-top">
+    <!-- Container wrapper -->
         <div class="container-fluid">
             <!-- Toggle button -->
             <button class="navbar-toggler" type="button" data-mdb-toggle="collapse" data-mdb-target="#sidebarMenu"

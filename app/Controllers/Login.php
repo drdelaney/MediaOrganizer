@@ -6,7 +6,7 @@ use CodeIgniter\Controller;
 
 class Login extends Controller
 {
-    public function index() {
+    public function getIndex() {
         $data = [];
         $data['title'] 		= 'Page Title. Yay';
         $data['heading']	= 'Welcome to ....';

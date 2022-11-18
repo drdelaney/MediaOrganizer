@@ -6,14 +6,64 @@ use CodeIgniter\Model;
 
 class MediaModel extends Model {
     protected $table = 'media';
+    protected $primaryKey = 'id';
+
+    //protected $useTimestamps = false;
+    //protected $createdField  = 'created_at';
+
+
     protected $allowedFields = [
-        'title'
+        //'id', We cannot set ID, so it's not allowed.
+        'number',
+        'collection_id',
+        'volume_id',
+        'medium_id',
+        'vcodec_id',
+        'loaned',
+        'seen',
+        'rating',
+        'color',
+        'cond',
+        'layers',
+        'region',
+        'media_num',
+        'runtime',
+        'year',
+        'o_title',
+        'title',
+        'director',
+        'o_site',
+        'site',
+        'trailer',
+        'country',
+        'genre',
+        'image',
     ];
 
-    public function getTitle($title = false) {
-        if ($title === false) {
+    protected $validationRules = [
+
+    ];
+
+    protected $validationMessages = [];
+    protected $skipValidation     = false;
+
+
+    public function getAll() {
+        return $this->findAll();
+    }
+
+    public function getTitle(string $title) {
+        $result = $this->where(['title' => $title])->first();
+        if (empty($result)) {
             return $this->findAll();
         }
-        return $this->where(['title' => $title])->first();
+        return $result;
+    }
+
+    public function getSearch(string $search, string $filter = null) {
+        $db = \Config\Database::connect();
+        $builder = $db->table($this->table);
+        $result = $builder->like('title', $search)->get();
+        return $result->getResultObject();
     }
 }

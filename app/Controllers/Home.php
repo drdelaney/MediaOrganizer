@@ -4,7 +4,7 @@ namespace App\Controllers;
 
 class Home extends BaseController
 {
-    public function index() {
+    public function getIndex() {
         $data = [];
         $data['title'] 		= 'Page Title. Yay';
         $data['heading']	= 'Welcome to ....';

@@ -5,7 +5,7 @@ use App\Models\UserModel;
 use CodeIgniter\Controller;
 
 class Register extends Controller {
-    public function index() {
+    public function getIndex() {
         //include helper form
         helper(['form']);
         $data = [];
@@ -38,6 +38,5 @@ class Register extends Controller {
             $data['validation'] = $this->validator;
             echo view('register', $data);
         }
-
     }
 }

@@ -73,7 +73,7 @@ abstract class BaseModel
      *
      * @var string
      */
-    protected $returnType = 'array';
+    protected $returnType = 'object';
 
     /**
      * If this model should use "softDeletes" and
