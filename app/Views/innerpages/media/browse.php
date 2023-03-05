@@ -1,4 +1,4 @@
-<div class="row"><div class="col-12"><h2>Media</h2></div></div>
+<div class="row"><div class="col-12"><h4>Media</h4></div></div>
 <?php if(isset($validation)):?>
     <div class="alert alert-danger"><?= $validation->listErrors() ?></div>
 <?php endif;?>
@@ -36,11 +36,11 @@
                                 <div class="modal-dialog modal-lg">
                                     <div class="modal-content">
                                         <form action="/media/create" method="post">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title" id="staticBackdropLabel">New Media</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="staticBackdropLabel">New Media</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
                                                 <div class="container">
                                                     <div class="row">
                                                         <div class="form-outline mb-4 col-4">
@@ -57,11 +57,11 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save</button>
-                                        </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary">Save</button>
+                                            </div>
                                         </form>
                                     </div>
                                 </div>
@@ -93,17 +93,17 @@
                                 // Let's not display all the cast, as it can greatly increase the size of a row.
                                 . "<td>" . (strlen($media->cast) > 100 ? substr($media->cast, 0, 100) . "..." : $media->cast) . "</td>"
                                 . "<td>" . $media->runtime . "</td>"
-                            . "</tr>";
+                                . "</tr>";
                         } else if (isset($media[0])) {
                             foreach ($media as $row) {
-                                echo "<tr>"
+                                echo "<tr style='cursor:pointer;' onclick='location.href=\"media/id/" . $row->id . "\"'>"
                                     . "<td>" . $row->title . "</td>"
                                     . "<td>" . $row->genre . "</td>"
                                     . "<td>" . $row->director . "</td>"
                                     . "<td>" . (strlen($row->cast) > 100 ? substr($row->cast, 0, 100) . "..." : $row->cast) . "</td>"
                                     . "<td>" . $row->runtime . "</td>"
-                                . "</tr>";
-                           }
+                                    . "</tr>";
+                            }
                         }
                     }
                     ?>

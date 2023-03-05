@@ -128,3 +128,4 @@ nb-configuration.xml
 /.phpunit.*.cache
 
 /.php-cs-fixer.php
+/.env

@@ -10,7 +10,7 @@
     <!-- Google Fonts Roboto -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
     <!-- MDB -->
-    <link rel="stylesheet" href="/css/mdb.min.css" />
+    <link rel="stylesheet" href="/css/mdb.<?php echo getenv('DARK_THEME') === true ? 'dark.' : '' ?>min.css" />
     <!-- Custom styles -->
     <link rel="stylesheet" href="/css/admin.css" />
 </head>

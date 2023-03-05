@@ -7,14 +7,13 @@ use CodeIgniter\Model;
 class MediaModel extends Model {
     protected $table = 'media';
     protected $primaryKey = 'id';
-
+    protected $returnType    = \App\Entities\Media::class;
     //protected $useTimestamps = false;
     //protected $createdField  = 'created_at';
 
 
     protected $allowedFields = [
         //'id', We cannot set ID, so it's not allowed.
-        'number',
         'collection_id',
         'volume_id',
         'medium_id',
@@ -55,7 +54,7 @@ class MediaModel extends Model {
     public function getTitle(string $title) {
         $result = $this->where(['title' => $title])->first();
         if (empty($result)) {
-            return $this->findAll();
+            return [];
         }
         return $result;
     }
@@ -63,7 +62,16 @@ class MediaModel extends Model {
     public function getSearch(string $search, string $filter = null) {
         $db = \Config\Database::connect();
         $builder = $db->table($this->table);
-        $result = $builder->like('title', $search)->get();
+        // Need true for case-insensitive
+        $result = $builder->like('title', $search, 'both', null, true)->get();
         return $result->getResultObject();
+    }
+
+    public function getById($id) {
+        $result = $this->where(['id' => $id])->first();
+        if (empty($result)) {
+            return [];
+        }
+        return $result;
     }
 }

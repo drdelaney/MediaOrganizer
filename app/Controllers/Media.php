@@ -5,45 +5,58 @@ use App\Models\MediaModel;
 
 class Media extends BaseController {
     private string $pageTitle = 'Media';
-    private string $pageMainContent = 'media';
+    private string $browsePage = 'innerpages/media/browse';
+    private string $entityPage = 'innerpages/media/media';
     private string $pageActiveNav = 'media';
 
+    private $model;
+
+    public function __construct() {
+        $this->model = new MediaModel();
+    }
     public function getIndex() {
         //include helper form
-        $model = model(MediaModel::class);
         $data = [];
-        $data['media'] = $model->getAll();
+        $data['media'] = $this->model->getAll();
         $data['title'] = $this->pageTitle;
-        $data['main_content'] = $this->pageMainContent;
+        $data['main_content'] = $this->browsePage;
         $data['activeNav'] = $this->pageActiveNav;
         echo view('innerpages/template', $data);
     }
 
     public function getTitle($title) : string {
-        $model = model(MediaModel::class);
-        $data['media'] = $model->getTitle($title);
+        $data['media'] = $this->model->getTitle($title);
         $data['title'] = $this->pageTitle;
-        $data['main_content'] = $this->pageMainContent;
+        $data['main_content'] = $this->entityPage;
         $data['activeNav'] = $this->pageActiveNav;
         if (empty($data['media'])) {
-            throw new \CodeIgniter\Exceptions\PageNotFoundException('Cannot find the news item: ' . $title);
+            throw new \CodeIgniter\Exceptions\PageNotFoundException('Cannot find the movie item: ' . $title);
         }
-        $data['title'] = $data['media']->title;
         return view('innerpages/template', $data);
     }
 
     public function getSearch() : string {
         $search = $_GET['search'];
         //TODO: $filter = $_GET['filter'];
-        $model = model(MediaModel::class);
-        $data['media'] = $model->getSearch($search);
+        $data['media'] = $this->model->getSearch($search);
         $data['title'] = $this->pageTitle;
-        $data['main_content'] = $this->pageMainContent;
+        $data['main_content'] = $this->browsePage;
         $data['activeNav'] = $this->pageActiveNav;
         if (empty($data['media'])) {
             $data['not_found'] = 'Cannot find the news item: ' . $search;
             // Probably better to just throw an error and show all media instead of just returning a blank page with an error of not found.
             //throw new \CodeIgniter\Exceptions\PageNotFoundException();
+        }
+        return view('innerpages/template', $data);
+    }
+
+    public function getId($id) {
+        $data['media'] = $this->model->getById($id);
+        $data['title'] = $this->pageTitle;
+        $data['main_content'] = $this->entityPage;
+        $data['activeNav'] = $this->pageActiveNav;
+        if (empty($data['media'])) {
+            throw new \CodeIgniter\Exceptions\PageNotFoundException('Cannot find the movie by id: ' . $id);
         }
         return view('innerpages/template', $data);
     }
@@ -62,10 +75,12 @@ class Media extends BaseController {
                 'title' => $this->request->getVar('title'),
             ];
             $model->save($data);
+            $data['title'] = $this->pageTitle;
+            $data['main_content'] = $this->entityPage;
+            $data['activeNav'] = $this->pageActiveNav;
         } else {
             $data['validation'] = $this->validator;
-            $data['title'] = $this->pageTitle;
-            $data['main_content'] = $this->pageMainContent;
+            $data['main_content'] = $this->browsePage;
             $data['activeNav'] = $this->pageActiveNav;
             $data['title'] = $this->pageTitle;
         }
