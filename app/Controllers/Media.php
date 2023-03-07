@@ -94,4 +94,8 @@ class Media extends BaseController {
             ]);
         }
     }
+
+    public function postDelete(int $id) {
+        //TODO
+    }
 }
