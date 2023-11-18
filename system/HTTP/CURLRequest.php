@@ -18,8 +18,10 @@ use InvalidArgumentException;
 
 /**
  * A lightweight HTTP client for sending synchronous HTTP requests via cURL.
+ *
+ * @see \CodeIgniter\HTTP\CURLRequestTest
  */
-class CURLRequest extends Request
+class CURLRequest extends OutgoingRequest
 {
     /**
      * The response object associated with this request
@@ -27,6 +29,13 @@ class CURLRequest extends Request
      * @var ResponseInterface|null
      */
     protected $response;
+
+    /**
+     * The original response object associated with this request
+     *
+     * @var ResponseInterface|null
+     */
+    protected $responseOrig;
 
     /**
      * The URI associated with this request
@@ -96,8 +105,6 @@ class CURLRequest extends Request
      *  - baseURI
      *  - timeout
      *  - any other request options to use as defaults.
-     *
-     * @param ResponseInterface $response
      */
     public function __construct(App $config, URI $uri, ?ResponseInterface $response = null, array $options = [])
     {
@@ -105,14 +112,14 @@ class CURLRequest extends Request
             throw HTTPException::forMissingCurl(); // @codeCoverageIgnore
         }
 
-        parent::__construct($config);
+        parent::__construct('GET', $uri);
 
-        $this->response       = $response;
+        $this->responseOrig   = $response ?? new Response(config(App::class));
         $this->baseURI        = $uri->useRawQueryString();
         $this->defaultOptions = $options;
 
         /** @var ConfigCURLRequest|null $configCURLRequest */
-        $configCURLRequest  = config('CURLRequest');
+        $configCURLRequest  = config(ConfigCURLRequest::class);
         $this->shareOptions = $configCURLRequest->shareOptions ?? true;
 
         $this->config = $this->defaultConfig;
@@ -127,6 +134,8 @@ class CURLRequest extends Request
      */
     public function request($method, string $url, array $options = []): ResponseInterface
     {
+        $this->response = clone $this->responseOrig;
+
         $this->parseOptions($options);
 
         $url = $this->prepareURL($url);
@@ -144,6 +153,8 @@ class CURLRequest extends Request
 
     /**
      * Reset all options to default.
+     *
+     * @return void
      */
     protected function resetOptions()
     {
@@ -256,7 +267,7 @@ class CURLRequest extends Request
     /**
      * Set JSON data to be sent.
      *
-     * @param mixed $data
+     * @param array|bool|float|int|object|string|null $data
      *
      * @return $this
      */
@@ -270,6 +281,8 @@ class CURLRequest extends Request
     /**
      * Sets the correct settings based on the options array
      * passed in.
+     *
+     * @return void
      */
     protected function parseOptions(array $options)
     {
@@ -293,6 +306,11 @@ class CURLRequest extends Request
             unset($options['delay']);
         }
 
+        if (array_key_exists('body', $options)) {
+            $this->setBody($options['body']);
+            unset($options['body']);
+        }
+
         foreach ($options as $key => $value) {
             $this->config[$key] = $value;
         }
@@ -312,7 +330,13 @@ class CURLRequest extends Request
         $uri = $this->baseURI->resolveRelativeURI($url);
 
         // Create the string instead of casting to prevent baseURL muddling
-        return URI::createURIString($uri->getScheme(), $uri->getAuthority(), $uri->getPath(), $uri->getQuery(), $uri->getFragment());
+        return URI::createURIString(
+            $uri->getScheme(),
+            $uri->getAuthority(),
+            $uri->getPath(),
+            $uri->getQuery(),
+            $uri->getFragment()
+        );
     }
 
     /**
@@ -366,6 +390,10 @@ class CURLRequest extends Request
         $breakString = "\r\n\r\n";
 
         if (strpos($output, 'HTTP/1.1 100 Continue') === 0) {
+            $output = substr($output, strpos($output, $breakString) + 4);
+        }
+
+        if (strpos($output, 'HTTP/1.1 200 Connection established') === 0) {
             $output = substr($output, strpos($output, $breakString) + 4);
         }
 
@@ -457,6 +485,8 @@ class CURLRequest extends Request
     /**
      * Parses the header retrieved from the cURL response into
      * our Response object.
+     *
+     * @return void
      */
     protected function setResponseHeaders(array $headers = [])
     {
@@ -474,7 +504,7 @@ class CURLRequest extends Request
                 }
 
                 if (isset($matches[2])) {
-                    $this->response->setStatusCode($matches[2], $matches[3] ?? null);
+                    $this->response->setStatusCode((int) $matches[2], $matches[3] ?? null);
                 }
             }
         }
@@ -483,9 +513,9 @@ class CURLRequest extends Request
     /**
      * Set CURL options
      *
-     * @throws InvalidArgumentException
-     *
      * @return array
+     *
+     * @throws InvalidArgumentException
      */
     protected function setCURLOptions(array $curlOptions = [], array $config = [])
     {
@@ -532,6 +562,12 @@ class CURLRequest extends Request
             }
         }
 
+        // Proxy
+        if (isset($config['proxy'])) {
+            $curlOptions[CURLOPT_HTTPPROXYTUNNEL] = true;
+            $curlOptions[CURLOPT_PROXY]           = $config['proxy'];
+        }
+
         // Debug
         if ($config['debug']) {
             $curlOptions[CURLOPT_VERBOSE] = 1;
@@ -542,7 +578,7 @@ class CURLRequest extends Request
         if (! empty($config['decode_content'])) {
             $accept = $this->getHeaderLine('Accept-Encoding');
 
-            if ($accept) {
+            if ($accept !== '') {
                 $curlOptions[CURLOPT_ENCODING] = $accept;
             } else {
                 $curlOptions[CURLOPT_ENCODING]   = '';
@@ -619,6 +655,8 @@ class CURLRequest extends Request
                 $curlOptions[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_0;
             } elseif ($config['version'] === 1.1) {
                 $curlOptions[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
+            } elseif ($config['version'] === 2.0) {
+                $curlOptions[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2_0;
             }
         }
 

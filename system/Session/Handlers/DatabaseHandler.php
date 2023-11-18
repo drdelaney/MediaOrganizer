@@ -14,8 +14,8 @@ namespace CodeIgniter\Session\Handlers;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Session\Exceptions\SessionException;
-use Config\App as AppConfig;
 use Config\Database;
+use Config\Session as SessionConfig;
 use ReturnTypeWillChange;
 
 /**
@@ -61,21 +61,28 @@ class DatabaseHandler extends BaseHandler
     protected $rowExists = false;
 
     /**
+     * ID prefix for multiple session cookies
+     */
+    protected string $idPrefix;
+
+    /**
      * @throws SessionException
      */
-    public function __construct(AppConfig $config, string $ipAddress)
+    public function __construct(SessionConfig $config, string $ipAddress)
     {
         parent::__construct($config, $ipAddress);
-        $this->table = $config->sessionSavePath;
 
+        // Store Session configurations
+        $this->DBGroup = $config->DBGroup ?? config(Database::class)->defaultGroup;
+        // Add sessionCookieName for multiple session cookies.
+        $this->idPrefix = $config->cookieName . ':';
+
+        $this->table = $this->savePath;
         if (empty($this->table)) {
             throw SessionException::forMissingDatabaseTable();
         }
 
-        $this->DBGroup = $config->sessionDBGroup ?? config(Database::class)->defaultGroup;
-
-        $this->db = Database::connect($this->DBGroup);
-
+        $this->db       = Database::connect($this->DBGroup);
         $this->platform = $this->db->getPlatform();
     }
 
@@ -115,7 +122,7 @@ class DatabaseHandler extends BaseHandler
             $this->sessionID = $id;
         }
 
-        $builder = $this->db->table($this->table)->where('id', $id);
+        $builder = $this->db->table($this->table)->where('id', $this->idPrefix . $id);
 
         if ($this->matchIP) {
             $builder = $builder->where('ip_address', $this->ipAddress);
@@ -154,7 +161,7 @@ class DatabaseHandler extends BaseHandler
     /**
      * Decodes column data
      *
-     * @param mixed $data
+     * @param string $data
      *
      * @return false|string
      */
@@ -182,7 +189,7 @@ class DatabaseHandler extends BaseHandler
 
         if ($this->rowExists === false) {
             $insertData = [
-                'id'         => $id,
+                'id'         => $this->idPrefix . $id,
                 'ip_address' => $this->ipAddress,
                 'data'       => $this->prepareData($data),
             ];
@@ -197,7 +204,7 @@ class DatabaseHandler extends BaseHandler
             return true;
         }
 
-        $builder = $this->db->table($this->table)->where('id', $id);
+        $builder = $this->db->table($this->table)->where('id', $this->idPrefix . $id);
 
         if ($this->matchIP) {
             $builder = $builder->where('ip_address', $this->ipAddress);
@@ -242,7 +249,7 @@ class DatabaseHandler extends BaseHandler
     public function destroy($id): bool
     {
         if ($this->lock) {
-            $builder = $this->db->table($this->table)->where('id', $id);
+            $builder = $this->db->table($this->table)->where('id', $this->idPrefix . $id);
 
             if ($this->matchIP) {
                 $builder = $builder->where('ip_address', $this->ipAddress);
@@ -276,7 +283,11 @@ class DatabaseHandler extends BaseHandler
         $separator = ' ';
         $interval  = implode($separator, ['', "{$max_lifetime} second", '']);
 
-        return $this->db->table($this->table)->where('timestamp <', "now() - INTERVAL {$interval}", false)->delete() ? 1 : $this->fail();
+        return $this->db->table($this->table)->where(
+            'timestamp <',
+            "now() - INTERVAL {$interval}",
+            false
+        )->delete() ? 1 : $this->fail();
     }
 
     /**

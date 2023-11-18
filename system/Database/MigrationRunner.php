@@ -14,6 +14,7 @@ namespace CodeIgniter\Database;
 use CodeIgniter\CLI\CLI;
 use CodeIgniter\Events\Events;
 use CodeIgniter\Exceptions\ConfigException;
+use CodeIgniter\I18n\Time;
 use Config\Database;
 use Config\Migrations as MigrationsConfig;
 use Config\Services;
@@ -66,7 +67,7 @@ class MigrationRunner
      *
      * @var string
      */
-    protected $regex = '/^\d{4}[_-]?\d{2}[_-]?\d{2}[_-]?\d{6}_(\w+)$/';
+    protected $regex = '/\A(\d{4}[_-]?\d{2}[_-]?\d{2}[_-]?\d{6})_(\w+)\z/';
 
     /**
      * The main database connection. Used to store
@@ -141,7 +142,7 @@ class MigrationRunner
         $this->namespace = APP_NAMESPACE;
 
         // get default database group
-        $config      = config('Database');
+        $config      = config(Database::class);
         $this->group = $config->defaultGroup;
         unset($config);
 
@@ -153,10 +154,10 @@ class MigrationRunner
     /**
      * Locate and run all new migrations
      *
+     * @return bool
+     *
      * @throws ConfigException
      * @throws RuntimeException
-     *
-     * @return bool
      */
     public function latest(?string $group = null)
     {
@@ -219,22 +220,18 @@ class MigrationRunner
      *
      * Calls each migration step required to get to the provided batch
      *
-     * @param int $targetBatch Target batch number, or negative for a relative batch, 0 for all
+     * @param int         $targetBatch Target batch number, or negative for a relative batch, 0 for all
+     * @param string|null $group       Deprecated. The designation has no effect.
+     *
+     * @return bool True on success, FALSE on failure or no migrations are found
      *
      * @throws ConfigException
      * @throws RuntimeException
-     *
-     * @return mixed Current batch number on success, FALSE on failure or no migrations are found
      */
     public function regress(int $targetBatch = 0, ?string $group = null)
     {
         if (! $this->enabled) {
             throw ConfigException::forDisabledMigrations();
-        }
-
-        // Set database group if not null
-        if ($group !== null) {
-            $this->setGroup($group);
         }
 
         $this->ensureTable();
@@ -447,6 +444,8 @@ class MigrationRunner
     /**
      * Create a migration object from a file path.
      *
+     * @param string $path Full path to a valid migration file.
+     *
      * @return false|object Returns the migration object, or false on failure
      */
     protected function migrationFromFile(string $path, string $namespace)
@@ -455,9 +454,9 @@ class MigrationRunner
             return false;
         }
 
-        $name = basename($path, '.php');
+        $filename = basename($path, '.php');
 
-        if (! preg_match($this->regex, $name)) {
+        if (! preg_match($this->regex, $filename)) {
             return false;
         }
 
@@ -465,8 +464,8 @@ class MigrationRunner
 
         $migration = new stdClass();
 
-        $migration->version   = $this->getMigrationNumber($name);
-        $migration->name      = $this->getMigrationName($name);
+        $migration->version   = $this->getMigrationNumber($filename);
+        $migration->name      = $this->getMigrationName($filename);
         $migration->path      = $path;
         $migration->class     = $locator->getClassname($path);
         $migration->namespace = $namespace;
@@ -524,23 +523,29 @@ class MigrationRunner
 
     /**
      * Extracts the migration number from a filename
+     *
+     * @param string $migration A migration filename w/o path.
      */
     protected function getMigrationNumber(string $migration): string
     {
-        preg_match('/^\d{4}[_-]?\d{2}[_-]?\d{2}[_-]?\d{6}/', $migration, $matches);
+        preg_match($this->regex, $migration, $matches);
 
-        return count($matches) ? $matches[0] : '0';
+        return count($matches) ? $matches[1] : '0';
     }
 
     /**
-     * Extracts the migration class name from a filename
+     * Extracts the migration name from a filename
+     *
+     * Note: The migration name should be the classname, but maybe they are
+     *       different.
+     *
+     * @param string $migration A migration filename w/o path.
      */
     protected function getMigrationName(string $migration): string
     {
-        $parts = explode('_', $migration);
-        array_shift($parts);
+        preg_match($this->regex, $migration, $matches);
 
-        return implode('_', $parts);
+        return count($matches) ? $matches[2] : '';
     }
 
     /**
@@ -596,7 +601,7 @@ class MigrationRunner
             'class'     => $migration->class,
             'group'     => $this->group,
             'namespace' => $migration->namespace,
-            'time'      => time(),
+            'time'      => Time::now()->getTimestamp(),
             'batch'     => $batch,
         ]);
 
@@ -835,7 +840,7 @@ class MigrationRunner
         }
 
         $instance = new $class();
-        $group    = $instance->getDBGroup() ?? config('Database')->defaultGroup;
+        $group    = $instance->getDBGroup() ?? config(Database::class)->defaultGroup;
 
         if (ENVIRONMENT !== 'testing' && $group === 'tests' && $this->groupFilter !== 'tests') {
             // @codeCoverageIgnoreStart

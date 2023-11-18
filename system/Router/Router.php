@@ -13,12 +13,16 @@ namespace CodeIgniter\Router;
 
 use Closure;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use CodeIgniter\HTTP\Exceptions\RedirectException;
 use CodeIgniter\HTTP\Request;
-use CodeIgniter\Router\Exceptions\RedirectException;
 use CodeIgniter\Router\Exceptions\RouterException;
+use Config\App;
+use Config\Feature;
 
 /**
  * Request router.
+ *
+ * @see \CodeIgniter\Router\RouterTest
  */
 class Router implements RouterInterface
 {
@@ -126,12 +130,12 @@ class Router implements RouterInterface
         $this->controller = $this->collection->getDefaultController();
         $this->method     = $this->collection->getDefaultMethod();
 
-        $this->collection->setHTTPVerb(strtolower($request->getMethod() ?? $_SERVER['REQUEST_METHOD']));
+        $this->collection->setHTTPVerb($request->getMethod() ?? $_SERVER['REQUEST_METHOD']);
 
         $this->translateURIDashes = $this->collection->shouldTranslateURIDashes();
 
         if ($this->collection->shouldAutoRoute()) {
-            $autoRoutesImproved = config('Feature')->autoRoutesImproved ?? false;
+            $autoRoutesImproved = config(Feature::class)->autoRoutesImproved ?? false;
             if ($autoRoutesImproved) {
                 $this->autoRouter = new AutoRouterImproved(
                     $this->collection->getRegisteredControllers('*'),
@@ -143,7 +147,7 @@ class Router implements RouterInterface
                 );
             } else {
                 $this->autoRouter = new AutoRouter(
-                    $this->collection->getRegisteredControllers('cli'),
+                    $this->collection->getRoutes('cli', false), // @phpstan-ignore-line
                     $this->collection->getDefaultNamespace(),
                     $this->collection->getDefaultController(),
                     $this->collection->getDefaultMethod(),
@@ -155,19 +159,20 @@ class Router implements RouterInterface
     }
 
     /**
-     * @throws PageNotFoundException
-     * @throws RedirectException
+     * Finds the controller method corresponding to the URI.
+     *
+     * @param string|null $uri URI path relative to baseURL
      *
      * @return Closure|string Controller classname or Closure
+     *
+     * @throws PageNotFoundException
+     * @throws RedirectException
      */
     public function handle(?string $uri = null)
     {
-        // If we cannot find a URI to match against, then
-        // everything runs off of its default settings.
+        // If we cannot find a URI to match against, then set it to root (`/`).
         if ($uri === null || $uri === '') {
-            return strpos($this->controller, '\\') === false
-                ? $this->collection->getDefaultNamespace() . $this->controller
-                : $this->controller;
+            $uri = '/';
         }
 
         // Decode URL-encoded string
@@ -180,7 +185,7 @@ class Router implements RouterInterface
         // Checks defined routes
         if ($this->checkRoutes($uri)) {
             if ($this->collection->isFiltered($this->matchedRoute[0])) {
-                $multipleFiltersEnabled = config('Feature')->multipleFilters ?? false;
+                $multipleFiltersEnabled = config(Feature::class)->multipleFilters ?? false;
                 if ($multipleFiltersEnabled) {
                     $this->filtersInfo = $this->collection->getFiltersForRoute($this->matchedRoute[0]);
                 } else {
@@ -324,7 +329,7 @@ class Router implements RouterInterface
 
     /**
      * Sets the value that should be used to match the index.php file. Defaults
-     * to index.php but this allows you to modify it in case your are using
+     * to index.php but this allows you to modify it in case you are using
      * something like mod_rewrite to remove the page. This allows you to set
      * it a blank.
      *
@@ -376,7 +381,7 @@ class Router implements RouterInterface
     }
 
     /**
-     * Checks Defined Routs.
+     * Checks Defined Routes.
      *
      * Compares the uri string against the routes that the
      * RouteCollection class defined for us, attempting to find a match.
@@ -384,12 +389,13 @@ class Router implements RouterInterface
      *
      * @param string $uri The URI path to compare against the routes
      *
-     * @throws RedirectException
-     *
      * @return bool Whether the route was matched or not.
+     *
+     * @throws RedirectException
      */
     protected function checkRoutes(string $uri): bool
     {
+        // @phpstan-ignore-next-line
         $routes = $this->collection->getRoutes($this->collection->getHTTPVerb());
 
         // Don't waste any time
@@ -439,6 +445,13 @@ class Router implements RouterInterface
                         $matched
                     );
 
+                    if ($this->collection->shouldUseSupportedLocalesOnly()
+                        && ! in_array($matched['locale'], config(App::class)->supportedLocales, true)) {
+                        // Throw exception to prevent the autorouter, if enabled,
+                        // from trying to find a route
+                        throw PageNotFoundException::forLocaleNotSupported($matched['locale']);
+                    }
+
                     $this->detectedLocale = $matched['locale'];
                     unset($matched);
                 }
@@ -459,7 +472,7 @@ class Router implements RouterInterface
                     return true;
                 }
 
-                [$controller, ] = explode('::', $handler);
+                [$controller] = explode('::', $handler);
 
                 // Checks `/` in controller name
                 if (strpos($controller, '/') !== false) {
@@ -488,15 +501,17 @@ class Router implements RouterInterface
     }
 
     /**
-     * Checks Auto Routs.
+     * Checks Auto Routes.
      *
      * Attempts to match a URI path against Controllers and directories
      * found in APPPATH/Controllers, to find a matching route.
+     *
+     * @return void
      */
     public function autoRoute(string $uri)
     {
         [$this->directory, $this->controller, $this->method, $this->params]
-            = $this->autoRouter->getRoute($uri);
+            = $this->autoRouter->getRoute($uri, $this->collection->getHTTPVerb());
     }
 
     /**
@@ -568,14 +583,14 @@ class Router implements RouterInterface
      *
      * @param bool $validate if true, checks to make sure $dir consists of only PSR4 compliant segments
      *
+     * @return void
+     *
      * @deprecated This method should be removed.
      */
     public function setDirectory(?string $dir = null, bool $append = false, bool $validate = true)
     {
         if (empty($dir)) {
             $this->directory = null;
-
-            return;
         }
 
         if ($this->autoRouter instanceof AutoRouter) {
@@ -602,6 +617,8 @@ class Router implements RouterInterface
      * to be called.
      *
      * @param array $segments URI segments
+     *
+     * @return void
      */
     protected function setRequest(array $segments = [])
     {
@@ -629,6 +646,8 @@ class Router implements RouterInterface
      * Sets the default controller based on the info set in the RouteCollection.
      *
      * @deprecated This was an unnecessary method, so it is no longer used.
+     *
+     * @return void
      */
     protected function setDefaultController()
     {

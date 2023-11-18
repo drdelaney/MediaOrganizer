@@ -15,6 +15,8 @@ use DateTime;
 
 /**
  * Format validation Rules.
+ *
+ * @see \CodeIgniter\Validation\FormatRulesTest
  */
 class FormatRules
 {
@@ -176,8 +178,6 @@ class FormatRules
      * timezone_identifiers_list function.
      *
      * @see http://php.net/manual/en/datetimezone.listidentifiers.php
-     *
-     * @param string $str
      */
     public function timezone(?string $str = null): bool
     {
@@ -189,8 +189,6 @@ class FormatRules
      *
      * Tests a string for characters outside of the Base64 alphabet
      * as defined by RFC 2045 http://www.faqs.org/rfcs/rfc2045
-     *
-     * @param string $str
      */
     public function valid_base64(?string $str = null): bool
     {
@@ -203,8 +201,6 @@ class FormatRules
 
     /**
      * Valid JSON
-     *
-     * @param string $str
      */
     public function valid_json(?string $str = null): bool
     {
@@ -215,8 +211,6 @@ class FormatRules
 
     /**
      * Checks for a correctly formatted email address
-     *
-     * @param string $str
      */
     public function valid_email(?string $str = null): bool
     {
@@ -233,8 +227,6 @@ class FormatRules
      *
      * Example:
      *     valid_emails[one@example.com,two@example.com]
-     *
-     * @param string $str
      */
     public function valid_emails(?string $str = null): bool
     {
@@ -293,7 +285,7 @@ class FormatRules
             return false;
         }
 
-        if (preg_match('/^(?:([^:]*)\:)?\/\/(.+)$/', $str, $matches)) {
+        if (preg_match('/\A(?:([^:]*)\:)?\/\/(.+)\z/', $str, $matches)) {
             if (! in_array($matches[1], ['http', 'https'], true)) {
                 return false;
             }
@@ -344,6 +336,15 @@ class FormatRules
         $date   = DateTime::createFromFormat($format, $str);
         $errors = DateTime::getLastErrors();
 
-        return $date !== false && $errors !== false && $errors['warning_count'] === 0 && $errors['error_count'] === 0;
+        if ($date === false) {
+            return false;
+        }
+
+        // PHP 8.2 or later.
+        if ($errors === false) {
+            return true;
+        }
+
+        return $errors['warning_count'] === 0 && $errors['error_count'] === 0;
     }
 }

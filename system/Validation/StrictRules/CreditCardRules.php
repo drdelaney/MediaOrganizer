@@ -21,6 +21,7 @@ use CodeIgniter\Validation\CreditCardRules as NonStrictCreditCardRules;
  * Provides validation methods for common credit-card inputs.
  *
  * @see http://en.wikipedia.org/wiki/Credit_card_number
+ * @see \CodeIgniter\Validation\StrictRules\CreditCardRulesTest
  */
 class CreditCardRules
 {
@@ -41,7 +42,7 @@ class CreditCardRules
      *      'cc_num' => 'valid_cc_number[visa]'
      *  ];
      *
-     * @param mixed $ccNumber
+     * @param array|bool|float|int|object|string|null $ccNumber
      */
     public function valid_cc_number($ccNumber, string $type): bool
     {

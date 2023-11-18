@@ -21,6 +21,7 @@ use Traversable;
  * The CookieStore object represents an immutable collection of `Cookie` value objects.
  *
  * @implements IteratorAggregate<string, Cookie>
+ * @see \CodeIgniter\Cookie\CookieStoreTest
  */
 class CookieStore implements Countable, IteratorAggregate
 {
@@ -36,9 +37,9 @@ class CookieStore implements Countable, IteratorAggregate
      *
      * @param string[] $headers
      *
-     * @throws CookieException
-     *
      * @return static
+     *
+     * @throws CookieException
      */
     public static function fromCookieHeaders(array $headers, bool $raw = false)
     {

@@ -267,7 +267,7 @@ class GDHandler extends BaseHandler
                     throw ImageException::forInvalidImageCreate(lang('Images.webpNotSupported'));
                 }
 
-                if (! @imagewebp($this->resource, $target)) {
+                if (! @imagewebp($this->resource, $target, $quality)) {
                     throw ImageException::forSaveFailed();
                 }
                 break;
@@ -328,9 +328,9 @@ class GDHandler extends BaseHandler
      * @param string $path      Image path
      * @param int    $imageType Image type
      *
-     * @throws ImageException
-     *
      * @return bool|resource
+     *
+     * @throws ImageException
      */
     protected function getImageResource(string $path, int $imageType)
     {
@@ -354,7 +354,7 @@ class GDHandler extends BaseHandler
                     throw ImageException::forInvalidImageCreate(lang('Images.pngNotSupported'));
                 }
 
-                return imagecreatefrompng($path);
+                return @imagecreatefrompng($path);
 
             case IMAGETYPE_WEBP:
                 if (! function_exists('imagecreatefromwebp')) {
@@ -381,11 +381,11 @@ class GDHandler extends BaseHandler
         // offset flips itself automatically
 
         if ($options['vAlign'] === 'bottom') {
-            $options['vOffset'] = $options['vOffset'] * -1;
+            $options['vOffset'] *= -1;
         }
 
         if ($options['hAlign'] === 'right') {
-            $options['hOffset'] = $options['hOffset'] * -1;
+            $options['hOffset'] *= -1;
         }
 
         // Set font width and height

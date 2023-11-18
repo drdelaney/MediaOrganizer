@@ -13,12 +13,15 @@ namespace CodeIgniter\Files;
 
 use CodeIgniter\Files\Exceptions\FileException;
 use CodeIgniter\Files\Exceptions\FileNotFoundException;
+use CodeIgniter\I18n\Time;
 use Config\Mimes;
 use ReturnTypeWillChange;
 use SplFileInfo;
 
 /**
  * Wrapper for PHP's built-in SplFileInfo, with goodies.
+ *
+ * @see \CodeIgniter\Files\FileTest
  */
 class File extends SplFileInfo
 {
@@ -126,7 +129,7 @@ class File extends SplFileInfo
         $extension = $this->getExtension();
         $extension = empty($extension) ? '' : '.' . $extension;
 
-        return time() . '_' . bin2hex(random_bytes(10)) . $extension;
+        return Time::now()->getTimestamp() . '_' . bin2hex(random_bytes(10)) . $extension;
     }
 
     /**

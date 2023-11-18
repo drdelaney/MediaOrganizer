@@ -13,6 +13,8 @@ namespace CodeIgniter\HTTP;
 
 /**
  * An HTTP message
+ *
+ * @see \CodeIgniter\HTTP\MessageTest
  */
 class Message implements MessageInterface
 {
@@ -34,6 +36,7 @@ class Message implements MessageInterface
         '1.0',
         '1.1',
         '2.0',
+        '3.0',
     ];
 
     /**
@@ -60,6 +63,8 @@ class Message implements MessageInterface
      *
      * @deprecated Use Message::headers() to make room for PSR-7
      *
+     * @TODO Incompatible return value with PSR-7
+     *
      * @codeCoverageIgnore
      */
     public function getHeaders(): array
@@ -74,6 +79,8 @@ class Message implements MessageInterface
      * @return array|Header|null
      *
      * @deprecated Use Message::header() to make room for PSR-7
+     *
+     * @TODO Incompatible return value with PSR-7
      *
      * @codeCoverageIgnore
      */

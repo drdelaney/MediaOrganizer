@@ -14,18 +14,23 @@ namespace CodeIgniter\Router;
 use Closure;
 use CodeIgniter\Autoloader\FileLocator;
 use CodeIgniter\Router\Exceptions\RouterException;
+use Config\App;
 use Config\Modules;
+use Config\Routing;
 use Config\Services;
 use InvalidArgumentException;
 
 /**
  * @todo Implement nested resource routing (See CakePHP)
+ * @see \CodeIgniter\Router\RouteCollectionTest
  */
 class RouteCollection implements RouteCollectionInterface
 {
     /**
      * The namespace to be added to any Controllers.
-     * Defaults to the global namespaces (\)
+     * Defaults to the global namespaces (\).
+     *
+     * This must have a trailing backslash (\).
      *
      * @var string
      */
@@ -87,6 +92,11 @@ class RouteCollection implements RouteCollectionInterface
     protected $override404;
 
     /**
+     * An array of files that would contain route definitions.
+     */
+    protected array $routeFiles = [];
+
+    /**
      * Defined placeholders that can be used
      * within the
      *
@@ -108,11 +118,20 @@ class RouteCollection implements RouteCollectionInterface
      *
      * [
      *     verb => [
-     *         routeName => [
-     *             'route' => [
-     *                 routeKey => handler,
-     *             ]
-     *         ]
+     *         routeKey(regex) => [
+     *             'name'    => routeName
+     *             'handler' => handler,
+     *             'from'    => from,
+     *         ],
+     *     ],
+     *     // redirect route
+     *     '*' => [
+     *          routeKey(regex)(from) => [
+     *             'name'     => routeName
+     *             'handler'  => [routeKey(regex)(to) => handler],
+     *             'from'     => from,
+     *             'redirect' => statusCode,
+     *         ],
      *     ],
      * ]
      */
@@ -130,16 +149,48 @@ class RouteCollection implements RouteCollectionInterface
     ];
 
     /**
+     * Array of routes names
+     *
+     * @var array
+     *
+     * [
+     *     verb => [
+     *         routeName => routeKey(regex)
+     *     ],
+     * ]
+     */
+    protected $routesNames = [
+        '*'       => [],
+        'options' => [],
+        'get'     => [],
+        'head'    => [],
+        'post'    => [],
+        'put'     => [],
+        'delete'  => [],
+        'trace'   => [],
+        'connect' => [],
+        'cli'     => [],
+    ];
+
+    /**
      * Array of routes options
      *
      * @var array
+     *
+     * [
+     *     verb => [
+     *         routeKey(regex) => [
+     *             key => value,
+     *         ]
+     *     ],
+     * ]
      */
     protected $routesOptions = [];
 
     /**
      * The current method that the script is being called by.
      *
-     * @var string
+     * @var string HTTP verb (lower case) like `get`,`post` or `*`
      */
     protected $HTTPVerb = '*';
 
@@ -224,14 +275,110 @@ class RouteCollection implements RouteCollectionInterface
     private ?string $httpHost = null;
 
     /**
+     * Flag to limit or not the routes with {locale} placeholder to App::$supportedLocales
+     */
+    protected bool $useSupportedLocalesOnly = false;
+
+    /**
      * Constructor
      */
-    public function __construct(FileLocator $locator, Modules $moduleConfig)
+    public function __construct(FileLocator $locator, Modules $moduleConfig, Routing $routing)
     {
         $this->fileLocator  = $locator;
         $this->moduleConfig = $moduleConfig;
 
         $this->httpHost = Services::request()->getServer('HTTP_HOST');
+
+        // Setup based on config file. Let routes file override.
+        $this->defaultNamespace   = rtrim($routing->defaultNamespace, '\\') . '\\';
+        $this->defaultController  = $routing->defaultController;
+        $this->defaultMethod      = $routing->defaultMethod;
+        $this->translateURIDashes = $routing->translateURIDashes;
+        $this->override404        = $routing->override404;
+        $this->autoRoute          = $routing->autoRoute;
+        $this->routeFiles         = $routing->routeFiles;
+        $this->prioritize         = $routing->prioritize;
+
+        // Normalize the path string in routeFiles array.
+        foreach ($this->routeFiles as $routeKey => $routesFile) {
+            $realpath                    = realpath($routesFile);
+            $this->routeFiles[$routeKey] = ($realpath === false) ? $routesFile : $realpath;
+        }
+    }
+
+    /**
+     * Loads main routes file and discover routes.
+     *
+     * Loads only once unless reset.
+     *
+     * @return $this
+     */
+    public function loadRoutes(string $routesFile = APPPATH . 'Config/Routes.php')
+    {
+        if ($this->didDiscover) {
+            return $this;
+        }
+
+        // Normalize the path string in routesFile
+        $realpath   = realpath($routesFile);
+        $routesFile = ($realpath === false) ? $routesFile : $realpath;
+
+        // Include the passed in routesFile if it doesn't exist.
+        // Only keeping that around for BC purposes for now.
+        $routeFiles = $this->routeFiles;
+        if (! in_array($routesFile, $routeFiles, true)) {
+            $routeFiles[] = $routesFile;
+        }
+
+        // We need this var in local scope
+        // so route files can access it.
+        $routes = $this;
+
+        foreach ($routeFiles as $routesFile) {
+            if (! is_file($routesFile)) {
+                log_message('warning', sprintf('Routes file not found: "%s"', $routesFile));
+
+                continue;
+            }
+
+            require $routesFile;
+        }
+
+        $this->discoverRoutes();
+
+        return $this;
+    }
+
+    /**
+     * Will attempt to discover any additional routes, either through
+     * the local PSR4 namespaces, or through selected Composer packages.
+     *
+     * @return void
+     */
+    protected function discoverRoutes()
+    {
+        if ($this->didDiscover) {
+            return;
+        }
+
+        // We need this var in local scope
+        // so route files can access it.
+        $routes = $this;
+
+        if ($this->moduleConfig->shouldDiscover('routes')) {
+            $files = $this->fileLocator->search('Config/Routes.php');
+
+            foreach ($files as $file) {
+                // Don't include our main file again...
+                if (in_array($file, $this->routeFiles, true)) {
+                    continue;
+                }
+
+                include $file;
+            }
+        }
+
+        $this->didDiscover = true;
     }
 
     /**
@@ -337,7 +484,7 @@ class RouteCollection implements RouteCollectionInterface
      *
      * This setting is passed to the Router class and handled there.
      *
-     * @param callable|null $callable
+     * @param callable|string|null $callable
      */
     public function set404Override($callable = null): RouteCollectionInterface
     {
@@ -355,41 +502,6 @@ class RouteCollection implements RouteCollectionInterface
     public function get404Override()
     {
         return $this->override404;
-    }
-
-    /**
-     * Will attempt to discover any additional routes, either through
-     * the local PSR4 namespaces, or through selected Composer packages.
-     */
-    protected function discoverRoutes()
-    {
-        if ($this->didDiscover) {
-            return;
-        }
-
-        // We need this var in local scope
-        // so route files can access it.
-        $routes = $this;
-
-        if ($this->moduleConfig->shouldDiscover('routes')) {
-            $files = $this->fileLocator->search('Config/Routes.php');
-
-            $excludes = [
-                APPPATH . 'Config' . DIRECTORY_SEPARATOR . 'Routes.php',
-                SYSTEMPATH . 'Config' . DIRECTORY_SEPARATOR . 'Routes.php',
-            ];
-
-            foreach ($files as $file) {
-                // Don't include our main file again...
-                if (in_array($file, $excludes, true)) {
-                    continue;
-                }
-
-                include $file;
-            }
-        }
-
-        $this->didDiscover = true;
     }
 
     /**
@@ -447,8 +559,10 @@ class RouteCollection implements RouteCollectionInterface
 
     /**
      * Returns the raw array of available routes.
+     *
+     * @param bool $includeWildcard Whether to include '*' routes.
      */
-    public function getRoutes(?string $verb = null): array
+    public function getRoutes(?string $verb = null, bool $includeWildcard = true): array
     {
         if (empty($verb)) {
             $verb = $this->getHTTPVerb();
@@ -464,11 +578,10 @@ class RouteCollection implements RouteCollectionInterface
         if (isset($this->routes[$verb])) {
             // Keep current verb's routes at the beginning, so they're matched
             // before any of the generic, "add" routes.
-            $collection = $this->routes[$verb] + ($this->routes['*'] ?? []);
+            $collection = $includeWildcard ? $this->routes[$verb] + ($this->routes['*'] ?? []) : $this->routes[$verb];
 
-            foreach ($collection as $r) {
-                $key          = key($r['route']);
-                $routes[$key] = $r['route'][$key];
+            foreach ($collection as $routeKey => $r) {
+                $routes[$routeKey] = $r['handler'];
             }
         }
 
@@ -491,6 +604,8 @@ class RouteCollection implements RouteCollectionInterface
 
     /**
      * Returns one or all routes options
+     *
+     * @return array<string, int|string> [key => value]
      */
     public function getRoutesOptions(?string $from = null, ?string $verb = null): array
     {
@@ -511,11 +626,13 @@ class RouteCollection implements RouteCollectionInterface
      * Sets the current HTTP verb.
      * Used primarily for testing.
      *
+     * @param string $verb HTTP verb
+     *
      * @return $this
      */
     public function setHTTPVerb(string $verb)
     {
-        $this->HTTPVerb = $verb;
+        $this->HTTPVerb = strtolower($verb);
 
         return $this;
     }
@@ -563,27 +680,41 @@ class RouteCollection implements RouteCollectionInterface
     public function addRedirect(string $from, string $to, int $status = 302)
     {
         // Use the named route's pattern if this is a named route.
-        if (array_key_exists($to, $this->routes['*'])) {
-            $to = $this->routes['*'][$to]['route'];
-        } elseif (array_key_exists($to, $this->routes['get'])) {
-            $to = $this->routes['get'][$to]['route'];
+        if (array_key_exists($to, $this->routesNames['*'])) {
+            $routeName  = $to;
+            $routeKey   = $this->routesNames['*'][$routeName];
+            $redirectTo = [$routeKey => $this->routes['*'][$routeKey]['handler']];
+        } elseif (array_key_exists($to, $this->routesNames['get'])) {
+            $routeName  = $to;
+            $routeKey   = $this->routesNames['get'][$routeName];
+            $redirectTo = [$routeKey => $this->routes['get'][$routeKey]['handler']];
+        } else {
+            // The named route is not found.
+            $redirectTo = $to;
         }
 
-        $this->create('*', $from, $to, ['redirect' => $status]);
+        $this->create('*', $from, $redirectTo, ['redirect' => $status]);
 
         return $this;
     }
 
     /**
      * Determines if the route is a redirecting route.
+     *
+     * @param string $routeKey routeKey or route name
      */
-    public function isRedirect(string $from): bool
+    public function isRedirect(string $routeKey): bool
     {
-        foreach ($this->routes['*'] as $name => $route) {
-            // Named route?
-            if ($name === $from || key($route['route']) === $from) {
-                return isset($route['redirect']) && is_numeric($route['redirect']);
-            }
+        if (isset($this->routes['*'][$routeKey]['redirect'])) {
+            return true;
+        }
+
+        // This logic is not used. Should be deprecated?
+        $routeName = $this->routes['*'][$routeKey]['name'] ?? null;
+        if ($routeName === $routeKey) {
+            $routeKey = $this->routesNames['*'][$routeName];
+
+            return isset($this->routes['*'][$routeKey]['redirect']);
         }
 
         return false;
@@ -591,14 +722,21 @@ class RouteCollection implements RouteCollectionInterface
 
     /**
      * Grabs the HTTP status code from a redirecting Route.
+     *
+     * @param string $routeKey routeKey or route name
      */
-    public function getRedirectCode(string $from): int
+    public function getRedirectCode(string $routeKey): int
     {
-        foreach ($this->routes['*'] as $name => $route) {
-            // Named route?
-            if ($name === $from || key($route['route']) === $from) {
-                return $route['redirect'] ?? 0;
-            }
+        if (isset($this->routes['*'][$routeKey]['redirect'])) {
+            return $this->routes['*'][$routeKey]['redirect'];
+        }
+
+        // This logic is not used. Should be deprecated?
+        $routeName = $this->routes['*'][$routeKey]['name'] ?? null;
+        if ($routeName === $routeKey) {
+            $routeKey = $this->routesNames['*'][$routeName];
+
+            return $this->routes['*'][$routeKey]['redirect'];
         }
 
         return 0;
@@ -616,6 +754,8 @@ class RouteCollection implements RouteCollectionInterface
      *
      * @param string         $name      The name to group/prefix the routes with.
      * @param array|callable ...$params
+     *
+     * @return void
      */
     public function group(string $name, ...$params)
     {
@@ -683,7 +823,7 @@ class RouteCollection implements RouteCollectionInterface
      *      POST        /photos/{id}        update
      *
      * @param string     $name    The name of the resource/controller to route to.
-     * @param array|null $options An list of possible ways to customize the routing.
+     * @param array|null $options A list of possible ways to customize the routing.
      */
     public function resource(string $name, ?array $options = null): RouteCollectionInterface
     {
@@ -777,7 +917,7 @@ class RouteCollection implements RouteCollectionInterface
      *      POST        /photos/delete/{id} delete          deleting the specified photo object
      *
      * @param string     $name    The name of the controller to route to.
-     * @param array|null $options An list of possible ways to customize the routing.
+     * @param array|null $options A list of possible ways to customize the routing.
      */
     public function presenter(string $name, ?array $options = null): RouteCollectionInterface
     {
@@ -965,6 +1105,24 @@ class RouteCollection implements RouteCollectionInterface
     }
 
     /**
+     * Specifies a route that will only display a view.
+     * Only works for GET requests.
+     */
+    public function view(string $from, string $view, ?array $options = null): RouteCollectionInterface
+    {
+        $to = static fn (...$data) => Services::renderer()
+            ->setData(['segments' => $data], 'raw')
+            ->render($view, $options);
+
+        $routeOptions = $options ?? [];
+        $routeOptions = array_merge($routeOptions, ['view' => $view]);
+
+        $this->create('get', $from, $to, $routeOptions);
+
+        return $this;
+    }
+
+    /**
      * Limits the routes to a specified ENVIRONMENT or they won't run.
      */
     public function environment(string $env, Closure $callback): RouteCollectionInterface
@@ -989,19 +1147,26 @@ class RouteCollection implements RouteCollectionInterface
      *      // Equals 'path/$param1/$param2'
      *      reverseRoute('Controller::method', $param1, $param2);
      *
-     * @param string     $search    Named route or Controller::method
-     * @param int|string ...$params One or more parameters to be passed to the route
+     * @param string     $search    Route name or Controller::method
+     * @param int|string ...$params One or more parameters to be passed to the route.
+     *                              The last parameter allows you to set the locale.
      *
-     * @return false|string
+     * @return false|string The route (URI path relative to baseURL) or false if not found.
      */
     public function reverseRoute(string $search, ...$params)
     {
-        // Named routes get higher priority.
-        foreach ($this->routes as $collection) {
-            if (array_key_exists($search, $collection)) {
-                $route = $this->fillRouteParams(key($collection[$search]['route']), $params);
+        if ($search === '') {
+            return false;
+        }
 
-                return $this->localizeRoute($route);
+        // Named routes get higher priority.
+        foreach ($this->routesNames as $verb => $collection) {
+            if (array_key_exists($search, $collection)) {
+                $routeKey = $collection[$search];
+
+                $from = $this->routes[$verb][$routeKey]['from'];
+
+                return $this->buildReverseRoute($from, $params);
             }
         }
 
@@ -1018,8 +1183,8 @@ class RouteCollection implements RouteCollectionInterface
         // all routes to find a match.
         foreach ($this->routes as $collection) {
             foreach ($collection as $route) {
-                $from = key($route['route']);
-                $to   = $route['route'][$from];
+                $to   = $route['handler'];
+                $from = $route['from'];
 
                 // ignore closures
                 if (! is_string($to)) {
@@ -1043,9 +1208,7 @@ class RouteCollection implements RouteCollectionInterface
                     continue;
                 }
 
-                $route = $this->fillRouteParams($from, $params);
-
-                return $this->localizeRoute($route);
+                return $this->buildReverseRoute($from, $params);
             }
         }
 
@@ -1055,6 +1218,8 @@ class RouteCollection implements RouteCollectionInterface
 
     /**
      * Replaces the {locale} tag with the current application locale
+     *
+     * @deprecated Unused.
      */
     protected function localizeRoute(string $route): string
     {
@@ -1099,12 +1264,17 @@ class RouteCollection implements RouteCollectionInterface
      *    'role:admin,manager'
      *
      * has a filter of "role", with parameters of ['admin', 'manager'].
+     *
+     * @param string $search routeKey
+     *
+     * @return array<int, string> filter_name or filter_name:arguments like 'role:admin,manager'
+     * @phpstan-return list<string>
      */
     public function getFiltersForRoute(string $search, ?string $verb = null): array
     {
         $options = $this->loadRoutesOptions($verb);
 
-        if (! array_key_exists($search, $options)) {
+        if (! array_key_exists($search, $options) || ! array_key_exists('filter', $options[$search])) {
             return [];
         }
 
@@ -1112,13 +1282,15 @@ class RouteCollection implements RouteCollectionInterface
             return [$options[$search]['filter']];
         }
 
-        return $options[$search]['filter'] ?? [];
+        return $options[$search]['filter'];
     }
 
     /**
      * Given a
      *
      * @throws RouterException
+     *
+     * @deprecated Unused. Now uses buildReverseRoute().
      */
     protected function fillRouteParams(string $from, ?array $params = null): string
     {
@@ -1129,9 +1301,16 @@ class RouteCollection implements RouteCollectionInterface
             return '/' . ltrim($from, '/');
         }
 
-        // Build our resulting string, inserting the $params in
-        // the appropriate places.
-        foreach ($matches[0] as $index => $pattern) {
+        /**
+         * Build our resulting string, inserting the $params in
+         * the appropriate places.
+         *
+         * @var array<int, string> $patterns
+         * @phpstan-var list<string> $patterns
+         */
+        $patterns = $matches[0];
+
+        foreach ($patterns as $index => $pattern) {
             if (! preg_match('#^' . $pattern . '$#u', $params[$index])) {
                 throw RouterException::forInvalidParameterType();
             }
@@ -1146,11 +1325,102 @@ class RouteCollection implements RouteCollectionInterface
     }
 
     /**
+     * Builds reverse route
+     *
+     * @param array $params One or more parameters to be passed to the route.
+     *                      The last parameter allows you to set the locale.
+     */
+    protected function buildReverseRoute(string $from, array $params): string
+    {
+        $locale = null;
+
+        // Find all of our back-references in the original route
+        preg_match_all('/\(([^)]+)\)/', $from, $matches);
+
+        if (empty($matches[0])) {
+            if (strpos($from, '{locale}') !== false) {
+                $locale = $params[0] ?? null;
+            }
+
+            $from = $this->replaceLocale($from, $locale);
+
+            return '/' . ltrim($from, '/');
+        }
+
+        // Locale is passed?
+        $placeholderCount = count($matches[0]);
+        if (count($params) > $placeholderCount) {
+            $locale = $params[$placeholderCount];
+        }
+
+        /**
+         * Build our resulting string, inserting the $params in
+         * the appropriate places.
+         *
+         * @var array<int, string> $placeholders
+         * @phpstan-var list<string> $placeholders
+         */
+        $placeholders = $matches[0];
+
+        foreach ($placeholders as $index => $placeholder) {
+            if (! isset($params[$index])) {
+                throw new InvalidArgumentException(
+                    'Missing argument for "' . $placeholder . '" in route "' . $from . '".'
+                );
+            }
+
+            // Remove `(:` and `)` when $placeholder is a placeholder.
+            $placeholderName = substr($placeholder, 2, -1);
+            // or maybe $placeholder is not a placeholder, but a regex.
+            $pattern = $this->placeholders[$placeholderName] ?? $placeholder;
+
+            if (! preg_match('#^' . $pattern . '$#u', $params[$index])) {
+                throw RouterException::forInvalidParameterType();
+            }
+
+            // Ensure that the param we're inserting matches
+            // the expected param type.
+            $pos  = strpos($from, $placeholder);
+            $from = substr_replace($from, $params[$index], $pos, strlen($placeholder));
+        }
+
+        $from = $this->replaceLocale($from, $locale);
+
+        return '/' . ltrim($from, '/');
+    }
+
+    /**
+     * Replaces the {locale} tag with the locale
+     */
+    private function replaceLocale(string $route, ?string $locale = null): string
+    {
+        if (strpos($route, '{locale}') === false) {
+            return $route;
+        }
+
+        // Check invalid locale
+        if ($locale !== null) {
+            $config = config(App::class);
+            if (! in_array($locale, $config->supportedLocales, true)) {
+                $locale = null;
+            }
+        }
+
+        if ($locale === null) {
+            $locale = Services::request()->getLocale();
+        }
+
+        return strtr($route, ['{locale}' => $locale]);
+    }
+
+    /**
      * Does the heavy lifting of creating an actual route. You must specify
      * the request method(s) that this route will work for. They can be separated
      * by a pipe character "|" if there is more than one.
      *
      * @param array|Closure|string $to
+     *
+     * @return void
      */
     protected function create(string $verb, string $from, $to, ?array $options = null)
     {
@@ -1166,7 +1436,7 @@ class RouteCollection implements RouteCollectionInterface
         }
 
         // When redirecting to named route, $to is an array like `['zombies' => '\Zombies::index']`.
-        if (is_array($to) && count($to) === 2) {
+        if (is_array($to) && isset($to[0])) {
             $to = $this->processArrayCallableSyntax($from, $to);
         }
 
@@ -1184,13 +1454,12 @@ class RouteCollection implements RouteCollectionInterface
         // Hostname limiting?
         if (! empty($options['hostname'])) {
             // @todo determine if there's a way to whitelist hosts?
-            if (isset($this->httpHost) && strtolower($this->httpHost) !== strtolower($options['hostname'])) {
+            if (! $this->checkHostname($options['hostname'])) {
                 return;
             }
 
             $overwrite = true;
         }
-
         // Limiting to subdomains?
         elseif (! empty($options['subdomain'])) {
             // If we don't match the current subdomain, then
@@ -1219,10 +1488,12 @@ class RouteCollection implements RouteCollectionInterface
             }
         }
 
+        $routeKey = $from;
+
         // Replace our regex pattern placeholders with the actual thing
         // so that the Router doesn't need to know about any of this.
         foreach ($this->placeholders as $tag => $pattern) {
-            $from = str_ireplace(':' . $tag, $pattern, $from);
+            $routeKey = str_ireplace(':' . $tag, $pattern, $routeKey);
         }
 
         // If is redirect, No processing
@@ -1237,27 +1508,48 @@ class RouteCollection implements RouteCollectionInterface
             $to = '\\' . ltrim($to, '\\');
         }
 
-        $name = $options['as'] ?? $from;
+        $name = $options['as'] ?? $routeKey;
+
+        helper('array');
 
         // Don't overwrite any existing 'froms' so that auto-discovered routes
         // do not overwrite any app/Config/Routes settings. The app
         // routes should always be the "source of truth".
         // this works only because discovered routes are added just prior
         // to attempting to route the request.
-        if (isset($this->routes[$verb][$name]) && ! $overwrite) {
+        $routeKeyExists = isset($this->routes[$verb][$routeKey]);
+        if ((isset($this->routesNames[$verb][$name]) || $routeKeyExists) && ! $overwrite) {
             return;
         }
 
-        $this->routes[$verb][$name] = [
-            'route' => [$from => $to],
+        $this->routes[$verb][$routeKey] = [
+            'name'    => $name,
+            'handler' => $to,
+            'from'    => $from,
         ];
-
-        $this->routesOptions[$verb][$from] = $options;
+        $this->routesOptions[$verb][$routeKey] = $options;
+        $this->routesNames[$verb][$name]       = $routeKey;
 
         // Is this a redirect?
         if (isset($options['redirect']) && is_numeric($options['redirect'])) {
-            $this->routes['*'][$name]['redirect'] = $options['redirect'];
+            $this->routes['*'][$routeKey]['redirect'] = $options['redirect'];
         }
+    }
+
+    /**
+     * Compares the hostname passed in against the current hostname
+     * on this page request.
+     *
+     * @param string $hostname Hostname in route options
+     */
+    private function checkHostname($hostname): bool
+    {
+        // CLI calls can't be on hostname.
+        if (! isset($this->httpHost)) {
+            return false;
+        }
+
+        return strtolower($this->httpHost) === strtolower($hostname);
     }
 
     private function processArrayCallableSyntax(string $from, array $to): string
@@ -1332,7 +1624,7 @@ class RouteCollection implements RouteCollectionInterface
     }
 
     /**
-     * Examines the HTTP_HOST to get a best match for the subdomain. It
+     * Examines the HTTP_HOST to get the best match for the subdomain. It
      * won't be perfect, but should work for our needs.
      *
      * It's especially not perfect since it's possible to register a domain
@@ -1378,24 +1670,40 @@ class RouteCollection implements RouteCollectionInterface
     /**
      * Reset the routes, so that a test case can provide the
      * explicit ones needed for it.
+     *
+     * @return void
      */
     public function resetRoutes()
     {
-        $this->routes = ['*' => []];
+        $this->routes = $this->routesNames = ['*' => []];
 
         foreach ($this->defaultHTTPMethods as $verb) {
-            $this->routes[$verb] = [];
+            $this->routes[$verb]      = [];
+            $this->routesNames[$verb] = [];
         }
 
+        $this->routesOptions = [];
+
         $this->prioritizeDetected = false;
+        $this->didDiscover        = false;
     }
 
     /**
      * Load routes options based on verb
+     *
+     * @return array<string, array<string, array|int|string>> [routeKey(or from) => [key => value]]
+     * @phpstan-return array<
+     *     string,
+     *     array{
+     *         filter?: string|list<string>, namespace?: string, hostname?: string,
+     *         subdomain?: string, offset?: int, priority?: int, as?: string,
+     *         redirect?: int
+     *     }
+     * >
      */
     protected function loadRoutesOptions(?string $verb = null): array
     {
-        $verb = $verb ?: $this->getHTTPVerb();
+        $verb ??= $this->getHTTPVerb();
 
         $options = $this->routesOptions[$verb] ?? [];
 
@@ -1431,40 +1739,68 @@ class RouteCollection implements RouteCollectionInterface
      * Get all controllers in Route Handlers
      *
      * @param string|null $verb HTTP verb. `'*'` returns all controllers in any verb.
+     *
+     * @return array<int, string> controller name list
+     * @phpstan-return list<string>
      */
     public function getRegisteredControllers(?string $verb = '*'): array
     {
-        $routes = [];
+        $controllers = [];
 
         if ($verb === '*') {
-            $rawRoutes = [];
-
             foreach ($this->defaultHTTPMethods as $tmpVerb) {
-                $rawRoutes = array_merge($rawRoutes, $this->routes[$tmpVerb]);
-            }
-
-            foreach ($rawRoutes as $route) {
-                $key     = key($route['route']);
-                $handler = $route['route'][$key];
-
-                $routes[$key] = $handler;
+                foreach ($this->routes[$tmpVerb] as $route) {
+                    $controller = $this->getControllerName($route['handler']);
+                    if ($controller !== null) {
+                        $controllers[] = $controller;
+                    }
+                }
             }
         } else {
             $routes = $this->getRoutes($verb);
-        }
 
-        $controllers = [];
-
-        foreach ($routes as $handler) {
-            if (! is_string($handler)) {
-                continue;
+            foreach ($routes as $handler) {
+                $controller = $this->getControllerName($handler);
+                if ($controller !== null) {
+                    $controllers[] = $controller;
+                }
             }
-
-            [$controller] = explode('::', $handler, 2);
-
-            $controllers[] = $controller;
         }
 
         return array_unique($controllers);
+    }
+
+    /**
+     * @param Closure|string $handler Handler
+     *
+     * @return string|null Controller classname
+     */
+    private function getControllerName($handler)
+    {
+        if (! is_string($handler)) {
+            return null;
+        }
+
+        [$controller] = explode('::', $handler, 2);
+
+        return $controller;
+    }
+
+    /**
+     * Set The flag that limit or not the routes with {locale} placeholder to App::$supportedLocales
+     */
+    public function useSupportedLocalesOnly(bool $useOnly): self
+    {
+        $this->useSupportedLocalesOnly = $useOnly;
+
+        return $this;
+    }
+
+    /**
+     * Get the flag that limit or not the routes with {locale} placeholder to App::$supportedLocales
+     */
+    public function shouldUseSupportedLocalesOnly(): bool
+    {
+        return $this->useSupportedLocalesOnly;
     }
 }
