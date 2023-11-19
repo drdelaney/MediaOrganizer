@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
-    <title><?=$title?></title>
+    <title><?=$pageTitle?></title>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.2.0/css/all.css" />
     <!-- Google Fonts Roboto -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" />
-    <!-- MDB -->
+    <!-- MDB https://mdbootstrap.com/ -->
     <link rel="stylesheet" href="/css/mdb.<?php echo getenv('DARK_THEME') === true ? 'dark.' : '' ?>min.css" />
     <!-- Custom styles -->
     <link rel="stylesheet" href="/css/admin.css" />
@@ -61,3 +61,20 @@
 <!--Main layout-->
 <main style="margin-top: 58px">
     <div class="container pt-4">
+        <?php
+            if (isset($success)) {
+                if (is_array($success)) {
+                    foreach ($success as $item) echo '<div class="alert alert-success">' . $item . '</div>';
+                } else {
+                    echo '<div class="alert alert-success">' . $success . '</div>';
+                }
+            }
+            if (isset($error)) {
+                if (is_array($error)) {
+                    foreach ($error as $item) echo '<div class="alert alert-danger">' . $item . '</div>';
+                } else {
+                    echo '<div class="alert alert-danger">' . $error . '</div>';
+                }
+            }
+        ?>
+

@@ -96,7 +96,7 @@
                                 . "</tr>";
                         } else if (isset($media[0])) {
                             foreach ($media as $row) {
-                                echo "<tr style='cursor:pointer;' onclick='location.href=\"media/id/" . $row->id . "\"'>"
+                                echo "<tr style='cursor:pointer;' onclick='location.href=\"/media/view/" . $row->id . "\"'>"
                                     . "<td>" . $row->title . "</td>"
                                     . "<td>" . $row->genre . "</td>"
                                     . "<td>" . $row->director . "</td>"
