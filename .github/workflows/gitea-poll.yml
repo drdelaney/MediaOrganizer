@@ -29,8 +29,8 @@ jobs:
 
       - name: Check out gitea_sync branch
         run: |
-          git fetch origin gitea_sync || git checkout -b gitea_sync
-          git checkout gitea_sync
+          git fetch origin gitea_sync
+          git checkout -B gitea_sync origin/gitea_sync || git checkout -b gitea_sync
 
       - name: Check for new commits in Gitea
         id: check_commits
@@ -38,7 +38,6 @@ jobs:
           GITEA_HEAD=$(git rev-parse gitea/main)
           echo "GITEA_HEAD=$GITEA_HEAD" >> $GITHUB_ENV
 
-          # Check cached last commit
           if [ -f last_gitea_main.txt ]; then
             LAST_HEAD=$(cat last_gitea_main.txt)
             if [ "$LAST_HEAD" = "$GITEA_HEAD" ]; then
@@ -47,11 +46,14 @@ jobs:
             fi
           fi
 
+      - name: Configure Git identity
+        run: |
+          git config user.name "Gitea Sync Bot"
+          git config user.email "github@loclhst.com"
+
       - name: Squash Gitea changes on top of gitea_sync
         run: |
           git merge --squash gitea/main
-          git config user.name "Gitea Sync Bot"
-          git config user.email "github@loclhst.com"
           git commit -m "Automated import from Gitea"
 
       - name: Push gitea_sync branch
@@ -77,13 +79,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_URL=$(gh pr list --head gitea_sync --base main --state open --json url -q '.[0].url')
-          if [ -z "$PR_URL" ]; then
-            gh pr create \
-              --head gitea_sync \
-              --base main \
-              --title "Automated sync from Gitea" \
-              --body "This PR contains the latest squashed changes from Gitea main branch."
-            echo "PR created."
-          else
-            echo "PR already exists: $PR_URL"
+          PR_URL=$(gh pr list --head gitea_sync --base main --state open --json u
