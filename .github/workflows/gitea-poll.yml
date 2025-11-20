@@ -51,19 +51,18 @@ jobs:
           git config user.name "Gitea Sync Bot"
           git config user.email "github@loclhst.com"
 
-      - name: Squash Gitea changes on top of gitea_sync
+      - name: Squash Gitea changes on top of gitea_sync (auto-resolve conflicts)
         run: |
           git merge --squash -X theirs gitea/main
-          # Only commit if there are staged changes
           if ! git diff --cached --quiet; then
-            git commit -m "Automated import from Gitea"
+            git commit -m "Automated import from Gitea (conflicts auto-resolved)"
           else
             echo "No changes to commit."
           fi
 
-      - name: Push gitea_sync branch
+      - name: Push gitea_sync branch using PAT
         run: |
-          git push origin gitea_sync --force
+          git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }} gitea_sync --force
 
       - name: Update last synced commit cache
         run: |
@@ -90,4 +89,3 @@ jobs:
             echo "PR created."
           else
             echo "PR already exists: $PR_URL"
-          fi
