@@ -1,4 +1,4 @@
-name: Gitea → GitHub Squash Sync (Polling)
+name: Gitea → GitHub Squash Sync (Polling, Main Only)
 
 on:
   schedule:
@@ -15,9 +15,25 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Clone Gitea repository
+    - name: Clone Gitea repository (main branch only)
       run: |
-        git clone --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
+        git clone --branch main --single-branch --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
+
+    - name: Check for new commits
+      id: check
+      run: |
+        cd gitea-src
+        CURRENT_HEAD=$(git rev-parse HEAD)
+        echo "current_head=$CURRENT_HEAD" >> $GITHUB_ENV
+
+        # Check if we have last synced commit stored
+        if [ -f ../last_gitea_main.txt ]; then
+          LAST_HEAD=$(cat ../last_gitea_main.txt)
+          if [ "$LAST_HEAD" = "$CURRENT_HEAD" ]; then
+            echo "No new commits on main branch, exiting."
+            exit 0
+          fi
+        fi
 
     - name: Remove git history and create squashed commit
       run: |
@@ -34,3 +50,9 @@ jobs:
         cd gitea-src
         git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         git push github HEAD:${{ secrets.TARGET_BRANCH }} --force
+
+    - name: Save last synced commit
+      run: |
+        echo $current_head > last_gitea_main.txt
+        # Persist as artifact for next run
+        echo "::set-output name=last_head::$current_head"
