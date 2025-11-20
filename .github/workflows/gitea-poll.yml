@@ -2,7 +2,7 @@ name: Gitea -> GitHub Squash Sync (Dedicated Branch)
 
 on:
   schedule:
-    # Runs every 5 minutes
+    # Runs every 12 hours
     - cron: "0 */12 * * *"
   workflow_dispatch:   # Allows manual run
 
@@ -11,80 +11,73 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout empty repo
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout empty repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Restore last synced commit from cache
-      id: restore_cache
-      uses: actions/cache@v3
-      with:
-        path: last_gitea_main.txt
-        key: gitea-main-last-commit
+      - name: Restore last synced commit from cache
+        id: restore_cache
+        uses: actions/cache@v3
+        with:
+          path: last_gitea_main.txt
+          key: gitea-main-last-commit
 
-    - name: Clone Gitea main branch
-      run: |
-        git clone --branch main --single-branch --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
-        cd gitea-src
-        CURRENT_HEAD=$(git rev-parse HEAD)
-        echo "current_head=$CURRENT_HEAD" >> $GITHUB_ENV
+      - name: Clone Gitea main branch
+        run: |
+          git clone --branch main --single-branch --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
+          cd gitea-src
+          CURRENT_HEAD=$(git rev-parse HEAD)
+          echo "current_head=$CURRENT_HEAD" >> $GITHUB_ENV
 
-    - name: Check if main branch has new commits
-      run: |
-        if [ -f last_gitea_main.txt ]; then
-          LAST_HEAD=$(cat last_gitea_main.txt)
-          if [ "$LAST_HEAD" = "$current_head" ]; then
-            echo "No new commits on main branch, exiting."
-            exit 0
+      - name: Check if main branch has new commits
+        run: |
+          if [ -f last_gitea_main.txt ]; then
+            LAST_HEAD=$(cat last_gitea_main.txt)
+            if [ "$LAST_HEAD" = "$current_head" ]; then
+              echo "No new commits on main branch, exiting."
+              exit 0
+            fi
           fi
-        fi
 
-    - name: Remove git history and create squashed commit
-      run: |
-        cd gitea-src
-        rm -rf .git
-        git init
-        git config user.name "Gitea Sync Bot"
-        git config user.email "github@loclhst.com"
-        git add .
-        git commit -m "Automated import from Gitea (squashed)"
+      - name: Remove git history and create squashed commit
+        run: |
+          cd gitea-src
+          rm -rf .git
+          git init
+          git config user.name "Gitea Sync Bot"
+          git config user.email "github@loclhst.com"
+          git add .
+          git commit -m "Automated import from Gitea (squashed)"
 
-    - name: Push to GitHub `gitea_sync` branch
-      run: |
-        cd gitea-src
-        git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-        git push github HEAD:gitea_sync --force
+      - name: Push to GitHub `gitea_sync` branch
+        run: |
+          cd gitea-src
+          git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push github HEAD:gitea_sync --force
 
-        - name: Set up GitHub CLI
-      uses: cli/gh-action@v2
-      with:
-        version: latest
+      - name: Create or update PR from gitea_sync -> main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_URL=$(gh pr list --head gitea_sync --base main --state open --json url -q '.[0].url')
+          if [ -z "$PR_URL" ]; then
+            gh pr create \
+              --head gitea_sync \
+              --base main \
+              --title "Automated sync from Gitea" \
+              --body "This PR contains the latest squashed changes from Gitea main branch."
+            echo "PR created."
+          else
+            echo "PR already exists: $PR_URL"
+          fi
 
-    - name: Create or update PR from gitea_sync -> main
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Check if a PR already exists
-        PR_URL=$(gh pr list --head gitea_sync --base main --state open --json url -q '.[0].url')
-        if [ -z "$PR_URL" ]; then
-          # No PR exists, create one
-          gh pr create \
-            --head gitea_sync \
-            --base main \
-            --title "Automated sync from Gitea" \
-            --body "This PR contains the latest squashed changes from Gitea main branch."
-          echo "PR created."
-        else
-          echo "PR already exists: $PR_URL"
-        fi
+      - name: Save last synced commit to cache
+        run: |
+          echo $current_head > last_gitea_main.txt
 
-
-    - name: Save last synced commit to cache
-      run: |
-        echo $current_head > last_gitea_main.txt
-    - name: Cache last synced commit
-      uses: actions/cache@v3
-      with:
-        path: last_gitea_main.txt
-        key: gitea-main-last-commit
+      - name: Cache last synced commit
+        uses: actions/cache@v3
+        with:
+          path: last_gitea_main.txt
+          key: gitea-main-la
