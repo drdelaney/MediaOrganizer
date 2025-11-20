@@ -68,8 +68,10 @@ jobs:
           path: last_gitea_main.txt
           key: gitea-main-last-commit
 
-      - name: Set up GitHub CLI
-        uses: gh-actions/gh-cli@v2
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install -y gh
 
       - name: Create or update PR from gitea_sync -> main
         env:
