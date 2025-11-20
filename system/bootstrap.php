@@ -1,19 +1,34 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
-use CodeIgniter\Config\DotEnv;
+/**
+ * ---------------------------------------------------------------
+ * This file cannot be used. The code has moved to Boot.php.
+ * ---------------------------------------------------------------
+ */
+
+use CodeIgniter\Exceptions\FrameworkException;
 use Config\Autoload;
 use Config\Modules;
 use Config\Paths;
 use Config\Services;
+
+header('HTTP/1.1 503 Service Unavailable.', true, 503);
+
+$message = 'This "system/bootstrap.php" is no longer used. If you are seeing this error message,
+the upgrade is not complete. Please refer to the upgrade guide and complete the upgrade.
+See https://codeigniter4.github.io/userguide/installation/upgrade_450.html' . PHP_EOL;
+echo $message;
 
 /*
  * ---------------------------------------------------------------
@@ -25,62 +40,52 @@ use Config\Services;
  * so they are available in the config files that are loaded.
  */
 
+/** @var Paths $paths */
+
 // The path to the application directory.
-if (! defined('APPPATH'))
-{
-	/**
-	 * @var Paths $paths
-	 */
-	define('APPPATH', realpath(rtrim($paths->appDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
+if (! defined('APPPATH')) {
+    define('APPPATH', realpath(rtrim($paths->appDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
 }
 
 // The path to the project root directory. Just above APPPATH.
-if (! defined('ROOTPATH'))
-{
-	define('ROOTPATH', realpath(APPPATH . '../') . DIRECTORY_SEPARATOR);
+if (! defined('ROOTPATH')) {
+    define('ROOTPATH', realpath(APPPATH . '../') . DIRECTORY_SEPARATOR);
 }
 
 // The path to the system directory.
-if (! defined('SYSTEMPATH'))
-{
-	/**
-	 * @var Paths $paths
-	 */
-	define('SYSTEMPATH', realpath(rtrim($paths->systemDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
+if (! defined('SYSTEMPATH')) {
+    define('SYSTEMPATH', realpath(rtrim($paths->systemDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
 }
 
 // The path to the writable directory.
-if (! defined('WRITEPATH'))
-{
-	/**
-	 * @var Paths $paths
-	 */
-	define('WRITEPATH', realpath(rtrim($paths->writableDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
+if (! defined('WRITEPATH')) {
+    define('WRITEPATH', realpath(rtrim($paths->writableDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
 }
 
 // The path to the tests directory
-if (! defined('TESTPATH'))
-{
-	/**
-	 * @var Paths $paths
-	 */
-	define('TESTPATH', realpath(rtrim($paths->testsDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
+if (! defined('TESTPATH')) {
+    define('TESTPATH', realpath(rtrim($paths->testsDirectory, '\\/ ')) . DIRECTORY_SEPARATOR);
 }
 
 /*
  * ---------------------------------------------------------------
- * GRAB OUR CONSTANTS & COMMON
+ * GRAB OUR CONSTANTS
  * ---------------------------------------------------------------
  */
-if (! defined('APP_NAMESPACE'))
-{
-	require_once APPPATH . 'Config/Constants.php';
+
+if (! defined('APP_NAMESPACE')) {
+    require_once APPPATH . 'Config/Constants.php';
 }
 
+/*
+ * ---------------------------------------------------------------
+ * LOAD COMMON FUNCTIONS
+ * ---------------------------------------------------------------
+ */
+
 // Require app/Common.php file if exists.
-if (is_file(APPPATH . 'Common.php'))
-{
-	require_once APPPATH . 'Common.php';
+if (is_file(APPPATH . 'Common.php')) {
+    require_once APPPATH . 'Common.php';
 }
 
 // Require system/Common.php
@@ -96,12 +101,11 @@ require_once SYSTEMPATH . 'Common.php';
  * files can use the path constants.
  */
 
-if (! class_exists('Config\Autoload', false))
-{
-	require_once SYSTEMPATH . 'Config/AutoloadConfig.php';
-	require_once APPPATH . 'Config/Autoload.php';
-	require_once SYSTEMPATH . 'Modules/Modules.php';
-	require_once APPPATH . 'Config/Modules.php';
+if (! class_exists(Autoload::class, false)) {
+    require_once SYSTEMPATH . 'Config/AutoloadConfig.php';
+    require_once APPPATH . 'Config/Autoload.php';
+    require_once SYSTEMPATH . 'Modules/Modules.php';
+    require_once APPPATH . 'Config/Modules.php';
 }
 
 require_once SYSTEMPATH . 'Autoloader/Autoloader.php';
@@ -109,51 +113,51 @@ require_once SYSTEMPATH . 'Config/BaseService.php';
 require_once SYSTEMPATH . 'Config/Services.php';
 require_once APPPATH . 'Config/Services.php';
 
-// Use Config\Services as CodeIgniter\Services
-if (! class_exists('CodeIgniter\Services', false))
-{
-	class_alias('Config\Services', 'CodeIgniter\Services');
-}
-
 // Initialize and register the loader with the SPL autoloader stack.
 Services::autoloader()->initialize(new Autoload(), new Modules())->register();
-
-// Now load Composer's if it's available
-if (is_file(COMPOSER_PATH))
-{
-	/*
-	 * The path to the vendor directory.
-	 *
-	 * We do not want to enforce this, so set the constant if Composer was used.
-	 */
-	if (! defined('VENDORPATH'))
-	{
-		define('VENDORPATH', realpath(ROOTPATH . 'vendor') . DIRECTORY_SEPARATOR);
-	}
-
-	require_once COMPOSER_PATH;
-}
-
-// Load environment settings from .env files into $_SERVER and $_ENV
-require_once SYSTEMPATH . 'Config/DotEnv.php';
-
-$env = new DotEnv(ROOTPATH);
-$env->load();
-
-// Always load the URL helper, it should be used in most of apps.
-helper('url');
+Services::autoloader()->loadHelpers();
 
 /*
  * ---------------------------------------------------------------
- * GRAB OUR CODEIGNITER INSTANCE
+ * SET EXCEPTION AND ERROR HANDLERS
  * ---------------------------------------------------------------
- *
- * The CodeIgniter class contains the core functionality to make
- * the application run, and does all of the dirty work to get
- * the pieces all working together.
  */
 
-$app = Services::codeigniter();
-$app->initialize();
+Services::exceptions()->initialize();
 
-return $app;
+/*
+ * ---------------------------------------------------------------
+ * CHECK SYSTEM FOR MISSING REQUIRED PHP EXTENSIONS
+ * ---------------------------------------------------------------
+ */
+
+// Run this check for manual installations
+if (! is_file(COMPOSER_PATH)) {
+    $missingExtensions = [];
+
+    foreach ([
+        'intl',
+        'json',
+        'mbstring',
+    ] as $extension) {
+        if (! extension_loaded($extension)) {
+            $missingExtensions[] = $extension;
+        }
+    }
+
+    if ($missingExtensions !== []) {
+        throw FrameworkException::forMissingExtension(implode(', ', $missingExtensions));
+    }
+
+    unset($missingExtensions);
+}
+
+/*
+ * ---------------------------------------------------------------
+ * INITIALIZE KINT
+ * ---------------------------------------------------------------
+ */
+
+Services::autoloader()->initializeKint(CI_DEBUG);
+
+exit(1);

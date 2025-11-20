@@ -19,13 +19,22 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
-	// public static function example($getShared = true)
-	// {
-	//     if ($getShared)
-	//     {
-	//         return static::getSharedInstance('example');
-	//     }
-	//
-	//     return new \CodeIgniter\Example();
-	// }
+    /**
+     * The Email class with custom SSL verification support.
+     *
+     * @param Email|null $config Configuration settings
+     * @param bool       $getShared
+     *
+     * @return \App\Libraries\Email|object
+     */
+    public static function email($config = null, bool $getShared = true)
+    {
+        if ($getShared) {
+            return static::getSharedInstance('email', $config);
+        }
+
+        $config ??= config('Email');
+
+        return new \App\Libraries\Email($config);
+    }
 }

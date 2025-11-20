@@ -1,27 +1,28 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
 namespace CodeIgniter\Test;
 
 use Closure;
+use CodeIgniter\Exceptions\InvalidArgumentException;
+use CodeIgniter\Exceptions\RuntimeException;
 use CodeIgniter\Filters\Exceptions\FilterException;
-use CodeIgniter\Filters\Filters;
 use CodeIgniter\Filters\FilterInterface;
+use CodeIgniter\Filters\Filters;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Router\RouteCollection;
 use Config\Filters as FiltersConfig;
-use Config\Services;
-use InvalidArgumentException;
-use RuntimeException;
 
 /**
  * Filter Test Trait
@@ -33,259 +34,290 @@ use RuntimeException;
  */
 trait FilterTestTrait
 {
-	/**
-	 * Have the one-time classes been instantiated?
-	 *
-	 * @var boolean
-	 */
-	private $doneFilterSetUp = false;
+    /**
+     * Have the one-time classes been instantiated?
+     *
+     * @var bool
+     */
+    private $doneFilterSetUp = false;
 
-	/**
-	 * The active IncomingRequest or CLIRequest
-	 *
-	 * @var RequestInterface
-	 */
-	protected $request;
+    /**
+     * The active IncomingRequest or CLIRequest
+     *
+     * @var RequestInterface
+     */
+    protected $request;
 
-	/**
-	 * The active Response instance
-	 *
-	 * @var ResponseInterface
-	 */
-	protected $response;
+    /**
+     * The active Response instance
+     *
+     * @var ResponseInterface
+     */
+    protected $response;
 
-	/**
-	 * The Filters configuration to use.
-	 * Extracted for access to aliases
-	 * during Filters::discoverFilters().
-	 *
-	 * @var FiltersConfig|null
-	 */
-	protected $filtersConfig;
+    /**
+     * The Filters configuration to use.
+     * Extracted for access to aliases
+     * during Filters::discoverFilters().
+     *
+     * @var FiltersConfig|null
+     */
+    protected $filtersConfig;
 
-	/**
-	 * The prepared Filters library.
-	 *
-	 * @var Filters|null
-	 */
-	protected $filters;
+    /**
+     * The prepared Filters library.
+     *
+     * @var Filters|null
+     */
+    protected $filters;
 
-	/**
-	 * The default App and discovered
-	 * routes to check for filters.
-	 *
-	 * @var RouteCollection|null
-	 */
-	protected $collection;
+    /**
+     * The default App and discovered
+     * routes to check for filters.
+     *
+     * @var RouteCollection|null
+     */
+    protected $collection;
 
-	//--------------------------------------------------------------------
-	// Staging
-	//--------------------------------------------------------------------
+    // --------------------------------------------------------------------
+    // Staging
+    // --------------------------------------------------------------------
 
-	/**
-	 * Initializes dependencies once.
-	 *
-	 * @return void
-	 */
-	protected function setUpFilterTestTrait(): void
-	{
-		if ($this->doneFilterSetUp === true)
-		{
-			return;
-		}
+    /**
+     * Initializes dependencies once.
+     */
+    protected function setUpFilterTestTrait(): void
+    {
+        if ($this->doneFilterSetUp === true) {
+            return;
+        }
 
-		// Create our own Request and Response so we can
-		// use the same ones for Filters and FilterInterface
-		// yet isolate them from outside influence
-		$this->request  = $this->request ?? clone Services::request();
-		$this->response = $this->response ?? clone Services::response();
+        // Create our own Request and Response so we can
+        // use the same ones for Filters and FilterInterface
+        // yet isolate them from outside influence
+        $this->request ??= clone service('request');
+        $this->response ??= clone service('response');
 
-		// Create our config and Filters instance to reuse for performance
-		$this->filtersConfig = $this->filtersConfig ?? config('Filters');
-		$this->filters       = $this->filters ?? new Filters($this->filtersConfig, $this->request, $this->response);
+        // Create our config and Filters instance to reuse for performance
+        $this->filtersConfig ??= config(FiltersConfig::class);
+        $this->filters ??= new Filters($this->filtersConfig, $this->request, $this->response);
 
-		if (is_null($this->collection))
-		{
-			// Load the RouteCollection from Config to gather App route info
-			// (creates $routes using the Service as a starting point)
-			require APPPATH . 'Config/Routes.php';
+        if ($this->collection === null) {
+            $this->collection = service('routes')->loadRoutes();
+        }
 
-			$routes->getRoutes('*'); // Triggers discovery
-			$this->collection = $routes;
-		}
+        $this->doneFilterSetUp = true;
+    }
 
-		$this->doneFilterSetUp = true;
-	}
+    // --------------------------------------------------------------------
+    // Utility
+    // --------------------------------------------------------------------
 
-	//--------------------------------------------------------------------
-	// Utility
-	//--------------------------------------------------------------------
+    /**
+     * Returns a callable method for a filter position
+     * using the local HTTP instances.
+     *
+     * @param FilterInterface|string $filter   The filter instance, class, or alias
+     * @param string                 $position "before" or "after"
+     *
+     * @return Closure(list<string>|null=): mixed
+     */
+    protected function getFilterCaller($filter, string $position): Closure
+    {
+        if (! in_array($position, ['before', 'after'], true)) {
+            throw new InvalidArgumentException('Invalid filter position passed: ' . $position);
+        }
 
-	/**
-	 * Returns a callable method for a filter position
-	 * using the local HTTP instances.
-	 *
-	 * @param FilterInterface|string $filter   The filter instance, class, or alias
-	 * @param string                 $position "before" or "after"
-	 *
-	 * @return Closure
-	 */
-	protected function getFilterCaller($filter, string $position): Closure
-	{
-		if (! in_array($position, ['before', 'after'], true))
-		{
-			throw new InvalidArgumentException('Invalid filter position passed: ' . $position);
-		}
+        if ($filter instanceof FilterInterface) {
+            $filterInstances = [$filter];
+        }
 
-		if (is_string($filter))
-		{
-			// Check for an alias (no namespace)
-			if (strpos($filter, '\\') === false)
-			{
-				if (! isset($this->filtersConfig->aliases[$filter]))
-				{
-					throw new RuntimeException("No filter found with alias '{$filter}'");
-				}
+        if (is_string($filter)) {
+            // Check for an alias (no namespace)
+            if (! str_contains($filter, '\\')) {
+                if (! isset($this->filtersConfig->aliases[$filter])) {
+                    throw new RuntimeException("No filter found with alias '{$filter}'");
+                }
 
-				$filter = $this->filtersConfig->aliases[$filter];
-			}
+                $filterClasses = (array) $this->filtersConfig->aliases[$filter];
+            } else {
+                // FQCN
+                $filterClasses = [$filter];
+            }
 
-			// Get an instance
-			$filter = new $filter();
-		}
+            $filterInstances = [];
 
-		if (! $filter instanceof FilterInterface)
-		{
-			throw FilterException::forIncorrectInterface(get_class($filter));
-		}
+            foreach ($filterClasses as $class) {
+                // Get an instance
+                $filter = new $class();
 
-		$request = clone $this->request;
+                if (! $filter instanceof FilterInterface) {
+                    throw FilterException::forIncorrectInterface($filter::class);
+                }
 
-		if ($position === 'before')
-		{
-			return function (array $params = null) use ($filter, $request) {
-				return $filter->before($request, $params);
-			};
-		}
+                $filterInstances[] = $filter;
+            }
+        }
 
-		$response = clone $this->response;
+        $request = clone $this->request;
 
-		return function (array $params = null) use ($filter, $request, $response) {
-			return $filter->after($request, $response, $params);
-		};
-	}
+        if ($position === 'before') {
+            return static function (?array $params = null) use ($filterInstances, $request) {
+                $result = null;
 
-	/**
-	 * Gets an array of filter aliases enabled
-	 * for the given route at position.
-	 *
-	 * @param string $route    The route to test
-	 * @param string $position "before" or "after"
-	 *
-	 * @return string[] The filter aliases
-	 */
-	protected function getFiltersForRoute(string $route, string $position): array
-	{
-		if (! in_array($position, ['before', 'after'], true))
-		{
-			throw new InvalidArgumentException('Invalid filter position passed:' . $position);
-		}
+                foreach ($filterInstances as $filter) {
+                    $result = $filter->before($request, $params);
 
-		$this->filters->reset();
+                    // @TODO The following logic is in Filters class.
+                    //       Should use Filters class.
+                    if ($result instanceof RequestInterface) {
+                        $request = $result;
 
-		if ($routeFilter = $this->collection->getFilterForRoute($route))
-		{
-			$this->filters->enableFilter($routeFilter, $position);
-		}
+                        continue;
+                    }
+                    if ($result instanceof ResponseInterface) {
+                        return $result;
+                    }
+                    if (empty($result)) {
+                        continue;
+                    }
+                }
 
-		$aliases = $this->filters->initialize($route)->getFilters();
+                return $result;
+            };
+        }
 
-		$this->filters->reset();
-		return $aliases[$position];
-	}
+        $response = clone $this->response;
 
-	//--------------------------------------------------------------------
-	// Assertions
-	//--------------------------------------------------------------------
+        return static function (?array $params = null) use ($filterInstances, $request, $response) {
+            $result = null;
 
-	/**
-	 * Asserts that the given route at position uses
-	 * the filter (by its alias).
-	 *
-	 * @param string $route    The route to test
-	 * @param string $position "before" or "after"
-	 * @param string $alias    Alias for the anticipated filter
-	 *
-	 * @return void
-	 */
-	protected function assertFilter(string $route, string $position, string $alias): void
-	{
-		$filters = $this->getFiltersForRoute($route, $position);
+            foreach ($filterInstances as $filter) {
+                $result = $filter->after($request, $response, $params);
 
-		$this->assertContains(
-			$alias,
-			$filters,
-			"Filter '{$alias}' does not apply to '{$route}'.",
-		);
-	}
+                // @TODO The following logic is in Filters class.
+                //       Should use Filters class.
+                if ($result instanceof ResponseInterface) {
+                    $response = $result;
 
-	/**
-	 * Asserts that the given route at position does not
-	 * use the filter (by its alias).
-	 *
-	 * @param string $route    The route to test
-	 * @param string $position "before" or "after"
-	 * @param string $alias    Alias for the anticipated filter
-	 *
-	 * @return void
-	 */
-	protected function assertNotFilter(string $route, string $position, string $alias)
-	{
-		$filters = $this->getFiltersForRoute($route, $position);
+                    continue;
+                }
+            }
 
-		$this->assertNotContains(
-			$alias,
-			$filters,
-			"Filter '{$alias}' applies to '{$route}' when it should not.",
-		);
-	}
+            return $result;
+        };
+    }
 
-	/**
-	 * Asserts that the given route at position has
-	 * at least one filter set.
-	 *
-	 * @param string $route    The route to test
-	 * @param string $position "before" or "after"
-	 *
-	 * @return void
-	 */
-	protected function assertHasFilters(string $route, string $position)
-	{
-		$filters = $this->getFiltersForRoute($route, $position);
+    /**
+     * Gets an array of filter aliases enabled
+     * for the given route at position.
+     *
+     * @param string $route    The route to test
+     * @param string $position "before" or "after"
+     *
+     * @return list<string> The filter aliases
+     */
+    protected function getFiltersForRoute(string $route, string $position): array
+    {
+        if (! in_array($position, ['before', 'after'], true)) {
+            throw new InvalidArgumentException('Invalid filter position passed:' . $position);
+        }
 
-		$this->assertNotEmpty(
-			$filters,
-			"No filters found for '{$route}' when at least one was expected.",
-		);
-	}
+        $this->filters->reset();
 
-	/**
-	 * Asserts that the given route at position has
-	 * no filters set.
-	 *
-	 * @param string $route    The route to test
-	 * @param string $position "before" or "after"
-	 *
-	 * @return void
-	 */
-	protected function assertNotHasFilters(string $route, string $position)
-	{
-		$filters = $this->getFiltersForRoute($route, $position);
+        $routeFilters = $this->collection->getFiltersForRoute($route);
 
-		$this->assertSame(
-			[],
-			$filters,
-			"Found filters for '{$route}' when none were expected: " . implode(', ', $filters) . '.',
-		);
-	}
+        if ($routeFilters !== []) {
+            $this->filters->enableFilters($routeFilters, $position);
+        }
+
+        $aliases = $this->filters->initialize($route)->getFilters();
+
+        $this->filters->reset();
+
+        return $aliases[$position];
+    }
+
+    // --------------------------------------------------------------------
+    // Assertions
+    // --------------------------------------------------------------------
+
+    /**
+     * Asserts that the given route at position uses
+     * the filter (by its alias).
+     *
+     * @param string $route    The route to test
+     * @param string $position "before" or "after"
+     * @param string $alias    Alias for the anticipated filter
+     */
+    protected function assertFilter(string $route, string $position, string $alias): void
+    {
+        $filters = $this->getFiltersForRoute($route, $position);
+
+        $this->assertContains(
+            $alias,
+            $filters,
+            "Filter '{$alias}' does not apply to '{$route}'.",
+        );
+    }
+
+    /**
+     * Asserts that the given route at position does not
+     * use the filter (by its alias).
+     *
+     * @param string $route    The route to test
+     * @param string $position "before" or "after"
+     * @param string $alias    Alias for the anticipated filter
+     *
+     * @return void
+     */
+    protected function assertNotFilter(string $route, string $position, string $alias)
+    {
+        $filters = $this->getFiltersForRoute($route, $position);
+
+        $this->assertNotContains(
+            $alias,
+            $filters,
+            "Filter '{$alias}' applies to '{$route}' when it should not.",
+        );
+    }
+
+    /**
+     * Asserts that the given route at position has
+     * at least one filter set.
+     *
+     * @param string $route    The route to test
+     * @param string $position "before" or "after"
+     *
+     * @return void
+     */
+    protected function assertHasFilters(string $route, string $position)
+    {
+        $filters = $this->getFiltersForRoute($route, $position);
+
+        $this->assertNotEmpty(
+            $filters,
+            "No filters found for '{$route}' when at least one was expected.",
+        );
+    }
+
+    /**
+     * Asserts that the given route at position has
+     * no filters set.
+     *
+     * @param string $route    The route to test
+     * @param string $position "before" or "after"
+     *
+     * @return void
+     */
+    protected function assertNotHasFilters(string $route, string $position)
+    {
+        $filters = $this->getFiltersForRoute($route, $position);
+
+        $this->assertSame(
+            [],
+            $filters,
+            "Found filters for '{$route}' when none were expected: " . implode(', ', $filters) . '.',
+        );
+    }
 }

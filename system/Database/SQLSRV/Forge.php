@@ -1,410 +1,452 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
 namespace CodeIgniter\Database\SQLSRV;
 
+use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\Database\Forge as BaseForge;
+use Throwable;
 
 /**
  * Forge for SQLSRV
  */
 class Forge extends BaseForge
 {
-	/**
-	 * DROP CONSTRAINT statement
-	 *
-	 * @var string
-	 */
-	protected $dropConstraintStr = 'ALTER TABLE %s DROP CONSTRAINT %s';
+    /**
+     * DROP CONSTRAINT statement
+     *
+     * @var string
+     */
+    protected $dropConstraintStr;
 
-	/**
-	 * CREATE DATABASE IF statement
-	 *
-	 * @todo missing charset, collat & check for existent
-	 *
-	 * @var string
-	 */
-	protected $createDatabaseIfStr = "DECLARE @DBName VARCHAR(255) = '%s'\nDECLARE @SQL VARCHAR(max) = 'IF DB_ID( ''' + @DBName + ''' ) IS NULL CREATE DATABASE ' + @DBName\nEXEC( @SQL )";
+    /**
+     * DROP INDEX statement
+     *
+     * @var string
+     */
+    protected $dropIndexStr;
 
-	/**
-	 * CREATE DATABASE IF statement
-	 *
-	 * @todo missing charset & collat
-	 *
-	 * @var string
-	 */
-	protected $createDatabaseStr = 'CREATE DATABASE %s ';
+    /**
+     * CREATE DATABASE IF statement
+     *
+     * @todo missing charset, collat & check for existent
+     *
+     * @var string
+     */
+    protected $createDatabaseIfStr = "DECLARE @DBName VARCHAR(255) = '%s'\nDECLARE @SQL VARCHAR(max) = 'IF DB_ID( ''' + @DBName + ''' ) IS NULL CREATE DATABASE %s'\nEXEC( @SQL )";
 
-	/**
-	 * CHECK DATABASE EXIST statement
-	 *
-	 * @var string
-	 */
-	protected $checkDatabaseExistStr = 'IF DB_ID( %s ) IS NOT NULL SELECT 1';
+    /**
+     * CREATE DATABASE IF statement
+     *
+     * @todo missing charset & collat
+     *
+     * @var string
+     */
+    protected $createDatabaseStr = 'CREATE DATABASE %s ';
 
-	/**
-	 * RENAME TABLE statement
-	 *
-	 * While the below statement would work, it returns an error.
-	 * Also MS recommends dropping and dropping and re-creating the table.
-	 *
-	 * @see https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-2017
-	 * 'EXEC sp_rename %s , %s ;'
-	 *
-	 * @var string
-	 */
-	protected $renameTableStr = 'EXEC sp_rename %s , %s ;';
+    /**
+     * CHECK DATABASE EXIST statement
+     *
+     * @var string
+     */
+    protected $checkDatabaseExistStr = 'IF DB_ID( %s ) IS NOT NULL SELECT 1';
 
-	/**
-	 * UNSIGNED support
-	 *
-	 * @var array
-	 */
-	protected $unsigned = [
-		'TINYINT'  => 'SMALLINT',
-		'SMALLINT' => 'INT',
-		'INT'      => 'BIGINT',
-		'REAL'     => 'FLOAT',
-	];
+    /**
+     * RENAME TABLE statement
+     *
+     * While the below statement would work, it returns an error.
+     * Also MS recommends dropping and dropping and re-creating the table.
+     *
+     * @see https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-2017
+     * 'EXEC sp_rename %s , %s ;'
+     *
+     * @var string
+     */
+    protected $renameTableStr;
 
-	/**
-	 * CREATE TABLE IF statement
-	 *
-	 * @var string
-	 */
-	protected $createTableIfStr = "IF NOT EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'%s') AND OBJECTPROPERTY(id, N'IsUserTable') = 1)\nCREATE TABLE";
+    /**
+     * UNSIGNED support
+     *
+     * @var array
+     */
+    protected $unsigned = [
+        'TINYINT'  => 'SMALLINT',
+        'SMALLINT' => 'INT',
+        'INT'      => 'BIGINT',
+        'REAL'     => 'FLOAT',
+    ];
 
-	/**
-	 * CREATE TABLE statement
-	 *
-	 * @var string
-	 */
-	protected $createTableStr = "%s %s (%s\n) ";
+    /**
+     * Foreign Key Allowed Actions
+     *
+     * @var array
+     */
+    protected $fkAllowActions = ['CASCADE', 'SET NULL', 'NO ACTION', 'RESTRICT', 'SET DEFAULT'];
 
-	/**
-	 * DROP TABLE IF statement
-	 *
-	 * @var string
-	 */
-	protected $_drop_table_if = "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'%s') AND OBJECTPROPERTY(id, N'IsUserTable') = 1)\nDROP TABLE";
+    /**
+     * CREATE TABLE IF statement
+     *
+     * @var string
+     *
+     * @deprecated This is no longer used.
+     */
+    protected $createTableIfStr;
 
-	//--------------------------------------------------------------------
+    /**
+     * CREATE TABLE statement
+     *
+     * @var string
+     */
+    protected $createTableStr;
 
-	/**
-	 * CREATE TABLE attributes
-	 *
-	 * @param  array $attributes Associative array of table attributes
-	 * @return string
-	 */
-	protected function _createTableAttributes(array $attributes): string
-	{
-		return '';
-	}
+    public function __construct(BaseConnection $db)
+    {
+        parent::__construct($db);
 
-	/**
-	 * ALTER TABLE
-	 *
-	 * @param string $alterType ALTER type
-	 * @param string $table     Table name
-	 * @param mixed  $field     Column definition
-	 *
-	 * @return string|string[]|false
-	 */
-	protected function _alterTable(string $alterType, string $table, $field)
-	{
-		if ($alterType === 'ADD')
-		{
-			return parent::_alterTable($alterType, $table, $field);
-		}
+        $this->createTableStr = '%s ' . $this->db->escapeIdentifiers($this->db->schema) . ".%s (%s\n) ";
+        $this->renameTableStr = 'EXEC sp_rename [' . $this->db->escapeIdentifiers($this->db->schema) . '.%s] , %s ;';
 
-		// Handle DROP here
-		if ($alterType === 'DROP')
-		{
-			// check if fields are part of any indexes
-			$indexData = $this->db->getIndexData($table);
+        $this->dropConstraintStr = 'ALTER TABLE ' . $this->db->escapeIdentifiers($this->db->schema) . '.%s DROP CONSTRAINT %s';
+        $this->dropIndexStr      = 'DROP INDEX %s ON ' . $this->db->escapeIdentifiers($this->db->schema) . '.%s';
+    }
 
-			foreach ($indexData as $index)
-			{
-				if (is_string($field))
-				{
-					$field = explode(',', $field);
-				}
+    /**
+     * Create database
+     *
+     * @param bool $ifNotExists Whether to add IF NOT EXISTS condition
+     *
+     * @throws DatabaseException
+     */
+    public function createDatabase(string $dbName, bool $ifNotExists = false): bool
+    {
+        if ($ifNotExists) {
+            $sql = sprintf(
+                $this->createDatabaseIfStr,
+                $dbName,
+                $this->db->escapeIdentifier($dbName),
+            );
+        } else {
+            $sql = sprintf(
+                $this->createDatabaseStr,
+                $this->db->escapeIdentifier($dbName),
+            );
+        }
 
-				$fld = array_intersect($field, $index->fields);
+        try {
+            if (! $this->db->query($sql)) {
+                // @codeCoverageIgnoreStart
+                if ($this->db->DBDebug) {
+                    throw new DatabaseException('Unable to create the specified database.');
+                }
 
-				// Drop index if field is part of an index
-				if (! empty($fld))
-				{
-					$this->_dropIndex($table, $index);
-				}
-			}
+                return false;
+                // @codeCoverageIgnoreEnd
+            }
 
-			$sql = 'ALTER TABLE [' . $table . '] DROP ';
+            if (isset($this->db->dataCache['db_names'])) {
+                $this->db->dataCache['db_names'][] = $dbName;
+            }
 
-			$fields = array_map(function ($item) {
-				return 'COLUMN [' . trim($item) . ']';
-			}, (array) $field);
+            return true;
+        } catch (Throwable $e) {
+            if ($this->db->DBDebug) {
+                throw new DatabaseException('Unable to create the specified database.', 0, $e);
+            }
 
-			return $sql .= implode(',', $fields);
-		}
+            return false; // @codeCoverageIgnore
+        }
+    }
 
-		$sql = 'ALTER TABLE ' . $this->db->escapeIdentifiers($table);
+    /**
+     * CREATE TABLE attributes
+     */
+    protected function _createTableAttributes(array $attributes): string
+    {
+        return '';
+    }
 
-		$sqls = [];
-		foreach ($field as $data)
-		{
-			if ($data['_literal'] !== false)
-			{
-				return false;
-			}
+    /**
+     * @param array|string $processedFields Processed column definitions
+     *                                      or column names to DROP
+     *
+     * @return ($alterType is 'DROP' ? string : false|list<string>)
+     */
+    protected function _alterTable(string $alterType, string $table, $processedFields)
+    {
+        // Handle DROP here
+        if ($alterType === 'DROP') {
+            $columnNamesToDrop = $processedFields;
 
-			if (isset($data['type']))
-			{
-				$sqls[] = $sql . ' ALTER COLUMN ' . $this->db->escapeIdentifiers($data['name'])
-						. " {$data['type']}{$data['length']}";
-			}
+            // check if fields are part of any indexes
+            $indexData = $this->db->getIndexData($table);
 
-			if (! empty($data['default']))
-			{
-				$sqls[] = $sql . ' ALTER COLUMN ADD CONSTRAINT ' . $this->db->escapeIdentifiers($data['name']) . '_def'
-						. " DEFAULT {$data['default']} FOR " . $this->db->escapeIdentifiers($data['name']);
-			}
+            foreach ($indexData as $index) {
+                if (is_string($columnNamesToDrop)) {
+                    $columnNamesToDrop = explode(',', $columnNamesToDrop);
+                }
 
-			if (isset($data['null']))
-			{
-				$sqls[] = $sql . ' ALTER COLUMN ' . $this->db->escapeIdentifiers($data['name'])
-						. ($data['null'] === true ? ' DROP' : '') . " {$data['type']}{$data['length']} NOT NULL";
-			}
+                $fld = array_intersect($columnNamesToDrop, $index->fields);
 
-			if (! empty($data['comment']))
-			{
-				$sqls[] = 'EXEC sys.sp_addextendedproperty '
-						. "@name=N'Caption', @value=N'" . $data['comment'] . "' , "
-						. "@level0type=N'SCHEMA',@level0name=N'" . $this->db->schema . "', "
-						. "@level1type=N'TABLE',@level1name=N'" . $this->db->escapeIdentifiers($table) . "', "
-						. "@level2type=N'COLUMN',@level2name=N'" . $this->db->escapeIdentifiers($data['name']) . "'";
-			}
+                // Drop index if field is part of an index
+                if ($fld !== []) {
+                    $this->_dropIndex($table, $index);
+                }
+            }
 
-			if (! empty($data['new_name']))
-			{
-				// EXEC sp_rename '[dbo].[db_misc].[value]', 'valueasdasd', 'COLUMN';
-				$sqls[] = "EXEC sp_rename  '[" . $this->db->schema . '].[' . $table . '].[' . $data['name'] . "]' , '" . $data['new_name'] . "', 'COLUMN';";
-			}
-		}
+            $fullTable = $this->db->escapeIdentifiers($this->db->schema) . '.' . $this->db->escapeIdentifiers($table);
 
-		return $sqls;
-	}
+            // Drop default constraints
+            $fields = implode(',', $this->db->escape((array) $columnNamesToDrop));
 
-	//--------------------------------------------------------------------
+            $sql = <<<SQL
+                SELECT name
+                FROM sys.default_constraints
+                WHERE parent_object_id = OBJECT_ID('{$fullTable}')
+                AND parent_column_id IN (
+                SELECT column_id FROM sys.columns WHERE name IN ({$fields}) AND object_id = OBJECT_ID(N'{$fullTable}')
+                )
+                SQL;
 
-	/**
-	 * Drop index for table
-	 *
-	 * @param string $table
-	 * @param object $indexData
-	 *
-	 * @return mixed
-	 */
-	protected function _dropIndex(string $table, object $indexData)
-	{
-		if ($indexData->type === 'PRIMARY')
-		{
-			$sql = 'ALTER TABLE [' . $this->db->schema . '].[' . $table . '] DROP [' . $indexData->name . ']';
-		}
-		else
-		{
-			$sql = 'DROP INDEX [' . $indexData->name . '] ON [' . $this->db->schema . '].[' . $table . ']';
-		}
+            foreach ($this->db->query($sql)->getResultArray() as $index) {
+                $this->db->query('ALTER TABLE ' . $fullTable . ' DROP CONSTRAINT ' . $index['name'] . '');
+            }
 
-		return $this->db->simpleQuery($sql);
-	}
+            $sql = 'ALTER TABLE ' . $fullTable . ' DROP ';
 
-	/**
-	 * Process column
-	 *
-	 * @param  array $field
-	 * @return string
-	 */
-	protected function _processColumn(array $field): string
-	{
-		return $this->db->escapeIdentifiers($field['name'])
-				. (empty($field['new_name']) ? '' : ' ' . $this->db->escapeIdentifiers($field['new_name']))
-				. ' ' . $field['type'] . $field['length']
-				. $field['default']
-				. $field['null']
-				. $field['auto_increment']
-				. '' // (empty($field['comment']) ? '' : ' COMMENT ' . $field['comment'])
-				. $field['unique'];
-	}
+            $fields = array_map(static fn ($item): string => 'COLUMN [' . trim($item) . ']', (array) $columnNamesToDrop);
 
-	/**
-	 * Process foreign keys
-	 *
-	 * @param string $table Table name
-	 *
-	 * @return string
-	 */
-	protected function _processForeignKeys(string $table): string
-	{
-		$sql = '';
+            return $sql . implode(',', $fields);
+        }
 
-		$allowActions = [
-			'CASCADE',
-			'SET NULL',
-			'NO ACTION',
-			'RESTRICT',
-			'SET DEFAULT',
-		];
+        $sql = 'ALTER TABLE ' . $this->db->escapeIdentifiers($this->db->schema) . '.' . $this->db->escapeIdentifiers($table);
+        $sql .= ($alterType === 'ADD') ? 'ADD ' : ' ';
 
-		if ($this->foreignKeys !== [])
-		{
-			foreach ($this->foreignKeys as $field => $fkey)
-			{
-				$nameIndex = $table . '_' . $field . '_foreign';
+        $sqls = [];
 
-				$sql .= ",\n\t CONSTRAINT " . $this->db->escapeIdentifiers($nameIndex)
-						. ' FOREIGN KEY (' . $this->db->escapeIdentifiers($field) . ') '
-						. ' REFERENCES ' . $this->db->escapeIdentifiers($this->db->getPrefix() . $fkey['table']) . ' (' . $this->db->escapeIdentifiers($fkey['field']) . ')';
+        if ($alterType === 'ADD') {
+            foreach ($processedFields as $field) {
+                $sqls[] = $sql . ($field['_literal'] !== false ? $field['_literal'] : $this->_processColumn($field));
+            }
 
-				if ($fkey['onDelete'] !== false && in_array($fkey['onDelete'], $allowActions, true))
-				{
-					$sql .= ' ON DELETE ' . $fkey['onDelete'];
-				}
+            return $sqls;
+        }
 
-				if ($fkey['onUpdate'] !== false && in_array($fkey['onUpdate'], $allowActions, true))
-				{
-					$sql .= ' ON UPDATE ' . $fkey['onUpdate'];
-				}
-			}
-		}
+        foreach ($processedFields as $field) {
+            if ($field['_literal'] !== false) {
+                return false;
+            }
 
-		return $sql;
-	}
+            if (isset($field['type'])) {
+                $sqls[] = $sql . ' ALTER COLUMN ' . $this->db->escapeIdentifiers($field['name'])
+                    . " {$field['type']}{$field['length']}";
+            }
 
-	/**
-	 * Process primary keys
-	 *
-	 * @param string $table Table name
-	 *
-	 * @return string
-	 */
-	protected function _processPrimaryKeys(string $table): string
-	{
-		for ($i = 0, $c = count($this->primaryKeys); $i < $c; $i++)
-		{
-			if (! isset($this->fields[$this->primaryKeys[$i]]))
-			{
-				unset($this->primaryKeys[$i]);
-			}
-		}
+            if (! empty($field['default'])) {
+                $sqls[] = $sql . ' ALTER COLUMN ADD CONSTRAINT ' . $this->db->escapeIdentifiers($field['name']) . '_def'
+                    . " DEFAULT {$field['default']} FOR " . $this->db->escapeIdentifiers($field['name']);
+            }
 
-		if ($this->primaryKeys !== [])
-		{
-			$sql = ",\n\tCONSTRAINT " . $this->db->escapeIdentifiers('pk_' . $table)
-					. ' PRIMARY KEY(' . implode(', ', $this->db->escapeIdentifiers($this->primaryKeys)) . ')';
-		}
+            $nullable = true; // Nullable by default.
+            if (isset($field['null']) && ($field['null'] === false || $field['null'] === ' NOT ' . $this->null)) {
+                $nullable = false;
+            }
+            $sqls[] = $sql . ' ALTER COLUMN ' . $this->db->escapeIdentifiers($field['name'])
+                . " {$field['type']}{$field['length']} " . ($nullable ? '' : 'NOT') . ' NULL';
 
-		return $sql ?? '';
-	}
+            if (! empty($field['comment'])) {
+                $sqls[] = 'EXEC sys.sp_addextendedproperty '
+                    . "@name=N'Caption', @value=N'" . $field['comment'] . "' , "
+                    . "@level0type=N'SCHEMA',@level0name=N'" . $this->db->schema . "', "
+                    . "@level1type=N'TABLE',@level1name=N'" . $this->db->escapeIdentifiers($table) . "', "
+                    . "@level2type=N'COLUMN',@level2name=N'" . $this->db->escapeIdentifiers($field['name']) . "'";
+            }
 
-	/**
-	 * Field attribute TYPE
-	 *
-	 * Performs a data type mapping between different databases.
-	 *
-	 * @param array $attributes
-	 *
-	 * @return void
-	 */
-	protected function _attributeType(array &$attributes)
-	{
-		// Reset field lengths for data types that don't support it
-		if (isset($attributes['CONSTRAINT']) && stripos($attributes['TYPE'], 'int') !== false)
-		{
-			$attributes['CONSTRAINT'] = null;
-		}
+            if (! empty($field['new_name'])) {
+                $sqls[] = "EXEC sp_rename  '[" . $this->db->schema . '].[' . $table . '].[' . $field['name'] . "]' , '" . $field['new_name'] . "', 'COLUMN';";
+            }
+        }
 
-		switch (strtoupper($attributes['TYPE']))
-		{
-			case 'MEDIUMINT':
-				$attributes['TYPE']     = 'INTEGER';
-				$attributes['UNSIGNED'] = false;
-				break;
-			case 'INTEGER':
-				$attributes['TYPE'] = 'INT';
+        return $sqls;
+    }
 
-				break;
-			case 'ENUM':
-				$attributes['TYPE']       = 'TEXT';
-				$attributes['CONSTRAINT'] = null;
+    /**
+     * Drop index for table
+     *
+     * @return mixed
+     */
+    protected function _dropIndex(string $table, object $indexData)
+    {
+        if ($indexData->type === 'PRIMARY') {
+            $sql = 'ALTER TABLE [' . $this->db->schema . '].[' . $table . '] DROP [' . $indexData->name . ']';
+        } else {
+            $sql = 'DROP INDEX [' . $indexData->name . '] ON [' . $this->db->schema . '].[' . $table . ']';
+        }
 
-				break;
-			/* case 'DATETIME':
-			  $attributes['TYPE'] = 'TIMESTAMP';
-			  break; */
-			case 'TIMESTAMP':
-				$attributes['TYPE'] = 'DATETIME';
-				break;
-			default:
-				break;
-		}
-	}
+        return $this->db->simpleQuery($sql);
+    }
 
-	/**
-	 * Field attribute AUTO_INCREMENT
-	 *
-	 * @param array $attributes
-	 * @param array $field
-	 *
-	 * @return void
-	 */
-	protected function _attributeAutoIncrement(array &$attributes, array &$field)
-	{
-		if (! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === true && stripos($field['type'], 'INT') !== false)
-		{
-			$field['auto_increment'] = ' IDENTITY(1,1)';
-		}
-	}
+    /**
+     * Generates SQL to add indexes
+     *
+     * @param bool $asQuery When true returns stand alone SQL, else partial SQL used with CREATE TABLE
+     */
+    protected function _processIndexes(string $table, bool $asQuery = false): array
+    {
+        $sqls = [];
 
-	/**
-	 * Drop Table
-	 *
-	 * Generates a platform-specific DROP TABLE string
-	 *
-	 * @todo Support for cascade
-	 *
-	 * @param string  $table    Table name
-	 * @param boolean $ifExists Whether to add an IF EXISTS condition
-	 * @param boolean $cascade
-	 *
-	 * @return string
-	 */
-	protected function _dropTable(string $table, bool $ifExists, bool $cascade): string
-	{
-		$sql = 'DROP TABLE';
+        for ($i = 0, $c = count($this->keys); $i < $c; $i++) {
+            for ($i2 = 0, $c2 = count($this->keys[$i]['fields']); $i2 < $c2; $i2++) {
+                if (! isset($this->fields[$this->keys[$i]['fields'][$i2]])) {
+                    unset($this->keys[$i]['fields'][$i2]);
+                }
+            }
 
-		if ($ifExists)
-		{
-			$sql .= ' IF EXISTS ';
-		}
+            if (count($this->keys[$i]['fields']) <= 0) {
+                continue;
+            }
 
-		$table = ' [' . $this->db->database . '].[' . $this->db->schema . '].[' . $table . '] ';
+            $keyName = $this->db->escapeIdentifiers(($this->keys[$i]['keyName'] === '') ?
+                $table . '_' . implode('_', $this->keys[$i]['fields']) :
+                $this->keys[$i]['keyName']);
 
-		$sql .= $table;
+            if (in_array($i, $this->uniqueKeys, true)) {
+                $sqls[] = 'ALTER TABLE '
+                    . $this->db->escapeIdentifiers($this->db->schema) . '.' . $this->db->escapeIdentifiers($table)
+                    . ' ADD CONSTRAINT ' . $keyName
+                    . ' UNIQUE (' . implode(', ', $this->db->escapeIdentifiers($this->keys[$i]['fields'])) . ');';
 
-		if ($cascade)
-		{
-			$sql .= '';
-		}
+                continue;
+            }
 
-		return $sql;
-	}
+            $sqls[] = 'CREATE INDEX '
+                . $keyName
+                . ' ON ' . $this->db->escapeIdentifiers($this->db->schema) . '.' . $this->db->escapeIdentifiers($table)
+                . ' (' . implode(', ', $this->db->escapeIdentifiers($this->keys[$i]['fields'])) . ');';
+        }
+
+        return $sqls;
+    }
+
+    /**
+     * Process column
+     */
+    protected function _processColumn(array $processedField): string
+    {
+        return $this->db->escapeIdentifiers($processedField['name'])
+            . (empty($processedField['new_name']) ? '' : ' ' . $this->db->escapeIdentifiers($processedField['new_name']))
+            . ' ' . $processedField['type'] . ($processedField['type'] === 'text' ? '' : $processedField['length'])
+            . $processedField['default']
+            . $processedField['null']
+            . $processedField['auto_increment']
+            . ''
+            . $processedField['unique'];
+    }
+
+    /**
+     * Performs a data type mapping between different databases.
+     */
+    protected function _attributeType(array &$attributes)
+    {
+        // Reset field lengths for data types that don't support it
+        if (isset($attributes['CONSTRAINT']) && str_contains(strtolower($attributes['TYPE']), 'int')) {
+            $attributes['CONSTRAINT'] = null;
+        }
+
+        switch (strtoupper($attributes['TYPE'])) {
+            case 'MEDIUMINT':
+                $attributes['TYPE']     = 'INTEGER';
+                $attributes['UNSIGNED'] = false;
+                break;
+
+            case 'INTEGER':
+                $attributes['TYPE'] = 'INT';
+                break;
+
+            case 'ENUM':
+                // in char(n) and varchar(n), the n defines the string length in
+                // bytes (0 to 8,000).
+                // https://learn.microsoft.com/en-us/sql/t-sql/data-types/char-and-varchar-transact-sql?view=sql-server-ver16#remarks
+                $maxLength = max(
+                    array_map(
+                        static fn ($value): int => strlen($value),
+                        $attributes['CONSTRAINT'],
+                    ),
+                );
+
+                $attributes['TYPE']       = 'VARCHAR';
+                $attributes['CONSTRAINT'] = $maxLength;
+                break;
+
+            case 'TIMESTAMP':
+                $attributes['TYPE'] = 'DATETIME';
+                break;
+
+            case 'BOOLEAN':
+                $attributes['TYPE'] = 'BIT';
+                break;
+
+            case 'BLOB':
+                $attributes['TYPE'] = 'VARBINARY';
+                $attributes['CONSTRAINT'] ??= 'MAX';
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Field attribute AUTO_INCREMENT
+     */
+    protected function _attributeAutoIncrement(array &$attributes, array &$field)
+    {
+        if (! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === true && str_contains(strtolower($field['type']), strtolower('INT'))) {
+            $field['auto_increment'] = ' IDENTITY(1,1)';
+        }
+    }
+
+    /**
+     * Generates a platform-specific DROP TABLE string
+     *
+     * @todo Support for cascade
+     */
+    protected function _dropTable(string $table, bool $ifExists, bool $cascade): string
+    {
+        $sql = 'DROP TABLE';
+
+        if ($ifExists) {
+            $sql .= ' IF EXISTS ';
+        }
+
+        $table = ' [' . $this->db->database . '].[' . $this->db->schema . '].[' . $table . '] ';
+
+        $sql .= $table;
+
+        if ($cascade) {
+            $sql .= '';
+        }
+
+        return $sql;
+    }
+
+    /**
+     * Constructs sql to check if key is a constraint.
+     */
+    protected function _dropKeyAsConstraint(string $table, string $constraintName): string
+    {
+        return "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                WHERE TABLE_NAME= '" . trim($table, '"') . "'
+                AND CONSTRAINT_NAME = '" . trim($constraintName, '"') . "'";
+    }
 }
