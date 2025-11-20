@@ -3,7 +3,8 @@ name: Gitea → GitHub Squash Sync (Polling, Main Only)
 on:
   schedule:
     # Runs every 5 minutes
-    - cron: "*/5 * * * *"
+    - cron: "0 */6 * * *"
+  workflow_dispatch:   # Allows manual trigger
 
 jobs:
   squash_sync:
@@ -15,21 +16,25 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Clone Gitea repository (main branch only)
+    - name: Restore last synced commit from cache
+      id: restore_cache
+      uses: actions/cache@v3
+      with:
+        path: last_gitea_main.txt
+        key: gitea-main-last-commit
+
+    - name: Clone Gitea main branch
       run: |
         git clone --branch main --single-branch --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
-
-    - name: Check for new commits
-      id: check
-      run: |
         cd gitea-src
         CURRENT_HEAD=$(git rev-parse HEAD)
         echo "current_head=$CURRENT_HEAD" >> $GITHUB_ENV
 
-        # Check if we have last synced commit stored
-        if [ -f ../last_gitea_main.txt ]; then
-          LAST_HEAD=$(cat ../last_gitea_main.txt)
-          if [ "$LAST_HEAD" = "$CURRENT_HEAD" ]; then
+    - name: Check if main branch has new commits
+      run: |
+        if [ -f last_gitea_main.txt ]; then
+          LAST_HEAD=$(cat last_gitea_main.txt)
+          if [ "$LAST_HEAD" = "$current_head" ]; then
             echo "No new commits on main branch, exiting."
             exit 0
           fi
@@ -41,7 +46,7 @@ jobs:
         rm -rf .git
         git init
         git config user.name "Gitea Sync Bot"
-        git config user.email "syncbot@example.com"
+        git config user.email "github@loclhst.com"
         git add .
         git commit -m "Automated import from Gitea (squashed)"
 
@@ -51,8 +56,12 @@ jobs:
         git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         git push github HEAD:${{ secrets.TARGET_BRANCH }} --force
 
-    - name: Save last synced commit
+    - name: Save last synced commit to cache
       run: |
         echo $current_head > last_gitea_main.txt
-        # Persist as artifact for next run
-        echo "::set-output name=last_head::$current_head"
+      # Update cache with new last commit
+    - name: Cache last synced commit
+      uses: actions/cache@v3
+      with:
+        path: last_gitea_main.txt
+        key: gitea-main-last-commit
