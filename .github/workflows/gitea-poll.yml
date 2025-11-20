@@ -1,4 +1,4 @@
-name: Gitea → GitHub Squash Sync (Dedicated Branch)
+name: Gitea -> GitHub Squash Sync (Dedicated Branch)
 
 on:
   schedule:
@@ -55,6 +55,30 @@ jobs:
         cd gitea-src
         git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         git push github HEAD:gitea_sync --force
+
+        - name: Set up GitHub CLI
+      uses: cli/gh-action@v2
+      with:
+        version: latest
+
+    - name: Create or update PR from gitea_sync -> main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Check if a PR already exists
+        PR_URL=$(gh pr list --head gitea_sync --base main --state open --json url -q '.[0].url')
+        if [ -z "$PR_URL" ]; then
+          # No PR exists, create one
+          gh pr create \
+            --head gitea_sync \
+            --base main \
+            --title "Automated sync from Gitea" \
+            --body "This PR contains the latest squashed changes from Gitea main branch."
+          echo "PR created."
+        else
+          echo "PR already exists: $PR_URL"
+        fi
+
 
     - name: Save last synced commit to cache
       run: |
