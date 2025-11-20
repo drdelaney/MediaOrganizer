@@ -1,0 +1,36 @@
+name: Gitea → GitHub Squash Sync (Polling)
+
+on:
+  schedule:
+    # Runs every 5 minutes
+    - cron: "*/5 * * * *"
+
+jobs:
+  squash_sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout empty repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Clone Gitea repository
+      run: |
+        git clone --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
+
+    - name: Remove git history and create squashed commit
+      run: |
+        cd gitea-src
+        rm -rf .git
+        git init
+        git config user.name "Gitea Sync Bot"
+        git config user.email "syncbot@example.com"
+        git add .
+        git commit -m "Automated import from Gitea (squashed)"
+
+    - name: Push to GitHub branch
+      run: |
+        cd gitea-src
+        git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        git push github HEAD:${{ secrets.TARGET_BRANCH }} --force
