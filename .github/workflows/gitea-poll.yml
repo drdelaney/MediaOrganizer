@@ -54,7 +54,12 @@ jobs:
       - name: Squash Gitea changes on top of gitea_sync
         run: |
           git merge --squash gitea/main
-          git commit -m "Automated import from Gitea"
+          # Only commit if there are staged changes
+          if ! git diff --cached --quiet; then
+            git commit -m "Automated import from Gitea"
+          else
+            echo "No changes to commit."
+          fi
 
       - name: Push gitea_sync branch
         run: |
