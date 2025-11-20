@@ -1,17 +1,16 @@
-name: Gitea -> GitHub Squash Sync (Dedicated Branch)
+name: Gitea -> GitHub Squash Sync (PR Ready)
 
 on:
   schedule:
-    # Runs every 12 hours
     - cron: "0 */12 * * *"
-  workflow_dispatch:   # Allows manual run
+  workflow_dispatch:
 
 jobs:
   squash_sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout empty repo
+      - name: Checkout GitHub repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -23,38 +22,56 @@ jobs:
           path: last_gitea_main.txt
           key: gitea-main-last-commit
 
-      - name: Clone Gitea main branch
+      - name: Add Gitea remote
         run: |
-          git clone --branch main --single-branch --depth=1 ${{ secrets.GITEA_REPO_URL }} gitea-src
-          cd gitea-src
-          CURRENT_HEAD=$(git rev-parse HEAD)
-          echo "current_head=$CURRENT_HEAD" >> $GITHUB_ENV
+          git remote add gitea ${{ secrets.GITEA_REPO_URL }}
+          git fetch gitea main
 
-      - name: Check if main branch has new commits
+      - name: Check out gitea_sync branch
         run: |
+          git fetch origin gitea_sync || git checkout -b gitea_sync
+          git checkout gitea_sync
+
+      - name: Check for new commits in Gitea
+        id: check_commits
+        run: |
+          GITEA_HEAD=$(git rev-parse gitea/main)
+          echo "GITEA_HEAD=$GITEA_HEAD" >> $GITHUB_ENV
+
+          # Check cached last commit
           if [ -f last_gitea_main.txt ]; then
             LAST_HEAD=$(cat last_gitea_main.txt)
-            if [ "$LAST_HEAD" = "$current_head" ]; then
-              echo "No new commits on main branch, exiting."
+            if [ "$LAST_HEAD" = "$GITEA_HEAD" ]; then
+              echo "No new commits in Gitea main, exiting."
               exit 0
             fi
           fi
 
-      - name: Remove git history and create squashed commit
+      - name: Squash Gitea changes on top of gitea_sync
         run: |
-          cd gitea-src
-          rm -rf .git
-          git init
+          git merge --squash gitea/main
           git config user.name "Gitea Sync Bot"
           git config user.email "github@loclhst.com"
-          git add .
-          git commit -m "Automated import from Gitea (squashed)"
+          git commit -m "Automated import from Gitea"
 
-      - name: Push to GitHub `gitea_sync` branch
+      - name: Push gitea_sync branch
         run: |
-          cd gitea-src
-          git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git push github HEAD:gitea_sync --force
+          git push origin gitea_sync --force
+
+      - name: Update last synced commit cache
+        run: |
+          echo $GITEA_HEAD > last_gitea_main.txt
+
+      - name: Cache last synced commit
+        uses: actions/cache@v3
+        with:
+          path: last_gitea_main.txt
+          key: gitea-main-last-commit
+
+      - name: Set up GitHub CLI
+        uses: cli/gh-action@v2
+        with:
+          version: latest
 
       - name: Create or update PR from gitea_sync -> main
         env:
@@ -70,14 +87,3 @@ jobs:
             echo "PR created."
           else
             echo "PR already exists: $PR_URL"
-          fi
-
-      - name: Save last synced commit to cache
-        run: |
-          echo $current_head > last_gitea_main.txt
-
-      - name: Cache last synced commit
-        uses: actions/cache@v3
-        with:
-          path: last_gitea_main.txt
-          key: gitea-main-la
