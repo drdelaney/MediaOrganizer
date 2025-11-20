@@ -51,18 +51,24 @@ jobs:
           git config user.name "Gitea Sync Bot"
           git config user.email "github@loclhst.com"
 
-      - name: Squash Gitea changes on top of gitea_sync (auto-resolve conflicts)
+      - name: Squash Gitea changes on top of gitea_sync (ignore workflows)
         run: |
+          # Squash merge with automatic conflict resolution
           git merge --squash -X theirs gitea/main
+
+          # Unstage any workflow files to avoid GitHub push rejection
+          git reset HEAD .github/workflows
+
+          # Commit only if there are staged changes
           if ! git diff --cached --quiet; then
             git commit -m "Automated import from Gitea (conflicts auto-resolved)"
           else
             echo "No changes to commit."
           fi
 
-      - name: Push gitea_sync branch using fine-grained PAT
+      - name: Push gitea_sync branch
         run: |
-          git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }} gitea_sync --force
+          git push origin gitea_sync --force
 
       - name: Update last synced commit cache
         run: |
