@@ -69,9 +69,7 @@ jobs:
           key: gitea-main-last-commit
 
       - name: Set up GitHub CLI
-        uses: cli/gh-action@v2
-        with:
-          version: latest
+        uses: gh-actions/gh-cli@v2
 
       - name: Create or update PR from gitea_sync -> main
         env:
