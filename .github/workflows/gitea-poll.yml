@@ -84,7 +84,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y gh
-
+      
       - name: Create or update PR from gitea_sync -> main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,3 +95,5 @@ jobs:
             echo "PR created."
           else
             echo "PR already exists: $PR_URL"
+          fi
+
