@@ -1,126 +1,143 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
 namespace CodeIgniter\Database\SQLSRV;
 
-use BadMethodCallException;
 use CodeIgniter\Database\BasePreparedQuery;
-use Exception;
+use CodeIgniter\Database\Exceptions\DatabaseException;
+use CodeIgniter\Exceptions\BadMethodCallException;
 
 /**
  * Prepared query for Postgre
+ *
+ * @extends BasePreparedQuery<resource, resource, resource>
  */
 class PreparedQuery extends BasePreparedQuery
 {
-	/**
-	 * Parameters array used to store the dynamic variables.
-	 *
-	 * @var array
-	 */
-	protected $parameters = [];
+    /**
+     * Parameters array used to store the dynamic variables.
+     *
+     * @var array
+     */
+    protected $parameters = [];
 
-	/**
-	 * The result boolean from a sqlsrv_execute.
-	 *
-	 * @var boolean
-	 */
-	protected $result;
+    /**
+     * A reference to the db connection to use.
+     *
+     * @var Connection
+     */
+    protected $db;
 
-	/**
-	 * Prepares the query against the database, and saves the connection
-	 * info necessary to execute the query later.
-	 *
-	 * NOTE: This version is based on SQL code. Child classes should
-	 * override this method.
-	 *
-	 * @param string $sql
-	 * @param array  $options Options takes an associative array;
-	 *
-	 * @return mixed
-	 * @throws Exception
-	 */
-	public function _prepare(string $sql, array $options = [])
-	{
-		/* Prepare parameters for the query */
-		$queryString = $this->getQueryString();
+    public function __construct(Connection $db)
+    {
+        parent::__construct($db);
+    }
 
-		$parameters = $this->parameterize($queryString);
+    /**
+     * Prepares the query against the database, and saves the connection
+     * info necessary to execute the query later.
+     *
+     * NOTE: This version is based on SQL code. Child classes should
+     * override this method.
+     *
+     * @param array $options Options takes an associative array;
+     *
+     * @throws DatabaseException
+     */
+    public function _prepare(string $sql, array $options = []): PreparedQuery
+    {
+        // Prepare parameters for the query
+        $queryString = $this->getQueryString();
 
-		/* Prepare  the query */
-		$this->statement = sqlsrv_prepare($this->db->connID, $sql, $parameters);
+        $parameters = $this->parameterize($queryString, $options);
 
-		if (! $this->statement)
-		{
-			$info              = $this->db->error();
-			$this->errorCode   = $info['code'];
-			$this->errorString = $info['message'];
-		}
+        // Prepare the query
+        $this->statement = sqlsrv_prepare($this->db->connID, $sql, $parameters);
 
-		return $this;
-	}
+        if (! $this->statement) {
+            if ($this->db->DBDebug) {
+                throw new DatabaseException($this->db->getAllErrorMessages());
+            }
 
-	/**
-	 * Takes a new set of data and runs it against the currently
-	 * prepared query. Upon success, will return a Results object.
-	 *
-	 * @param array $data
-	 *
-	 * @return boolean
-	 */
-	public function _execute(array $data): bool
-	{
-		if (! isset($this->statement))
-		{
-			throw new BadMethodCallException('You must call prepare before trying to execute a prepared statement.');
-		}
+            $info              = $this->db->error();
+            $this->errorCode   = $info['code'];
+            $this->errorString = $info['message'];
+        }
 
-		foreach ($data as $key => $value)
-		{
-			$this->parameters[$key] = $value;
-		}
+        return $this;
+    }
 
-		$this->result = sqlsrv_execute($this->statement);
+    /**
+     * Takes a new set of data and runs it against the currently
+     * prepared query.
+     */
+    public function _execute(array $data): bool
+    {
+        if (! isset($this->statement)) {
+            throw new BadMethodCallException('You must call prepare before trying to execute a prepared statement.');
+        }
 
-		return (bool) $this->result;
-	}
+        foreach ($data as $key => $value) {
+            $this->parameters[$key] = $value;
+        }
 
-	/**
-	 * Returns the result object for the prepared query.
-	 *
-	 * @return mixed
-	 */
-	public function _getResult()
-	{
-		return $this->result;
-	}
+        $result = sqlsrv_execute($this->statement);
 
-	/**
-	 * Handle parameters
-	 *
-	 * @param string $queryString
-	 *
-	 * @return array
-	 */
-	protected function parameterize(string $queryString): array
-	{
-		$numberOfVariables = substr_count($queryString, '?');
+        if ($result === false && $this->db->DBDebug) {
+            throw new DatabaseException($this->db->getAllErrorMessages());
+        }
 
-		$params = [];
+        return $result;
+    }
 
-		for ($c = 0; $c < $numberOfVariables; $c++)
-		{
-			$this->parameters[$c] = null;
-			$params[]             = &$this->parameters[$c];
-		}
+    /**
+     * Returns the statement resource for the prepared query or false when preparing failed.
+     *
+     * @return resource|null
+     */
+    public function _getResult()
+    {
+        return $this->statement;
+    }
 
-		return $params;
-	}
+    /**
+     * Deallocate prepared statements.
+     */
+    protected function _close(): bool
+    {
+        return sqlsrv_free_stmt($this->statement);
+    }
+
+    /**
+     * Handle parameters.
+     *
+     * @param array<int, mixed> $options
+     */
+    protected function parameterize(string $queryString, array $options): array
+    {
+        $numberOfVariables = substr_count($queryString, '?');
+
+        $params = [];
+
+        for ($c = 0; $c < $numberOfVariables; $c++) {
+            $this->parameters[$c] = null;
+            if (isset($options[$c])) {
+                $params[] = [&$this->parameters[$c], SQLSRV_PARAM_IN, $options[$c]];
+            } else {
+                $params[] = &$this->parameters[$c];
+            }
+        }
+
+        return $params;
+    }
 }

@@ -1,81 +1,90 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
 namespace CodeIgniter\CLI;
 
 use CodeIgniter\CodeIgniter;
-use CodeIgniter\HTTP\RequestInterface;
-use CodeIgniter\HTTP\Response;
-use CodeIgniter\HTTP\ResponseInterface;
+use Config\App;
+use Config\Services;
 use Exception;
 
 /**
  * Console
+ *
+ * @see \CodeIgniter\CLI\ConsoleTest
  */
 class Console
 {
-	/**
-	 * Main CodeIgniter instance.
-	 *
-	 * @var CodeIgniter
-	 */
-	protected $app;
+    /**
+     * Runs the current command discovered on the CLI.
+     *
+     * @return int|void Exit code
+     *
+     * @throws Exception
+     */
+    public function run()
+    {
+        // Create CLIRequest
+        $appConfig = config(App::class);
+        Services::createRequest($appConfig, true);
+        // Load Routes
+        service('routes')->loadRoutes();
 
-	//--------------------------------------------------------------------
+        $params  = array_merge(CLI::getSegments(), CLI::getOptions());
+        $params  = $this->parseParamsForHelpOption($params);
+        $command = array_shift($params) ?? 'list';
 
-	/**
-	 * Console constructor.
-	 *
-	 * @param CodeIgniter $app
-	 */
-	public function __construct(CodeIgniter $app)
-	{
-		$this->app = $app;
-	}
+        return service('commands')->run($command, $params);
+    }
 
-	//--------------------------------------------------------------------
+    /**
+     * Displays basic information about the Console.
+     *
+     * @return void
+     */
+    public function showHeader(bool $suppress = false)
+    {
+        if ($suppress) {
+            return;
+        }
 
-	/**
-	 * Runs the current command discovered on the CLI.
-	 *
-	 * @param boolean $useSafeOutput
-	 *
-	 * @return RequestInterface|Response|ResponseInterface|mixed
-	 * @throws Exception
-	 */
-	public function run(bool $useSafeOutput = false)
-	{
-		$path = CLI::getURI() ?: 'list';
+        CLI::write(sprintf(
+            'CodeIgniter v%s Command Line Tool - Server Time: %s',
+            CodeIgniter::CI_VERSION,
+            date('Y-m-d H:i:s \\U\\T\\CP'),
+        ), 'green');
+        CLI::newLine();
+    }
 
-		// Set the path for the application to route to.
-		$this->app->setPath("ci{$path}");
+    /**
+     * Introspects the `$params` passed for presence of the
+     * `--help` option.
+     *
+     * If present, it will be found as `['help' => null]`.
+     * We'll remove that as an option from `$params` and
+     * unshift it as argument instead.
+     *
+     * @param array<int|string, string|null> $params
+     */
+    private function parseParamsForHelpOption(array $params): array
+    {
+        if (array_key_exists('help', $params)) {
+            unset($params['help']);
 
-		return $this->app->useSafeOutput($useSafeOutput)->run();
-	}
+            $params = $params === [] ? ['list'] : $params;
+            array_unshift($params, 'help');
+        }
 
-	//--------------------------------------------------------------------
-
-	/**
-	 * Displays basic information about the Console.
-	 *
-	 * @param boolean $suppress
-	 */
-	public function showHeader(bool $suppress = false)
-	{
-		if ($suppress)
-		{
-			return;
-		}
-
-		CLI::write(sprintf('CodeIgniter v%s Command Line Tool - Server Time: %s UTC%s', CodeIgniter::CI_VERSION, date('Y-m-d H:i:s'), date('P')), 'green');
-		CLI::newLine();
-	}
+        return $params;
+    }
 }

@@ -1,17 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- * This file is part of the CodeIgniter 4 framework.
+ * This file is part of CodeIgniter 4 framework.
  *
  * (c) CodeIgniter Foundation <admin@codeigniter.com>
  *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
+ * For the full copyright and license information, please view
+ * the LICENSE file that was distributed with this source code.
  */
 
 namespace CodeIgniter\CLI;
 
-use Config\Services;
+use Config\Generators;
 use Throwable;
 
 /**
@@ -20,391 +22,505 @@ use Throwable;
  */
 trait GeneratorTrait
 {
-	/**
-	 * Component Name
-	 *
-	 * @var string
-	 */
-	protected $component;
+    /**
+     * Component Name
+     *
+     * @var string
+     */
+    protected $component;
 
-	/**
-	 * File directory
-	 *
-	 * @var string
-	 */
-	protected $directory;
+    /**
+     * File directory
+     *
+     * @var string
+     */
+    protected $directory;
 
-	/**
-	 * View template name
-	 *
-	 * @var string
-	 */
-	protected $template;
+    /**
+     * (Optional) View template path
+     *
+     * We use special namespaced paths like:
+     *      `CodeIgniter\Commands\Generators\Views\cell.tpl.php`.
+     */
+    protected ?string $templatePath = null;
 
-	/**
-	 * Language string key for required class names.
-	 *
-	 * @var string
-	 */
-	protected $classNameLang = '';
+    /**
+     * View template name for fallback
+     *
+     * @var string
+     */
+    protected $template;
 
-	/**
-	 * Whether to require class name.
-	 *
-	 * @internal
-	 *
-	 * @var boolean
-	 */
-	private $hasClassName = true;
+    /**
+     * Language string key for required class names.
+     *
+     * @var string
+     */
+    protected $classNameLang = '';
 
-	/**
-	 * Whether to sort class imports.
-	 *
-	 * @internal
-	 *
-	 * @var boolean
-	 */
-	private $sortImports = true;
+    /**
+     * Namespace to use for class.
+     * Leave null to use the default namespace.
+     */
+    protected ?string $namespace = null;
 
-	/**
-	 * Whether the `--suffix` option has any effect.
-	 *
-	 * @internal
-	 *
-	 * @var boolean
-	 */
-	private $enabledSuffixing = true;
+    /**
+     * Whether to require class name.
+     *
+     * @internal
+     *
+     * @var bool
+     */
+    private $hasClassName = true;
 
-	/**
-	 * The params array for easy access by other methods.
-	 *
-	 * @internal
-	 *
-	 * @var array
-	 */
-	private $params = [];
+    /**
+     * Whether to sort class imports.
+     *
+     * @internal
+     *
+     * @var bool
+     */
+    private $sortImports = true;
 
-	/**
-	 * Execute the command.
-	 *
-	 * @param array $params
-	 *
-	 * @return void
-	 */
-	protected function execute(array $params): void
-	{
-		$this->params = $params;
+    /**
+     * Whether the `--suffix` option has any effect.
+     *
+     * @internal
+     *
+     * @var bool
+     */
+    private $enabledSuffixing = true;
 
-		if ($this->getOption('namespace') === 'CodeIgniter')
-		{
-			// @codeCoverageIgnoreStart
-			CLI::write(lang('CLI.generator.usingCINamespace'), 'yellow');
-			CLI::newLine();
+    /**
+     * The params array for easy access by other methods.
+     *
+     * @internal
+     *
+     * @var array<int|string, string|null>
+     */
+    private $params = [];
 
-			if (CLI::prompt('Are you sure you want to continue?', ['y', 'n'], 'required') === 'n')
-			{
-				CLI::newLine();
-				CLI::write(lang('CLI.generator.cancelOperation'), 'yellow');
-				CLI::newLine();
+    /**
+     * Execute the command.
+     *
+     * @param array<int|string, string|null> $params
+     *
+     * @deprecated use generateClass() instead
+     */
+    protected function execute(array $params): void
+    {
+        $this->generateClass($params);
+    }
 
-				return;
-			}
+    /**
+     * Generates a class file from an existing template.
+     *
+     * @param array<int|string, string|null> $params
+     */
+    protected function generateClass(array $params): void
+    {
+        $this->params = $params;
 
-			CLI::newLine();
-			// @codeCoverageIgnoreEnd
-		}
+        // Get the fully qualified class name from the input.
+        $class = $this->qualifyClassName();
 
-		// Get the fully qualified class name from the input.
-		$class = $this->qualifyClassName();
+        // Get the file path from class name.
+        $target = $this->buildPath($class);
 
-		// Get the file path from class name.
-		$path = $this->buildPath($class);
+        // Check if path is empty.
+        if ($target === '') {
+            return;
+        }
 
-		// Check if path is empty.
-		if (empty($path))
-		{
-			return;
-		}
+        $this->generateFile($target, $this->buildContent($class));
+    }
 
-		$isFile = is_file($path);
+    /**
+     * Generate a view file from an existing template.
+     *
+     * @param string                         $view   namespaced view name that is generated
+     * @param array<int|string, string|null> $params
+     */
+    protected function generateView(string $view, array $params): void
+    {
+        $this->params = $params;
 
-		// Overwriting files unknowingly is a serious annoyance, So we'll check if
-		// we are duplicating things, If 'force' option is not supplied, we bail.
-		if (! $this->getOption('force') && $isFile)
-		{
-			CLI::error(lang('CLI.generator.fileExist', [clean_path($path)]), 'light_gray', 'red');
-			CLI::newLine();
+        $target = $this->buildPath($view);
 
-			return;
-		}
+        // Check if path is empty.
+        if ($target === '') {
+            return;
+        }
 
-		// Check if the directory to save the file is existing.
-		$dir = dirname($path);
+        $this->generateFile($target, $this->buildContent($view));
+    }
 
-		if (! is_dir($dir))
-		{
-			mkdir($dir, 0755, true);
-		}
+    /**
+     * Handles writing the file to disk, and all of the safety checks around that.
+     *
+     * @param string $target file path
+     */
+    private function generateFile(string $target, string $content): void
+    {
+        if ($this->getOption('namespace') === 'CodeIgniter') {
+            // @codeCoverageIgnoreStart
+            CLI::write(lang('CLI.generator.usingCINamespace'), 'yellow');
+            CLI::newLine();
 
-		helper('filesystem');
+            if (
+                CLI::prompt(
+                    'Are you sure you want to continue?',
+                    ['y', 'n'],
+                    'required',
+                ) === 'n'
+            ) {
+                CLI::newLine();
+                CLI::write(lang('CLI.generator.cancelOperation'), 'yellow');
+                CLI::newLine();
 
-		// Build the class based on the details we have, We'll be getting our file
-		// contents from the template, and then we'll do the necessary replacements.
-		if (! write_file($path, $this->buildContent($class)))
-		{
-			// @codeCoverageIgnoreStart
-			CLI::error(lang('CLI.generator.fileError', [clean_path($path)]), 'light_gray', 'red');
-			CLI::newLine();
+                return;
+            }
 
-			return;
-			// @codeCoverageIgnoreEnd
-		}
+            CLI::newLine();
+            // @codeCoverageIgnoreEnd
+        }
 
-		if ($this->getOption('force') && $isFile)
-		{
-			CLI::write(lang('CLI.generator.fileOverwrite', [clean_path($path)]), 'yellow');
-			CLI::newLine();
+        $isFile = is_file($target);
 
-			return;
-		}
+        // Overwriting files unknowingly is a serious annoyance, So we'll check if
+        // we are duplicating things, If 'force' option is not supplied, we bail.
+        if (! $this->getOption('force') && $isFile) {
+            CLI::error(
+                lang('CLI.generator.fileExist', [clean_path($target)]),
+                'light_gray',
+                'red',
+            );
+            CLI::newLine();
 
-		CLI::write(lang('CLI.generator.fileCreate', [clean_path($path)]), 'green');
-		CLI::newLine();
-	}
+            return;
+        }
 
-	/**
-	 * Prepare options and do the necessary replacements.
-	 *
-	 * @param string $class
-	 *
-	 * @return string
-	 */
-	protected function prepare(string $class): string
-	{
-		return $this->parseTemplate($class);
-	}
+        // Check if the directory to save the file is existing.
+        $dir = dirname($target);
 
-	/**
-	 * Change file basename before saving.
-	 *
-	 * Useful for components where the file name has a date.
-	 *
-	 * @param string $filename
-	 *
-	 * @return string
-	 */
-	protected function basename(string $filename): string
-	{
-		return basename($filename);
-	}
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
 
-	/**
-	 * Parses the class name and checks if it is already qualified.
-	 *
-	 * @return string
-	 */
-	protected function qualifyClassName(): string
-	{
-		// Gets the class name from input.
-		$class = $this->params[0] ?? CLI::getSegment(2);
+        helper('filesystem');
 
-		if (is_null($class) && $this->hasClassName)
-		{
-			// @codeCoverageIgnoreStart
-			$nameLang = $this->classNameLang ?: 'CLI.generator.className.default';
-			$class    = CLI::prompt(lang($nameLang), null, 'required');
-			CLI::newLine();
-			// @codeCoverageIgnoreEnd
-		}
+        // Build the class based on the details we have, We'll be getting our file
+        // contents from the template, and then we'll do the necessary replacements.
+        if (! write_file($target, $content)) {
+            // @codeCoverageIgnoreStart
+            CLI::error(
+                lang('CLI.generator.fileError', [clean_path($target)]),
+                'light_gray',
+                'red',
+            );
+            CLI::newLine();
 
-		helper('inflector');
+            return;
+            // @codeCoverageIgnoreEnd
+        }
 
-		$component = singular($this->component);
+        if ($this->getOption('force') && $isFile) {
+            CLI::write(
+                lang('CLI.generator.fileOverwrite', [clean_path($target)]),
+                'yellow',
+            );
+            CLI::newLine();
 
-		/**
-		 * @see https://regex101.com/r/a5KNCR/1
-		 */
-		$pattern = sprintf('/([a-z][a-z0-9_\/\\\\]+)(%s)/i', $component);
+            return;
+        }
 
-		if (preg_match($pattern, $class, $matches) === 1)
-		{
-			$class = $matches[1] . ucfirst($matches[2]);
-		}
+        CLI::write(
+            lang('CLI.generator.fileCreate', [clean_path($target)]),
+            'green',
+        );
+        CLI::newLine();
+    }
 
-		if ($this->enabledSuffixing && $this->getOption('suffix') && ! strripos($class, $component))
-		{
-			$class .= ucfirst($component);
-		}
+    /**
+     * Prepare options and do the necessary replacements.
+     *
+     * @param string $class namespaced classname or namespaced view.
+     *
+     * @return string generated file content
+     */
+    protected function prepare(string $class): string
+    {
+        return $this->parseTemplate($class);
+    }
 
-		// Trims input, normalize separators, and ensure that all paths are in Pascalcase.
-		$class = ltrim(implode('\\', array_map('pascalize', explode('\\', str_replace('/', '\\', trim($class))))), '\\/');
+    /**
+     * Change file basename before saving.
+     *
+     * Useful for components where the file name has a date.
+     */
+    protected function basename(string $filename): string
+    {
+        return basename($filename);
+    }
 
-		// Gets the namespace from input.
-		$namespace = trim(str_replace('/', '\\', $this->getOption('namespace') ?? APP_NAMESPACE), '\\');
+    /**
+     * Parses the class name and checks if it is already qualified.
+     */
+    protected function qualifyClassName(): string
+    {
+        $class = $this->normalizeInputClassName();
 
-		if (strncmp($class, $namespace, strlen($namespace)) === 0)
-		{
-			return $class; // @codeCoverageIgnore
-		}
+        // Gets the namespace from input. Don't forget the ending backslash!
+        $namespace = $this->getNamespace() . '\\';
 
-		return $namespace . '\\' . $this->directory . '\\' . str_replace('/', '\\', $class);
-	}
+        if (str_starts_with($class, $namespace)) {
+            return $class; // @codeCoverageIgnore
+        }
 
-	/**
-	 * Gets the generator view as defined in the `Config\Generators::$views`,
-	 * with fallback to `$template` when the defined view does not exist.
-	 *
-	 * @param array $data Data to be passed to the view.
-	 *
-	 * @return string
-	 */
-	protected function renderTemplate(array $data = []): string
-	{
-		try
-		{
-			return view(config('Generators')->views[$this->name], $data, ['debug' => false]);
-		}
-		catch (Throwable $e)
-		{
-			log_message('error', $e->getMessage());
+        $directoryString = ($this->directory !== null) ? $this->directory . '\\' : '';
 
-			return view("CodeIgniter\Commands\Generators\Views\\{$this->template}", $data, ['debug' => false]);
-		}
-	}
+        return $namespace . $directoryString . str_replace('/', '\\', $class);
+    }
 
-	/**
-	 * Performs pseudo-variables contained within view file.
-	 *
-	 * @param string $class
-	 * @param array  $search
-	 * @param array  $replace
-	 * @param array  $data
-	 *
-	 * @return string
-	 */
-	protected function parseTemplate(string $class, array $search = [], array $replace = [], array $data = []): string
-	{
-		// Retrieves the namespace part from the fully qualified class name.
-		$namespace = trim(implode('\\', array_slice(explode('\\', $class), 0, -1)), '\\');
-		$search[]  = '<@php';
-		$search[]  = '{namespace}';
-		$search[]  = '{class}';
-		$replace[] = '<?php';
-		$replace[] = $namespace;
-		$replace[] = str_replace($namespace . '\\', '', $class);
+    private function normalizeInputClassName(): string
+    {
+        // Gets the class name from input.
+        $class = $this->params[0] ?? CLI::getSegment(2);
 
-		return str_replace($search, $replace, $this->renderTemplate($data));
-	}
+        if ($class === null && $this->hasClassName) {
+            $nameField = $this->classNameLang !== ''
+                ? $this->classNameLang
+                : 'CLI.generator.className.default';
+            $class = CLI::prompt(lang($nameField), null, 'required');
 
-	/**
-	 * Builds the contents for class being generated, doing all
-	 * the replacements necessary, and alphabetically sorts the
-	 * imports for a given template.
-	 *
-	 * @param string $class
-	 *
-	 * @return string
-	 */
-	protected function buildContent(string $class): string
-	{
-		$template = $this->prepare($class);
+            // Reassign the class name to the params array in case
+            // the class name is requested again
+            $this->params[0] = $class;
+            CLI::newLine();
+        }
 
-		if ($this->sortImports && preg_match('/(?P<imports>(?:^use [^;]+;$\n?)+)/m', $template, $match))
-		{
-			$imports = explode("\n", trim($match['imports']));
-			sort($imports);
+        helper('inflector');
 
-			return str_replace(trim($match['imports']), implode("\n", $imports), $template);
-		}
+        $component = singular($this->component);
 
-		return $template;
-	}
+        /**
+         * @see https://regex101.com/r/a5KNCR/2
+         */
+        $pattern = sprintf('/([a-z][a-z0-9_\/\\\\]+)(%s)$/i', $component);
 
-	/**
-	 * Builds the file path from the class name.
-	 *
-	 * @param string $class
-	 *
-	 * @return string
-	 */
-	protected function buildPath(string $class): string
-	{
-		$namespace = trim(str_replace('/', '\\', $this->getOption('namespace') ?? APP_NAMESPACE), '\\');
+        if (preg_match($pattern, $class, $matches) === 1) {
+            $class = $matches[1] . ucfirst($matches[2]);
+        }
 
-		// Check if the namespace is actually defined and we are not just typing gibberish.
-		$base = Services::autoloader()->getNamespace($namespace);
+        if (
+            $this->enabledSuffixing && $this->getOption('suffix')
+            && preg_match($pattern, $class) !== 1
+        ) {
+            $class .= ucfirst($component);
+        }
 
-		if (! $base = reset($base))
-		{
-			CLI::error(lang('CLI.namespaceNotDefined', [$namespace]), 'light_gray', 'red');
-			CLI::newLine();
+        // Trims input, normalize separators, and ensure that all paths are in Pascalcase.
+        return ltrim(
+            implode(
+                '\\',
+                array_map(
+                    pascalize(...),
+                    explode('\\', str_replace('/', '\\', trim($class))),
+                ),
+            ),
+            '\\/',
+        );
+    }
 
-			return '';
-		}
+    /**
+     * Gets the generator view as defined in the `Config\Generators::$views`,
+     * with fallback to `$template` when the defined view does not exist.
+     *
+     * @param array<string, mixed> $data
+     */
+    protected function renderTemplate(array $data = []): string
+    {
+        try {
+            $template = $this->templatePath ?? config(Generators::class)->views[$this->name];
 
-		$base = realpath($base) ?: $base;
-		$file = $base . DIRECTORY_SEPARATOR . str_replace('\\', DIRECTORY_SEPARATOR, trim(str_replace($namespace . '\\', '', $class), '\\')) . '.php';
+            return view($template, $data, ['debug' => false]);
+        } catch (Throwable $e) {
+            log_message('error', (string) $e);
 
-		return implode(DIRECTORY_SEPARATOR, array_slice(explode(DIRECTORY_SEPARATOR, $file), 0, -1)) . DIRECTORY_SEPARATOR . $this->basename($file);
-	}
+            return view(
+                "CodeIgniter\\Commands\\Generators\\Views\\{$this->template}",
+                $data,
+                ['debug' => false],
+            );
+        }
+    }
 
-	/**
-	 * Allows child generators to modify the internal `$hasClassName` flag.
-	 *
-	 * @param boolean $hasClassName
-	 *
-	 * @return $this
-	 */
-	protected function setHasClassName(bool $hasClassName)
-	{
-		$this->hasClassName = $hasClassName;
+    /**
+     * Performs pseudo-variables contained within view file.
+     *
+     * @param string                          $class   namespaced classname or namespaced view.
+     * @param list<string>                    $search
+     * @param list<string>                    $replace
+     * @param array<string, bool|string|null> $data
+     *
+     * @return string generated file content
+     */
+    protected function parseTemplate(
+        string $class,
+        array $search = [],
+        array $replace = [],
+        array $data = [],
+    ): string {
+        // Retrieves the namespace part from the fully qualified class name.
+        $namespace = trim(
+            implode(
+                '\\',
+                array_slice(explode('\\', $class), 0, -1),
+            ),
+            '\\',
+        );
+        $search[]  = '<@php';
+        $search[]  = '{namespace}';
+        $search[]  = '{class}';
+        $replace[] = '<?php';
+        $replace[] = $namespace;
+        $replace[] = str_replace($namespace . '\\', '', $class);
 
-		return $this;
-	}
+        return str_replace($search, $replace, $this->renderTemplate($data));
+    }
 
-	/**
-	 * Allows child generators to modify the internal `$sortImports` flag.
-	 *
-	 * @param boolean $sortImports
-	 *
-	 * @return $this
-	 */
-	protected function setSortImports(bool $sortImports)
-	{
-		$this->sortImports = $sortImports;
+    /**
+     * Builds the contents for class being generated, doing all
+     * the replacements necessary, and alphabetically sorts the
+     * imports for a given template.
+     */
+    protected function buildContent(string $class): string
+    {
+        $template = $this->prepare($class);
 
-		return $this;
-	}
+        if (
+            $this->sortImports
+            && preg_match(
+                '/(?P<imports>(?:^use [^;]+;$\n?)+)/m',
+                $template,
+                $match,
+            )
+        ) {
+            $imports = explode("\n", trim($match['imports']));
+            sort($imports);
 
-	/**
-	 * Allows child generators to modify the internal `$enabledSuffixing` flag.
-	 *
-	 * @param boolean $enabledSuffixing
-	 *
-	 * @return $this
-	 */
-	protected function setEnabledSuffixing(bool $enabledSuffixing)
-	{
-		$this->enabledSuffixing = $enabledSuffixing;
+            return str_replace(trim($match['imports']), implode("\n", $imports), $template);
+        }
 
-		return $this;
-	}
+        return $template;
+    }
 
-	/**
-	 * Gets a single command-line option. Returns TRUE if the option exists,
-	 * but doesn't have a value, and is simply acting as a flag.
-	 *
-	 * @param string $name
-	 *
-	 * @return mixed
-	 */
-	protected function getOption(string $name)
-	{
-		if (! array_key_exists($name, $this->params))
-		{
-			return CLI::getOption($name);
-		}
+    /**
+     * Builds the file path from the class name.
+     *
+     * @param string $class namespaced classname or namespaced view.
+     */
+    protected function buildPath(string $class): string
+    {
+        $namespace = $this->getNamespace();
 
-		return is_null($this->params[$name]) ? true : $this->params[$name];
-	}
+        // Check if the namespace is actually defined and we are not just typing gibberish.
+        $base = service('autoloader')->getNamespace($namespace);
+
+        if (! $base = reset($base)) {
+            CLI::error(
+                lang('CLI.namespaceNotDefined', [$namespace]),
+                'light_gray',
+                'red',
+            );
+            CLI::newLine();
+
+            return '';
+        }
+
+        $realpath = realpath($base);
+        $base     = ($realpath !== false) ? $realpath : $base;
+
+        $file = $base . DIRECTORY_SEPARATOR
+            . str_replace(
+                '\\',
+                DIRECTORY_SEPARATOR,
+                trim(str_replace($namespace . '\\', '', $class), '\\'),
+            ) . '.php';
+
+        return implode(
+            DIRECTORY_SEPARATOR,
+            array_slice(
+                explode(DIRECTORY_SEPARATOR, $file),
+                0,
+                -1,
+            ),
+        ) . DIRECTORY_SEPARATOR . $this->basename($file);
+    }
+
+    /**
+     * Gets the namespace from the command-line option,
+     * or the default namespace if the option is not set.
+     * Can be overridden by directly setting $this->namespace.
+     */
+    protected function getNamespace(): string
+    {
+        return $this->namespace ?? trim(
+            str_replace(
+                '/',
+                '\\',
+                $this->getOption('namespace') ?? APP_NAMESPACE,
+            ),
+            '\\',
+        );
+    }
+
+    /**
+     * Allows child generators to modify the internal `$hasClassName` flag.
+     *
+     * @return $this
+     */
+    protected function setHasClassName(bool $hasClassName)
+    {
+        $this->hasClassName = $hasClassName;
+
+        return $this;
+    }
+
+    /**
+     * Allows child generators to modify the internal `$sortImports` flag.
+     *
+     * @return $this
+     */
+    protected function setSortImports(bool $sortImports)
+    {
+        $this->sortImports = $sortImports;
+
+        return $this;
+    }
+
+    /**
+     * Allows child generators to modify the internal `$enabledSuffixing` flag.
+     *
+     * @return $this
+     */
+    protected function setEnabledSuffixing(bool $enabledSuffixing)
+    {
+        $this->enabledSuffixing = $enabledSuffixing;
+
+        return $this;
+    }
+
+    /**
+     * Gets a single command-line option. Returns TRUE if the option exists,
+     * but doesn't have a value, and is simply acting as a flag.
+     */
+    protected function getOption(string $name): bool|string|null
+    {
+        if (! array_key_exists($name, $this->params)) {
+            return CLI::getOption($name);
+        }
+
+        return $this->params[$name] ?? true;
+    }
 }
