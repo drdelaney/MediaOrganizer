@@ -1,10 +1,10 @@
-name: Gitea → GitHub Squash Sync (Polling, Main Only)
+name: Gitea → GitHub Squash Sync (Dedicated Branch)
 
 on:
   schedule:
     # Runs every 5 minutes
-    - cron: "0 */6 * * *"
-  workflow_dispatch:   # Allows manual trigger
+    - cron: "0 */12 * * *"
+  workflow_dispatch:   # Allows manual run
 
 jobs:
   squash_sync:
@@ -50,16 +50,15 @@ jobs:
         git add .
         git commit -m "Automated import from Gitea (squashed)"
 
-    - name: Push to GitHub branch
+    - name: Push to GitHub `gitea_sync` branch
       run: |
         cd gitea-src
         git remote add github https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-        git push github HEAD:${{ secrets.TARGET_BRANCH }} --force
+        git push github HEAD:gitea_sync --force
 
     - name: Save last synced commit to cache
       run: |
         echo $current_head > last_gitea_main.txt
-      # Update cache with new last commit
     - name: Cache last synced commit
       uses: actions/cache@v3
       with:
