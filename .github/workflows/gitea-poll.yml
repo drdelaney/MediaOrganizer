@@ -89,12 +89,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if there are any differences before creating a PR
-          if git diff --quiet origin/main..gitea_sync; then
+          # Ensure main is fetched
+          git fetch origin main
+      
+          # Skip PR if no differences
+          if git diff --quiet origin/main...gitea_sync; then
             echo "No changes between gitea_sync and main — no PR needed."
             exit 0
           fi
       
+          # Check for existing PR
           PR_URL=$(gh pr list --head gitea_sync --base main --state open --json url -q '.[0].url')
       
           if [ -z "$PR_URL" ]; then
@@ -103,5 +107,3 @@ jobs:
           else
             echo "PR already exists: $PR_URL"
           fi
-
-
