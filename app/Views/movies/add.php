@@ -50,7 +50,10 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
         <?php endif; ?>
 
         <!-- Add Form -->
-        <form action="<?= base_url('movies/store') ?>" method="post">
+        <form action="<?= base_url('movies/store') ?>" method="post" id="addMovieForm" enctype="multipart/form-data">
+            <input type="hidden" id="selected_poster_url" name="selected_poster_url" value="">
+            <input type="hidden" id="tmdb_id_for_posters" name="tmdb_id_for_posters" value="">
+            <input type="hidden" id="media_type_for_posters" name="media_type_for_posters" value="">
             <!-- Lookup Section (Title / External IDs) -->
             <div class="card mb-4">
                 <div class="card-header">
@@ -87,9 +90,9 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                         </div>
                     </div>
                     <small class="text-muted d-block mt-2">
-                        - Provide IMDb ID (starts with tt), TVDB numeric ID, a Title (with optional year), or scan/paste a Barcode (UPC/EAN).<br>
+                        - <strong>Optional:</strong> Search by IMDb ID (starts with tt), TVDB numeric ID, Title (with optional year), or Barcode (UPC/EAN) to auto-fill details.<br>
                         - Barcode search will first check your local library and then attempt an online UPC lookup to map to a movie/TV entry (via TMDB when available).<br>
-                        - If none are provided, the entry will be created from the manual fields below.
+                        - <strong>Required fields:</strong> Original Title and at least one Media Format must be provided to create an entry.
                         <?php if (!$apiAvailable): ?>
                         <br>- TMDB API key not configured; title/ID mapping will be skipped, but basic barcode-to-title lookup will still be attempted.
                         <?php endif; ?>
@@ -111,10 +114,15 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-md-3 text-center">
-                            <img id="previewPoster" src="" alt="Poster" class="img-fluid rounded shadow-sm" style="max-height:300px; display:none;">
-                            <div id="previewPosterPlaceholder" class="bg-light rounded d-flex align-items-center justify-content-center" style="height:300px;">
-                                <span class="text-muted">No poster</span>
+                            <div id="selectedPosterPreview">
+                                <img id="previewPoster" src="" alt="Poster" class="img-fluid rounded shadow-sm" style="max-height:300px; display:none;">
+                                <div id="previewPosterPlaceholder" class="bg-light rounded d-flex align-items-center justify-content-center" style="height:300px;">
+                                    <span class="text-muted">No poster</span>
+                                </div>
                             </div>
+                            <button type="button" id="choosePosterBtn" class="btn btn-sm btn-outline-primary mt-2 w-100" style="display:none;">
+                                <i class="bi bi-images"></i> Choose Different Poster
+                            </button>
                         </div>
                         <div class="col-md-9">
                             <h4 id="previewTitle" class="mb-1"></h4>
@@ -140,8 +148,8 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
-                                <label for="o_title" class="form-label">Original Title</label>
-                                <input type="text" class="form-control" id="o_title" name="o_title" value="<?= esc(old('o_title')) ?>">
+                                <label for="o_title" class="form-label">Original Title <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="o_title" name="o_title" value="<?= esc(old('o_title')) ?>" required>
                             </div>
                             <div class="mb-3">
                                 <label for="director" class="form-label">Director</label>
@@ -194,11 +202,11 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
-                                <label class="form-label">Media Formats <small class="text-muted">(select all that apply)</small></label>
-                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                <label class="form-label">Media Formats <span class="text-danger">*</span> <small class="text-muted">(select at least one)</small></label>
+                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;" id="mediaFormatsContainer">
                                     <?php foreach ($mediaTypes as $medium): ?>
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" 
+                                            <input class="form-check-input medium-checkbox" type="checkbox" 
                                                    id="medium_<?= $medium['medium_id'] ?>" 
                                                    name="medium_ids[]" 
                                                    value="<?= $medium['medium_id'] ?>"
@@ -210,6 +218,9 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                                     <?php endforeach; ?>
                                 </div>
                                 <small class="text-muted">The highest format will be stored as the primary medium.</small>
+                                <div id="mediaFormatError" class="invalid-feedback d-block" style="display: none !important;">
+                                    Please select at least one media format.
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label for="collection_id" class="form-label">Collection</label>
@@ -368,6 +379,76 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
     </div>
 </div>
 
+<!-- Poster Selection Modal -->
+<div class="modal fade" id="posterSelectionModal" tabindex="-1" aria-labelledby="posterSelectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="posterSelectionModalLabel">
+                    <i class="bi bi-images"></i> Choose Poster
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3" id="addPosterTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="add-tmdb-tab" data-bs-toggle="tab" data-bs-target="#add-tmdb-posters" type="button" role="tab">
+                            <i class="bi bi-cloud-download"></i> TMDB Posters
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="add-upload-tab" data-bs-toggle="tab" data-bs-target="#add-upload-poster" type="button" role="tab">
+                            <i class="bi bi-upload"></i> Upload Custom
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="addPosterTabContent">
+                    <!-- TMDB Posters Tab -->
+                    <div class="tab-pane fade show active" id="add-tmdb-posters" role="tabpanel">
+                        <div id="addPosterLoadingSpinner" style="display: none;" class="text-center mb-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2">Fetching posters...</p>
+                        </div>
+                        <div id="addPosterMessage" class="alert" style="display: none;"></div>
+                        <div id="addPosterGallery" class="row g-3"></div>
+                    </div>
+
+                    <!-- Upload Custom Poster Tab -->
+                    <div class="tab-pane fade" id="add-upload-poster" role="tabpanel">
+                        <div class="mb-3">
+                            <label for="addPosterFile" class="form-label">Choose Image File</label>
+                            <input type="file" class="form-control" id="addPosterFile" name="poster_upload_file" accept="image/*">
+                            <div class="form-text">Supported formats: JPG, PNG, GIF. Image will be converted to JPEG.</div>
+                        </div>
+                        <div class="mb-3" id="addUploadPreview" style="display: none;">
+                            <label class="form-label">Preview</label>
+                            <div class="text-center">
+                                <img id="addUploadPreviewImg" src="" alt="Preview" class="img-fluid rounded" style="max-height: 300px;">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success" id="selectUploadedPosterBtn">
+                            <i class="bi bi-check-lg"></i> Use This Poster
+                        </button>
+                    </div>
+                </div>
+
+                <hr>
+                <div class="text-center">
+                    <button type="button" class="btn btn-outline-secondary" id="clearSelectedPosterBtn">
+                        <i class="bi bi-x-circle"></i> No Poster
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
@@ -381,6 +462,86 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
         const previewTitle = document.getElementById('previewTitle');
         const previewSubtitle = document.getElementById('previewSubtitle');
         const previewPlot = document.getElementById('previewPlot');
+        const form = document.getElementById('addMovieForm');
+        
+        // Handle Enter key in search fields - trigger search instead of form submit
+        const searchFields = ['lookup_type', 'title', 'year', 'imdb_id', 'tvdb_id', 'lookup_barcode'];
+        searchFields.forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        btn.click();
+                        return false;
+                    }
+                });
+            }
+        });
+        
+        // Form validation before submit
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                let isValid = true;
+                let errorMessage = '';
+                
+                // Check original title
+                const oTitleField = document.getElementById('o_title');
+                if (!oTitleField.value.trim()) {
+                    isValid = false;
+                    errorMessage += '• Original Title is required\n';
+                    oTitleField.classList.add('is-invalid');
+                } else {
+                    oTitleField.classList.remove('is-invalid');
+                }
+                
+                // Check at least one media format is selected
+                const mediaCheckboxes = document.querySelectorAll('.medium-checkbox:checked');
+                const mediaFormatError = document.getElementById('mediaFormatError');
+                const mediaContainer = document.getElementById('mediaFormatsContainer');
+                
+                if (mediaCheckboxes.length === 0) {
+                    isValid = false;
+                    errorMessage += '• At least one media format must be selected\n';
+                    mediaFormatError.style.display = 'block';
+                    mediaContainer.classList.add('border-danger');
+                } else {
+                    mediaFormatError.style.display = 'none';
+                    mediaContainer.classList.remove('border-danger');
+                }
+                
+                if (!isValid) {
+                    e.preventDefault();
+                    showToast('Please fix the following errors:\n' + errorMessage, 'error');
+                    
+                    // Scroll to first error
+                    const firstError = document.querySelector('.is-invalid, .border-danger');
+                    if (firstError) {
+                        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    
+                    return false;
+                }
+            });
+        }
+        
+        // Real-time validation feedback for media formats
+        const mediaCheckboxes = document.querySelectorAll('.medium-checkbox');
+        mediaCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const checkedCount = document.querySelectorAll('.medium-checkbox:checked').length;
+                const mediaFormatError = document.getElementById('mediaFormatError');
+                const mediaContainer = document.getElementById('mediaFormatsContainer');
+                
+                if (checkedCount > 0) {
+                    mediaFormatError.style.display = 'none';
+                    mediaContainer.classList.remove('border-danger');
+                } else {
+                    mediaFormatError.style.display = 'block';
+                    mediaContainer.classList.add('border-danger');
+                }
+            });
+        });
 
         function setPreviewVisible(visible) {
             if (previewCard) previewCard.style.display = visible ? '' : 'none';
@@ -441,10 +602,19 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                               previewPoster.src = d.poster_url;
                               previewPoster.style.display = '';
                               previewPosterPlaceholder.style.display = 'none';
+                              document.getElementById('selected_poster_url').value = d.poster_url;
                           } else {
                               previewPoster.src = '';
                               previewPoster.style.display = 'none';
                               previewPosterPlaceholder.style.display = '';
+                              document.getElementById('selected_poster_url').value = '';
+                          }
+                          
+                          // Store TMDB ID and type for fetching more posters
+                          if (d.tmdb_id) {
+                              document.getElementById('tmdb_id_for_posters').value = d.tmdb_id;
+                              document.getElementById('media_type_for_posters').value = payload.lookup_type;
+                              document.getElementById('choosePosterBtn').style.display = '';
                           }
 
                           setPreviewVisible(true);
@@ -482,6 +652,189 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                       showToast('An error occurred while searching TMDB.', 'error');
                   })
                   .finally(() => { btn.disabled = false; btn.innerHTML = oldHtml; });
+            });
+        }
+
+        // Poster Selection Functionality
+        let availablePosters = [];
+        let selectedPosterData = null;
+
+        // Choose poster button click
+        const choosePosterBtn = document.getElementById('choosePosterBtn');
+        if (choosePosterBtn) {
+            choosePosterBtn.addEventListener('click', function() {
+                const tmdbId = document.getElementById('tmdb_id_for_posters').value;
+                const mediaType = document.getElementById('media_type_for_posters').value || 'movie';
+
+                if (!tmdbId) {
+                    showToast('No TMDB ID available. Please search first.', 'error');
+                    return;
+                }
+
+                // Fetch posters
+                fetchPostersForSelection(tmdbId, mediaType);
+
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('posterSelectionModal'));
+                modal.show();
+            });
+        }
+
+        function fetchPostersForSelection(tmdbId, mediaType) {
+            document.getElementById('addPosterLoadingSpinner').style.display = 'block';
+            document.getElementById('addPosterMessage').style.display = 'none';
+            document.getElementById('addPosterGallery').innerHTML = '';
+
+            // We need to create a temporary movie ID or use a special endpoint
+            // For now, we'll call the API service directly via a new endpoint
+            fetch('<?= base_url('movies/fetchPostersForNew') ?>', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ tmdb_id: tmdbId, type: mediaType })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('addPosterLoadingSpinner').style.display = 'none';
+
+                if (data.success && data.posters && data.posters.length > 0) {
+                    availablePosters = data.posters;
+                    displayAddPosterGallery(data.posters);
+                    showAddPosterMessage(data.message, 'success');
+                } else {
+                    showAddPosterMessage(data.message || 'No posters found', 'warning');
+                }
+            })
+            .catch(error => {
+                document.getElementById('addPosterLoadingSpinner').style.display = 'none';
+                showAddPosterMessage('Error fetching posters: ' + error.message, 'danger');
+            });
+        }
+
+        function displayAddPosterGallery(posters) {
+            const gallery = document.getElementById('addPosterGallery');
+            gallery.innerHTML = '';
+
+            posters.forEach((poster, index) => {
+                const col = document.createElement('div');
+                col.className = 'col-md-4 col-sm-6';
+                col.innerHTML = `
+                    <div class="card add-poster-option" style="cursor: pointer;" data-poster-index="${index}">
+                        <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
+                        <div class="card-body p-2 text-center">
+                            <small class="text-muted">
+                                ${poster.width} x ${poster.height}
+                                ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}
+                            </small>
+                        </div>
+                    </div>
+                `;
+                gallery.appendChild(col);
+            });
+
+            // Add click handlers
+            document.querySelectorAll('.add-poster-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const index = parseInt(this.dataset.posterIndex);
+                    selectPosterFromGallery(index);
+                });
+            });
+        }
+
+        function selectPosterFromGallery(index) {
+            if (index >= 0 && index < availablePosters.length) {
+                const poster = availablePosters[index];
+                selectedPosterData = poster;
+
+                // Update preview
+                updatePosterPreview(poster.url);
+
+                // Store URL
+                document.getElementById('selected_poster_url').value = poster.url;
+
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('posterSelectionModal')).hide();
+
+                showToast('Poster selected! This will be saved when you create the movie.', 'success');
+            }
+        }
+
+        function updatePosterPreview(url) {
+            const previewPoster = document.getElementById('previewPoster');
+            const previewPosterPlaceholder = document.getElementById('previewPosterPlaceholder');
+
+            if (url) {
+                previewPoster.src = url;
+                previewPoster.style.display = '';
+                previewPosterPlaceholder.style.display = 'none';
+            } else {
+                previewPoster.src = '';
+                previewPoster.style.display = 'none';
+                previewPosterPlaceholder.style.display = '';
+            }
+        }
+
+        function showAddPosterMessage(message, type) {
+            const msgDiv = document.getElementById('addPosterMessage');
+            msgDiv.className = 'alert alert-' + type;
+            msgDiv.textContent = message;
+            msgDiv.style.display = 'block';
+        }
+
+        // Upload custom poster
+        const addPosterFile = document.getElementById('addPosterFile');
+        if (addPosterFile) {
+            addPosterFile.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        document.getElementById('addUploadPreviewImg').src = event.target.result;
+                        document.getElementById('addUploadPreview').style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+        // Select uploaded poster
+        const selectUploadedPosterBtn = document.getElementById('selectUploadedPosterBtn');
+        if (selectUploadedPosterBtn) {
+            selectUploadedPosterBtn.addEventListener('click', function() {
+                const file = document.getElementById('addPosterFile').files[0];
+                if (!file) {
+                    showToast('Please select a file first', 'error');
+                    return;
+                }
+
+                // Preview the uploaded image
+                const previewSrc = document.getElementById('addUploadPreviewImg').src;
+                updatePosterPreview(previewSrc);
+
+                // Mark that we're using an upload (clear the URL field)
+                document.getElementById('selected_poster_url').value = '';
+
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('posterSelectionModal')).hide();
+
+                showToast('Custom poster selected! This will be uploaded when you create the movie.', 'success');
+            });
+        }
+
+        // Clear selected poster
+        const clearSelectedPosterBtn = document.getElementById('clearSelectedPosterBtn');
+        if (clearSelectedPosterBtn) {
+            clearSelectedPosterBtn.addEventListener('click', function() {
+                updatePosterPreview(null);
+                document.getElementById('selected_poster_url').value = '';
+                document.getElementById('addPosterFile').value = '';
+                document.getElementById('addUploadPreview').style.display = 'none';
+
+                bootstrap.Modal.getInstance(document.getElementById('posterSelectionModal')).hide();
+
+                showToast('Poster selection cleared', 'success');
             });
         }
     });

@@ -28,11 +28,14 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->post('movies/toggleSeen/(:num)', 'Movies::toggleSeen/$1');
     $routes->post('movies/fetchFromApi/(:num)', 'Movies::fetchFromApi/$1');
     $routes->get('movies/poster/(:num)', 'Movies::poster/$1');
+    $routes->post('movies/fetchPosters/(:num)', 'Movies::fetchPosters/$1');
+    $routes->post('movies/updatePoster/(:num)', 'Movies::updatePoster/$1');
 
     // Add/create routes
     $routes->get('movies/add', 'Movies::add');
     $routes->post('movies/store', 'Movies::store');
     $routes->post('movies/lookup', 'Movies::lookup');
+    $routes->post('movies/fetchPostersForNew', 'Movies::fetchPostersForNew');
 
     // Loan management routes
     $routes->post('movies/loan/(:num)', 'Movies::loan/$1');
