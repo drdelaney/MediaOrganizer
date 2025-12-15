@@ -209,3 +209,82 @@ if (!function_exists('get_highest_medium_id_from_notes')) {
         return max($mediumIds);
     }
 }
+
+/**
+ * Normalize a title for fuzzy searching
+ * Handles special characters, punctuation, "the" placement, and common variations
+ *
+ * Examples:
+ * - "Tron: Legacy" and "Tron Legacy" both normalize to "tron legacy"
+ * - "The Matrix" and "Matrix, The" both normalize to "matrix"
+ * - "Star Wars: Episode IV - A New Hope" normalizes to "star wars episode iv a new hope"
+ * - "Marvel's Spider-Man" normalizes to "marvels spider man"
+ *
+ * @param string|null $title The title to normalize
+ * @return string The normalized title for comparison
+ */
+if (!function_exists('normalize_title_for_search')) {
+    function normalize_title_for_search(?string $title): string
+    {
+        if ($title === null || $title === '') {
+            return '';
+        }
+
+        // Convert to lowercase
+        $normalized = mb_strtolower($title, 'UTF-8');
+
+        // Replace common word separators with spaces
+        // & (ampersand) -> "and"
+        $normalized = preg_replace('/\s*&\s*/', ' and ', $normalized);
+
+        // Remove possessives ('s) - handles both straight and curly apostrophes
+        $normalized = preg_replace("/['\u{2019}]s\b/u", '', $normalized);
+
+        // Remove all punctuation and special characters except spaces
+        // This handles: colons, semicolons, hyphens, quotes, apostrophes, etc.
+        $normalized = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $normalized);
+
+        // Collapse multiple spaces into one
+        $normalized = preg_replace('/\s+/', ' ', $normalized);
+
+        // Trim
+        $normalized = trim($normalized);
+
+        // Handle "The" at the beginning or end
+        // Remove "the" from the beginning
+        $normalized = preg_replace('/^the\s+/', '', $normalized);
+
+        // Remove "the" from the end (handles "Matrix, The" -> "Matrix")
+        $normalized = preg_replace('/\s+the$/', '', $normalized);
+
+        // Remove "a" and "an" from the beginning
+        $normalized = preg_replace('/^an?\s+/', '', $normalized);
+
+        // Final trim and space collapse
+        $normalized = trim($normalized);
+        $normalized = preg_replace('/\s+/', ' ', $normalized);
+
+        return $normalized;
+    }
+}
+
+/**
+ * Check if two titles match using fuzzy/normalized comparison
+ *
+ * @param string|null $title1 First title
+ * @param string|null $title2 Second title
+ * @return bool True if titles match when normalized
+ */
+if (!function_exists('titles_match')) {
+    function titles_match(?string $title1, ?string $title2): bool
+    {
+        $norm1 = normalize_title_for_search($title1);
+        $norm2 = normalize_title_for_search($title2);
+
+        if ($norm1 === '' || $norm2 === '') {
+            return false;
+        }
+
+        return $norm1 === $norm2;
+    }
+}

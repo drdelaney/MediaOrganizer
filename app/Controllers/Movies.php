@@ -57,10 +57,10 @@ class Movies extends BaseController
 
     public function store()
     {
-        // Validation rules (all fields optional to allow manual minimal creation)
+        // Validation rules - original title is required, at least one medium must be selected
         $validationRules = [
             'title' => 'permit_empty|max_length[255]',
-            'o_title' => 'permit_empty|max_length[255]',
+            'o_title' => 'required|max_length[255]',
             'director' => 'permit_empty|max_length[255]',
             'year' => 'permit_empty|integer|greater_than[1800]|less_than[2100]',
             'runtime' => 'permit_empty|integer|greater_than[0]',
@@ -82,6 +82,17 @@ class Movies extends BaseController
 
         if (!$this->validate($validationRules)) {
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        // Additional validation: Check if at least one media format is selected
+        $mediumIds = $this->request->getPost('medium_ids');
+        if (!is_array($mediumIds)) {
+            $singleMediumId = $this->request->getPost('medium_id');
+            $mediumIds = $singleMediumId ? [$singleMediumId] : [];
+        }
+
+        if (empty($mediumIds)) {
+            return redirect()->back()->withInput()->with('errors', ['medium' => 'At least one media format must be selected.']);
         }
 
         $lookupType = strtolower((string)($this->request->getPost('lookup_type') ?: 'movie'));
@@ -164,18 +175,69 @@ class Movies extends BaseController
         // Insert the movie
         $movieId = $this->movieModel->insert($insertData, true);
         if ($movieId) {
-            // If we have a poster URL from API, download and store it
-            if ($apiData && !empty($apiData['poster_url'])) {
+            // Handle poster - check in this order: custom upload, selected URL, API data
+            $imageData = null;
+            
+            // 1. Check for custom uploaded poster file
+            $posterFile = $this->request->getFile('poster_upload_file');
+            if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
+                try {
+                    $mimeType = $posterFile->getMimeType();
+                    
+                    // Validate image type
+                    if (in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'])) {
+                        // Read the uploaded file
+                        $imageData = file_get_contents($posterFile->getTempName());
+
+                        // Convert to JPEG if needed
+                        if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg') {
+                            $image = imagecreatefromstring($imageData);
+                            if ($image !== false) {
+                                ob_start();
+                                imagejpeg($image, null, 90);
+                                $imageData = ob_get_clean();
+                                imagedestroy($image);
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    log_message('error', 'Failed to process uploaded poster: ' . $e->getMessage());
+                    $imageData = null;
+                }
+            }
+            
+            // 2. If no upload, check for selected poster URL from modal
+            if (!$imageData) {
+                $selectedPosterUrl = $this->request->getPost('selected_poster_url');
+                if (!empty($selectedPosterUrl)) {
+                    try {
+                        $apiService = $apiService ?? new \App\Libraries\MovieApiService();
+                        $imageData = $apiService->downloadPoster($selectedPosterUrl, $movieId);
+                    } catch (\Throwable $e) {
+                        log_message('error', 'Failed to download selected poster: ' . $e->getMessage());
+                    }
+                }
+            }
+            
+            // 3. If still no poster and we have API data with poster URL, use that
+            if (!$imageData && $apiData && !empty($apiData['poster_url'])) {
                 try {
                     $apiService = $apiService ?? new \App\Libraries\MovieApiService();
                     $imageData = $apiService->downloadPoster($apiData['poster_url'], $movieId);
-                    if ($imageData) {
-                        $this->movieModel->storePosterForMovie($movieId, $imageData);
-                    }
                 } catch (\Throwable $e) {
-                    log_message('error', 'Failed to download/store poster on create: ' . $e->getMessage());
+                    log_message('error', 'Failed to download API poster: ' . $e->getMessage());
                 }
             }
+            
+            // Store the poster if we got image data from any source
+            if ($imageData) {
+                try {
+                    $this->movieModel->storePosterForMovie($movieId, $imageData);
+                } catch (\Throwable $e) {
+                    log_message('error', 'Failed to store poster on create: ' . $e->getMessage());
+                }
+            }
+            
             session()->setFlashdata('success', 'Movie added successfully!');
             return redirect()->to(base_url('movies/view/' . $movieId));
         } else {
@@ -530,7 +592,7 @@ class Movies extends BaseController
             } elseif ($tvdbId !== '' && $apiAvailable) {
                 $apiData = $apiService->findByExternalId($tvdbId, $lookupType);
             } elseif ($barcode !== '') {
-                // 2) Local library lookup by barcode
+                // 2) Local library lookup by barcode (exact match)
                 $existing = $this->movieModel->findByBarcode($barcode);
                 if ($existing) {
                     $normalized = [
@@ -559,7 +621,7 @@ class Movies extends BaseController
                         ]
                     ]);
                 }
-                // Not found locally — attempt online resolution and TMDB mapping if possible
+                // Not found locally by barcode — attempt online resolution and TMDB mapping if possible
                 $apiData = $apiService->findByBarcode($barcode, $lookupType);
                 if (!$apiData && ($title === '' && !$apiAvailable)) {
                     return $this->response->setJSON([
@@ -698,5 +760,262 @@ class Movies extends BaseController
         }
 
         return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Get multiple poster options from TMDB for a new movie (before creation)
+     */
+    public function fetchPostersForNew()
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->back();
+        }
+
+        try {
+            $apiService = new \App\Libraries\MovieApiService();
+
+            if (!$apiService->isApiAvailable()) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'TMDB API key not configured.'
+                ]);
+            }
+
+            $payload = $this->request->getJSON(true) ?: [];
+            $tmdbId = isset($payload['tmdb_id']) ? (int)$payload['tmdb_id'] : 0;
+            $type = isset($payload['type']) ? strtolower($payload['type']) : 'movie';
+
+            if (!$tmdbId) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No TMDB ID provided.'
+                ]);
+            }
+
+            // Get multiple posters
+            $posters = $apiService->getPosters($tmdbId, $type, 10);
+
+            if (empty($posters)) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No posters found for this movie on TMDB.'
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'success' => true,
+                'posters' => $posters,
+                'message' => 'Found ' . count($posters) . ' poster(s)'
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Get multiple poster options from TMDB for a movie
+     */
+    public function fetchPosters($movieId)
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->back();
+        }
+
+        $movie = $this->movieModel->find($movieId);
+
+        if (!$movie) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Movie not found']);
+        }
+
+        try {
+            $apiService = new \App\Libraries\MovieApiService();
+
+            if (!$apiService->isApiAvailable()) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'TMDB API key not configured. Please add TMDB_API_KEY to your environment variables.'
+                ]);
+            }
+
+            // Get TMDB ID from notes
+            $notes = $movie['notes'] ?? '';
+            $tmdbId = null;
+            $type = 'movie'; // default
+
+            // Extract TMDB ID from notes
+            if (preg_match('/TMDB:\s*(\d+)/i', $notes, $matches)) {
+                $tmdbId = (int)$matches[1];
+            }
+
+            // Try to determine if it's TV from notes
+            if (preg_match('/TVDB:/i', $notes)) {
+                $type = 'tv';
+            }
+
+            // If no TMDB ID in notes, try searching by title
+            if (!$tmdbId) {
+                $title = $movie['title'] ?: $movie['o_title'];
+                $year = $movie['year'];
+                
+                if (!$title) {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => 'No TMDB ID found in notes and no title available for search.'
+                    ]);
+                }
+
+                // Search for the movie/TV show
+                if ($type === 'tv') {
+                    $apiData = $apiService->searchTv($title, $year);
+                } else {
+                    $apiData = $apiService->searchMovie($title, $year);
+                }
+
+                if (!$apiData || empty($apiData['tmdb_id'])) {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => 'Could not find movie on TMDB. Please ensure the movie has a TMDB ID in its notes.'
+                    ]);
+                }
+
+                $tmdbId = (int)$apiData['tmdb_id'];
+            }
+
+            // Get multiple posters
+            $posters = $apiService->getPosters($tmdbId, $type, 10);
+
+            if (empty($posters)) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No posters found for this movie on TMDB.'
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'success' => true,
+                'posters' => $posters,
+                'message' => 'Found ' . count($posters) . ' poster(s)'
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Update only the poster for a movie (from URL or upload)
+     */
+    public function updatePoster($movieId)
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->back();
+        }
+
+        $movie = $this->movieModel->find($movieId);
+
+        if (!$movie) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Movie not found']);
+        }
+
+        try {
+            $posterUrl = $this->request->getPost('poster_url');
+            $posterFile = $this->request->getFile('poster_file');
+            $clearPoster = $this->request->getPost('clear_poster');
+
+            // Option 1: Clear poster
+            if ($clearPoster === 'true' || $clearPoster === '1') {
+                $this->movieModel->clearPosterForMovie($movieId);
+                return $this->response->setJSON([
+                    'success' => true,
+                    'message' => 'Poster cleared successfully',
+                    'poster_url' => null
+                ]);
+            }
+
+            $imageData = null;
+
+            // Option 2: Upload from file
+            if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
+                $mimeType = $posterFile->getMimeType();
+                
+                // Validate image type
+                if (!in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'])) {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => 'Invalid file type. Please upload a JPG, PNG, or GIF image.'
+                    ]);
+                }
+
+                // Read the uploaded file
+                $imageData = file_get_contents($posterFile->getTempName());
+
+                // Convert to JPEG if needed
+                if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg') {
+                    $image = imagecreatefromstring($imageData);
+                    if ($image !== false) {
+                        ob_start();
+                        imagejpeg($image, null, 90);
+                        $imageData = ob_get_clean();
+                        imagedestroy($image);
+                    }
+                }
+            }
+            // Option 3: Download from URL
+            else if (!empty($posterUrl)) {
+                $apiService = new \App\Libraries\MovieApiService();
+                $imageData = $apiService->downloadPoster($posterUrl, $movieId);
+
+                if (!$imageData) {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => 'Failed to download poster from URL'
+                    ]);
+                }
+            }
+            else {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No poster URL or file provided'
+                ]);
+            }
+
+            // Store the poster
+            if ($imageData) {
+                $success = $this->movieModel->storePosterForMovie($movieId, $imageData);
+
+                if ($success) {
+                    $updatedMovie = $this->movieModel->find($movieId);
+                    return $this->response->setJSON([
+                        'success' => true,
+                        'message' => 'Poster updated successfully',
+                        'poster_url' => base_url('movies/poster/' . $movieId) . '?v=' . urlencode($updatedMovie['poster_md5'])
+                    ]);
+                } else {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => 'Failed to store poster'
+                    ]);
+                }
+            }
+
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'No valid image data'
+            ]);
+
+        } catch (\Exception $e) {
+            log_message('error', 'Error updating poster: ' . $e->getMessage());
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
     }
 }

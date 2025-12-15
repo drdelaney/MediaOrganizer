@@ -20,18 +20,23 @@
             <div class="col-md-3 mb-4">
                 <div class="card">
                     <div class="card-body text-center">
-                        <?php if ($movie['poster_md5']): ?>
-                            <img src="<?= base_url('movies/poster/' . $movie['movie_id']) . '?v=' . urlencode($movie['poster_md5']) ?>" 
-                                 class="img-fluid rounded movie-poster" 
-                                 alt="<?= esc($movie['title']) ?>"
-                                 style="max-height: 400px;">
-                        <?php else: ?>
-                            <div class="bg-light rounded d-flex align-items-center justify-content-center" 
-                                 style="height: 400px;">
-                                <i class="bi bi-film display-1 text-muted"></i>
-                            </div>
-                            <p class="text-muted mt-2">No poster available</p>
-                        <?php endif; ?>
+                        <div id="poster-container">
+                            <?php if ($movie['poster_md5']): ?>
+                                <img src="<?= base_url('movies/poster/' . $movie['movie_id']) . '?v=' . urlencode($movie['poster_md5']) ?>"
+                                     class="img-fluid rounded movie-poster"
+                                     alt="<?= esc($movie['title']) ?>"
+                                     style="max-height: 400px;">
+                            <?php else: ?>
+                                <div class="bg-light rounded d-flex align-items-center justify-content-center"
+                                     style="height: 400px;">
+                                    <i class="bi bi-film display-1 text-muted"></i>
+                                </div>
+                                <p class="text-muted mt-2">No poster available</p>
+                            <?php endif; ?>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2 w-100" data-bs-toggle="modal" data-bs-target="#updatePosterModal">
+                            <i class="bi bi-image"></i> Update Poster
+                        </button>
                     </div>
                 </div>
             </div>
@@ -317,6 +322,81 @@
     </div>
 </div>
 
+<!-- Update Poster Modal -->
+<div class="modal fade" id="updatePosterModal" tabindex="-1" aria-labelledby="updatePosterModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updatePosterModalLabel">
+                    <i class="bi bi-image"></i> Update Poster
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs mb-3" id="posterTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tmdb-tab" data-bs-toggle="tab" data-bs-target="#tmdb-posters" type="button" role="tab">
+                            <i class="bi bi-cloud-download"></i> TMDB Posters
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-poster" type="button" role="tab">
+                            <i class="bi bi-upload"></i> Upload Custom
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="posterTabContent">
+                    <!-- TMDB Posters Tab -->
+                    <div class="tab-pane fade show active" id="tmdb-posters" role="tabpanel">
+                        <button type="button" class="btn btn-primary mb-3" id="fetchPostersBtn">
+                            <i class="bi bi-search"></i> Fetch Posters from TMDB
+                        </button>
+                        <div id="posterLoadingSpinner" style="display: none;" class="text-center mb-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted mt-2">Fetching posters...</p>
+                        </div>
+                        <div id="posterMessage" class="alert" style="display: none;"></div>
+                        <div id="posterGallery" class="row g-3"></div>
+                    </div>
+
+                    <!-- Upload Custom Poster Tab -->
+                    <div class="tab-pane fade" id="upload-poster" role="tabpanel">
+                        <form id="uploadPosterForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="posterFile" class="form-label">Choose Image File</label>
+                                <input type="file" class="form-control" id="posterFile" name="poster_file" accept="image/*" required>
+                                <div class="form-text">Supported formats: JPG, PNG, GIF. Image will be converted to JPEG.</div>
+                            </div>
+                            <div class="mb-3" id="uploadPreview" style="display: none;">
+                                <label class="form-label">Preview</label>
+                                <div class="text-center">
+                                    <img id="uploadPreviewImg" src="" alt="Preview" class="img-fluid rounded" style="max-height: 300px;">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success" id="uploadPosterBtn">
+                                <i class="bi bi-upload"></i> Upload and Save
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <hr>
+                <div class="text-center">
+                    <button type="button" class="btn btn-outline-danger" id="clearPosterBtn">
+                        <i class="bi bi-x-circle"></i> Remove Current Poster
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
@@ -425,6 +505,230 @@ function confirmDelete(movieId, movieTitle) {
         // Redirect to delete URL
         window.location.href = '<?= base_url('movies/delete/') ?>' + movieId;
     }
+}
+
+// Poster Update Functionality
+const movieId = <?= $movie['movie_id'] ?>;
+let selectedPosterUrl = null;
+
+// Fetch posters from TMDB
+document.getElementById('fetchPostersBtn').addEventListener('click', function() {
+    const btn = this;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
+
+    document.getElementById('posterLoadingSpinner').style.display = 'block';
+    document.getElementById('posterMessage').style.display = 'none';
+    document.getElementById('posterGallery').innerHTML = '';
+
+    fetch('<?= base_url('movies/fetchPosters/') ?>' + movieId, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('posterLoadingSpinner').style.display = 'none';
+
+        if (data.success && data.posters && data.posters.length > 0) {
+            displayPosterGallery(data.posters);
+            showPosterMessage(data.message, 'success');
+        } else {
+            showPosterMessage(data.message || 'No posters found', 'warning');
+        }
+    })
+    .catch(error => {
+        document.getElementById('posterLoadingSpinner').style.display = 'none';
+        showPosterMessage('Error fetching posters: ' + error.message, 'danger');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+});
+
+// Display poster gallery
+function displayPosterGallery(posters) {
+    const gallery = document.getElementById('posterGallery');
+    gallery.innerHTML = '';
+
+    posters.forEach((poster, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-sm-6';
+        col.innerHTML = `
+            <div class="card poster-option" style="cursor: pointer;" data-poster-url="${poster.url}">
+                <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
+                <div class="card-body p-2 text-center">
+                    <small class="text-muted">
+                        ${poster.width} x ${poster.height}
+                        ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}
+                    </small>
+                </div>
+            </div>
+        `;
+        gallery.appendChild(col);
+    });
+
+    // Add click handlers to poster options
+    document.querySelectorAll('.poster-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.poster-option').forEach(o => o.classList.remove('border-primary', 'border-3'));
+            this.classList.add('border-primary', 'border-3');
+            selectedPosterUrl = this.dataset.posterUrl;
+            savePoster(selectedPosterUrl);
+        });
+    });
+}
+
+// Save poster
+function savePoster(posterUrl) {
+    fetch('<?= base_url('movies/updatePoster/') ?>' + movieId, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'poster_url=' + encodeURIComponent(posterUrl)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            updatePosterDisplay(data.poster_url);
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('updatePosterModal')).hide();
+            }, 1000);
+        } else {
+            showMessage(data.message || 'Failed to update poster', 'error');
+        }
+    })
+    .catch(error => {
+        showMessage('Error updating poster: ' + error.message, 'error');
+    });
+}
+
+// Upload custom poster
+document.getElementById('uploadPosterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const btn = document.getElementById('uploadPosterBtn');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+
+    fetch('<?= base_url('movies/updatePoster/') ?>' + movieId, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            updatePosterDisplay(data.poster_url);
+            document.getElementById('uploadPosterForm').reset();
+            document.getElementById('uploadPreview').style.display = 'none';
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('updatePosterModal')).hide();
+            }, 1000);
+        } else {
+            showMessage(data.message || 'Failed to upload poster', 'error');
+        }
+    })
+    .catch(error => {
+        showMessage('Error uploading poster: ' + error.message, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+});
+
+// Preview uploaded file
+document.getElementById('posterFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            document.getElementById('uploadPreviewImg').src = event.target.result;
+            document.getElementById('uploadPreview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Clear poster
+document.getElementById('clearPosterBtn').addEventListener('click', function() {
+    if (!confirm('Are you sure you want to remove the current poster?')) {
+        return;
+    }
+
+    const btn = this;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Removing...';
+
+    fetch('<?= base_url('movies/updatePoster/') ?>' + movieId, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'clear_poster=true'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showMessage(data.message, 'success');
+            updatePosterDisplay(null);
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('updatePosterModal')).hide();
+            }, 1000);
+        } else {
+            showMessage(data.message || 'Failed to clear poster', 'error');
+        }
+    })
+    .catch(error => {
+        showMessage('Error clearing poster: ' + error.message, 'error');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+});
+
+// Update poster display on page
+function updatePosterDisplay(posterUrl) {
+    const container = document.getElementById('poster-container');
+    if (posterUrl) {
+        container.innerHTML = `
+            <img src="${posterUrl}"
+                 class="img-fluid rounded movie-poster"
+                 alt="<?= esc($movie['title']) ?>"
+                 style="max-height: 400px;">
+        `;
+    } else {
+        container.innerHTML = `
+            <div class="bg-light rounded d-flex align-items-center justify-content-center"
+                 style="height: 400px;">
+                <i class="bi bi-film display-1 text-muted"></i>
+            </div>
+            <p class="text-muted mt-2">No poster available</p>
+        `;
+    }
+}
+
+function showPosterMessage(message, type) {
+    const msgDiv = document.getElementById('posterMessage');
+    msgDiv.className = 'alert alert-' + type;
+    msgDiv.textContent = message;
+    msgDiv.style.display = 'block';
 }
 </script>
 <?= $this->endsection() ?>

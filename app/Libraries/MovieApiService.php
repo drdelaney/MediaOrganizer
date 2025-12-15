@@ -742,4 +742,69 @@ class MovieApiService
             return null;
         }
     }
+
+    /**
+     * Get multiple poster images for a movie/TV show from TMDB
+     * Returns array of poster URLs (up to $limit)
+     *
+     * @param int $tmdbId The TMDB ID
+     * @param string $type 'movie' or 'tv'
+     * @param int $limit Maximum number of posters to return
+     * @return array Array of poster URLs
+     */
+    public function getPosters($tmdbId, $type = 'movie', $limit = 5)
+    {
+        if (!$this->isApiAvailable()) {
+            throw new \Exception('TMDB API key not configured');
+        }
+
+        try {
+            $params = [
+                'api_key' => $this->tmdbApiKey,
+                'include_image_language' => 'en,null'
+            ];
+
+            $endpoint = ($type === 'tv') ? "tv/{$tmdbId}/images" : "movie/{$tmdbId}/images";
+            $response = $this->client->get($endpoint . '?' . http_build_query($params));
+
+            if ($response->getStatusCode() !== 200) {
+                throw new \Exception('API request failed with status: ' . $response->getStatusCode());
+            }
+
+            $data = json_decode($response->getBody(), true);
+
+            if (empty($data['posters'])) {
+                return [];
+            }
+
+            $posters = [];
+            $count = 0;
+
+            // Sort by vote average (descending) to get the most popular posters first
+            usort($data['posters'], function($a, $b) {
+                return ($b['vote_average'] ?? 0) <=> ($a['vote_average'] ?? 0);
+            });
+
+            foreach ($data['posters'] as $poster) {
+                if ($count >= $limit) break;
+                if (!empty($poster['file_path'])) {
+                    $posters[] = [
+                        'url' => 'https://image.tmdb.org/t/p/w500' . $poster['file_path'],
+                        'thumbnail' => 'https://image.tmdb.org/t/p/w185' . $poster['file_path'],
+                        'width' => $poster['width'] ?? null,
+                        'height' => $poster['height'] ?? null,
+                        'vote_average' => $poster['vote_average'] ?? 0
+                    ];
+                    $count++;
+                }
+            }
+
+            log_message('info', 'TMDB API: Retrieved ' . count($posters) . ' posters for ' . $type . ' ID: ' . $tmdbId);
+            return $posters;
+
+        } catch (\Exception $e) {
+            log_message('error', 'TMDB API Error getting posters: ' . $e->getMessage());
+            throw new \Exception('Failed to get poster images: ' . $e->getMessage());
+        }
+    }
 }

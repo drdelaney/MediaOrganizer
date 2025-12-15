@@ -70,6 +70,7 @@ class MovieModel extends Model
 
     /**
      * Get movies with related data
+     * Uses fuzzy matching for title/o_title fields
      */
     public function getMoviesWithDetails($search = null, $searchField = 'title', $limit = 50, $offset = 0)
     {
@@ -85,7 +86,26 @@ class MovieModel extends Model
             ->join('media med', 'm.medium_id = med.medium_id', 'left');
 
         if ($search) {
-            if ($searchField === 'all') {
+            // For title searches, we'll use fuzzy matching in PHP after fetching candidates
+            // For other fields, use regular LIKE search
+            if ($searchField === 'title' || $searchField === 'o_title') {
+                // Get normalized search term
+                $normalizedSearch = normalize_title_for_search($search);
+                
+                if ($normalizedSearch !== '') {
+                    // Extract key words for initial SQL filtering
+                    $searchWords = explode(' ', $normalizedSearch);
+                    $primaryWord = $searchWords[0] ?? '';
+                    
+                    if ($primaryWord !== '') {
+                        // Broad initial filter to reduce dataset
+                        $builder->groupStart()
+                            ->like('m.title', $primaryWord)
+                            ->orLike('m.o_title', $primaryWord)
+                            ->groupEnd();
+                    }
+                }
+            } elseif ($searchField === 'all') {
                 $builder->groupStart()
                     ->like('m.title', $search)
                     ->orLike('m.o_title', $search)
@@ -96,24 +116,95 @@ class MovieModel extends Model
                     ->orLike('m.barcode', $search)
                     ->groupEnd();
             } else {
+                // Non-title fields use regular LIKE
                 $builder->like('m.' . $searchField, $search);
             }
         }
 
         $builder->orderBy('m.created', 'DESC');
+
+        // Get all candidates (no limit yet if doing fuzzy search on titles)
+        $needsFuzzyFilter = $search && ($searchField === 'title' || $searchField === 'o_title');
         
-        if ($limit > 0) {
+        if (!$needsFuzzyFilter && $limit > 0) {
             $builder->limit($limit, $offset);
         }
+        
+        $results = $builder->get()->getResultArray();
+        
+        // Apply fuzzy filtering if searching by title
+        if ($needsFuzzyFilter && $search) {
+            $normalizedSearch = normalize_title_for_search($search);
+            $filtered = [];
+            
+            foreach ($results as $movie) {
+                $movieTitleNorm = normalize_title_for_search($movie['title']);
+                $movieOTitleNorm = normalize_title_for_search($movie['o_title']);
+                
+                // Check if normalized search is contained in normalized titles
+                if (strpos($movieTitleNorm, $normalizedSearch) !== false || 
+                    strpos($movieOTitleNorm, $normalizedSearch) !== false) {
+                    $filtered[] = $movie;
+                }
+            }
+            
+            $results = $filtered;
+            
+            // Apply limit and offset after filtering
+            if ($limit > 0) {
+                $results = array_slice($results, $offset, $limit);
+            }
+        }
 
-        return $builder->get()->getResultArray();
+        return $results;
     }
 
     /**
      * Count total movies (with search filter)
+     * Uses fuzzy matching for title/o_title fields
      */
     public function countMovies($search = null, $searchField = 'title')
     {
+        if ($search && ($searchField === 'title' || $searchField === 'o_title')) {
+            // For title searches, we need to get all candidates and filter in PHP
+            $normalizedSearch = normalize_title_for_search($search);
+            
+            if ($normalizedSearch === '') {
+                return 0;
+            }
+            
+            // Extract key word for initial filtering
+            $searchWords = explode(' ', $normalizedSearch);
+            $primaryWord = $searchWords[0] ?? '';
+            
+            $builder = $this->db->table('movies m')
+                ->select('m.title, m.o_title');
+            
+            if ($primaryWord !== '') {
+                $builder->groupStart()
+                    ->like('m.title', $primaryWord)
+                    ->orLike('m.o_title', $primaryWord)
+                    ->groupEnd();
+            }
+            
+            $results = $builder->get()->getResultArray();
+            
+            // Filter using normalized comparison
+            $count = 0;
+            foreach ($results as $movie) {
+                $movieTitleNorm = normalize_title_for_search($movie['title']);
+                $movieOTitleNorm = normalize_title_for_search($movie['o_title']);
+                
+                if (strpos($movieTitleNorm, $normalizedSearch) !== false || 
+                    strpos($movieOTitleNorm, $normalizedSearch) !== false) {
+                    $count++;
+                }
+            }
+            
+            return $count;
+        }
+        
+        // Non-title searches use regular LIKE
         $builder = $this->db->table('movies m');
 
         if ($search) {
@@ -298,6 +389,84 @@ class MovieModel extends Model
             ->where('m.barcode', $barcode)
             ->get()
             ->getRowArray() ?: null;
+    }
+
+    /**
+     * Find movies by title using fuzzy/normalized matching
+     * Handles special characters, punctuation, "the" placement, etc.
+     * 
+     * @param string $title The title to search for
+     * @param int|null $year Optional year to narrow results
+     * @return array Array of matching movies
+     */
+    public function findByTitleFuzzy(string $title, ?int $year = null): array
+    {
+        if ($title === '') return [];
+        
+        // Get the normalized search term
+        $normalizedSearch = normalize_title_for_search($title);
+        
+        if ($normalizedSearch === '') return [];
+        
+        // Get all movies (we'll filter in PHP for better fuzzy matching)
+        // Start with a broad LIKE search to reduce the dataset
+        $builder = $this->db->table('movies m')
+            ->select('m.*, 
+                      c.name as collection_name,
+                      v.name as volume_name,
+                      vc.name as vcodec_name,
+                      r.name as ratio_name,
+                      med.name as medium_name')
+            ->join('collections c', 'm.collection_id = c.collection_id', 'left')
+            ->join('volumes v', 'm.volume_id = v.volume_id', 'left')
+            ->join('vcodecs vc', 'm.vcodec_id = vc.vcodec_id', 'left')
+            ->join('ratios r', 'm.ratio_id = r.ratio_id', 'left')
+            ->join('media med', 'm.medium_id = med.medium_id', 'left');
+        
+        // Extract key words from normalized title for initial filtering
+        $searchWords = explode(' ', $normalizedSearch);
+        $primaryWord = $searchWords[0] ?? '';
+        
+        if ($primaryWord !== '') {
+            $builder->groupStart()
+                ->like('m.title', $primaryWord)
+                ->orLike('m.o_title', $primaryWord)
+                ->groupEnd();
+        }
+        
+        // Add year filter if provided
+        if ($year !== null) {
+            $builder->where('m.year', $year);
+        }
+        
+        $candidates = $builder->get()->getResultArray();
+        
+        // Now filter using normalized comparison
+        $matches = [];
+        foreach ($candidates as $movie) {
+            $movieTitleNorm = normalize_title_for_search($movie['title']);
+            $movieOTitleNorm = normalize_title_for_search($movie['o_title']);
+            
+            if ($movieTitleNorm === $normalizedSearch || $movieOTitleNorm === $normalizedSearch) {
+                $matches[] = $movie;
+            }
+        }
+        
+        return $matches;
+    }
+
+    /**
+     * Search movies with fuzzy title matching
+     * Returns first match or null
+     * 
+     * @param string $title The title to search for
+     * @param int|null $year Optional year to narrow results
+     * @return array|null The first matching movie or null
+     */
+    public function searchByTitleFuzzy(string $title, ?int $year = null): ?array
+    {
+        $matches = $this->findByTitleFuzzy($title, $year);
+        return !empty($matches) ? $matches[0] : null;
     }
 
     /**

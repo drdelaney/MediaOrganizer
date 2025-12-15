@@ -8,8 +8,6 @@ This will use the existing schema of griffith.
 Copy the .env.example file to .env and fill in the values.
 Make sure to update your initial password.
 
-```
-
 Set up write permissions for the writeable folder
 ```
 # From the main folder run the following command:
