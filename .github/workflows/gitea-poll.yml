@@ -53,8 +53,18 @@ jobs:
 
       - name: Squash Gitea changes on top of gitea_sync (ignore workflows)
         run: |
-          # Squash merge with automatic conflict resolution
-          git merge --squash -X theirs gitea/main
+          set -e
+
+          # Attempt squash merge
+          if ! git merge --squash -X theirs gitea/main; then
+            echo "Resolving modify/delete conflicts in favor of Gitea..."
+
+            # For files deleted in Gitea, ensure they are deleted
+            git diff --name-status --diff-filter=DU | awk '{print $2}' | xargs -r git rm
+
+            # Stage everything after resolution
+            git add -A
+          fi
 
           # Unstage any workflow files to avoid GitHub push rejection
           git reset HEAD .github/workflows
