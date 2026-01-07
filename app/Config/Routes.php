@@ -35,12 +35,16 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('movies/add', 'Movies::add');
     $routes->post('movies/store', 'Movies::store');
     $routes->post('movies/lookup', 'Movies::lookup');
+    $routes->post('movies/fetchDetails', 'Movies::fetchDetails');
     $routes->post('movies/fetchPostersForNew', 'Movies::fetchPostersForNew');
 
     // Loan management routes
     $routes->post('movies/loan/(:num)', 'Movies::loan/$1');
     $routes->post('movies/returnLoan/(:num)', 'Movies::returnLoan/$1');
     $routes->get('movies/getPeople', 'Movies::getPeople');
+
+    // Tag management for movies (AJAX)
+    $routes->post('movies/updateTags/(:num)', 'Movies::updateMovieTags/$1');
 
     // Password management
     $routes->get('settings/password', 'Auth::changePassword');
@@ -89,4 +93,10 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     $routes->post('codec/add', 'DatabaseMaintenance::addCodec');
     $routes->post('codec/update/(:num)', 'DatabaseMaintenance::updateCodec/$1');
     $routes->post('codec/delete/(:num)', 'DatabaseMaintenance::deleteCodec/$1');
+
+    // Tag routes
+    $routes->get('tag/movies/(:num)', 'DatabaseMaintenance::viewTagMovies/$1');
+    $routes->post('tag/add', 'DatabaseMaintenance::addTag');
+    $routes->post('tag/update/(:num)', 'DatabaseMaintenance::updateTag/$1');
+    $routes->post('tag/delete/(:num)', 'DatabaseMaintenance::deleteTag/$1');
 });

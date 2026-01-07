@@ -1,7 +1,11 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
-<?php $movie = isset($movie) && is_array($movie) ? $movie : []; ?>
+<?php
+$movie = isset($movie) && is_array($movie) ? $movie : [];
+$movieTags = isset($movieTags) && is_array($movieTags) ? $movieTags : [];
+$allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
+?>
 
 <div class="row">
     <div class="col-12">
@@ -232,6 +236,28 @@
                             </div>
                         </div>
 
+                        <!-- Tags -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h5><i class="bi bi-tags"></i> Tags</h5>
+                                <div id="tags-container">
+                                    <?php if (!empty($movieTags)): ?>
+                                        <?php foreach ($movieTags as $tag): ?>
+                                            <a href="<?= base_url('database-maintenance/tag/movies/' . $tag['tag_id']) ?>"
+                                               class="badge bg-primary me-1 mb-1 text-decoration-none">
+                                                <i class="bi bi-tag"></i> <?= esc($tag['name']) ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">No tags assigned</span>
+                                    <?php endif; ?>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#manageTagsModal">
+                                    <i class="bi bi-tags"></i> Manage Tags
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Web Links -->
                         <?php if ($movie['site'] || $movie['o_site'] || $movie['trailer']): ?>
                             <div class="row mt-3">
@@ -316,6 +342,50 @@
                 </a>
                 <button type="button" class="btn btn-danger" onclick="confirmDelete(<?= $movie['movie_id'] ?>, '<?= esc(addslashes($movie['title'] ?: $movie['o_title'] ?: 'this movie'), 'js') ?>')">
                     <i class="bi bi-trash"></i> Delete Movie
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manage Tags Modal -->
+<div class="modal fade" id="manageTagsModal" tabindex="-1" aria-labelledby="manageTagsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="manageTagsModalLabel"><i class="bi bi-tags"></i> Manage Tags</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Select Tags for this Movie</label>
+                    <div id="tag-checkboxes">
+                        <?php if (!empty($allTags)): ?>
+                            <?php
+                            $selectedTagIds = array_column($movieTags, 'tag_id');
+                            foreach ($allTags as $tag):
+                                $isChecked = in_array($tag['tag_id'], $selectedTagIds);
+                            ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="tag_ids[]"
+                                           value="<?= $tag['tag_id'] ?>" id="tag_<?= $tag['tag_id'] ?>"
+                                           <?= $isChecked ? 'checked' : '' ?>>
+                                    <label class="form-check-label" for="tag_<?= $tag['tag_id'] ?>">
+                                        <?= esc($tag['name']) ?>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <p class="text-muted">No tags available. <a href="<?= base_url('tags') ?>" target="_blank">Create tags first</a>.</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div id="tagMessage" class="alert" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveTagsBtn">
+                    <i class="bi bi-save"></i> Save Tags
                 </button>
             </div>
         </div>
@@ -727,6 +797,51 @@ function updatePosterDisplay(posterUrl) {
 function showPosterMessage(message, type) {
     const msgDiv = document.getElementById('posterMessage');
     msgDiv.className = 'alert alert-' + type;
+    msgDiv.textContent = message;
+    msgDiv.style.display = 'block';
+}
+
+// Manage Tags
+document.getElementById('saveTagsBtn')?.addEventListener('click', function() {
+    const checkboxes = document.querySelectorAll('#tag-checkboxes input[type="checkbox"]:checked');
+    const tagIds = Array.from(checkboxes).map(cb => cb.value);
+    const btn = this;
+    const originalHtml = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+    fetch('<?= base_url('movies/updateTags/' . $movie['movie_id']) ?>', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'tag_ids[]=' + tagIds.join('&tag_ids[]=')
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showTagMessage(data.message, 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showTagMessage('Error: ' + data.message, 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        showTagMessage('Error: ' + error.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+});
+
+function showTagMessage(message, type) {
+    const msgDiv = document.getElementById('tagMessage');
+    msgDiv.className = 'alert alert-' + (type === 'success' ? 'success' : 'danger');
     msgDiv.textContent = message;
     msgDiv.style.display = 'block';
 }

@@ -1,6 +1,13 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$mediums = isset($mediums) && is_array($mediums) ? $mediums : [];
+$collections = isset($collections) && is_array($collections) ? $collections : [];
+$volumes = isset($volumes) && is_array($volumes) ? $volumes : [];
+$codecs = isset($codecs) && is_array($codecs) ? $codecs : [];
+$tags = isset($tags) && is_array($tags) ? $tags : [];
+?>
 
     <div class="row">
         <div class="col-12">
@@ -38,6 +45,11 @@
                         <i class="bi bi-file-earmark-code"></i> Codecs
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tags-tab" data-bs-toggle="tab" data-bs-target="#tags" type="button">
+                        <i class="bi bi-tags"></i> Tags
+                    </button>
+                </li>
             </ul>
 
             <!-- Tab Content -->
@@ -57,7 +69,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Name</th>
-                                    <th width="150">Actions</th>
+                                    <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
                                 <tbody id="mediums-table">
@@ -97,7 +109,7 @@
                                     <th>ID</th>
                                     <th>Name</th>
                                     <th>Loaned</th>
-                                    <th width="150">Actions</th>
+                                    <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
                                 <tbody id="collections-table">
@@ -143,7 +155,7 @@
                                     <th>ID</th>
                                     <th>Name</th>
                                     <th>Loaned</th>
-                                    <th width="150">Actions</th>
+                                    <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
                                 <tbody id="volumes-table">
@@ -188,7 +200,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Name</th>
-                                    <th width="150">Actions</th>
+                                    <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
                                 <tbody id="codecs-table">
@@ -210,6 +222,62 @@
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAGS TAB -->
+                <div class="tab-pane fade" id="tags" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-tags"></i> Tags</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addTagModal">
+                                <i class="bi bi-plus-circle"></i> Add Tag
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Movies Using</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="tags-table">
+                                <?php if (isset($tags)): foreach ($tags as $tag): ?>
+                                    <tr data-id="<?= $tag['tag_id'] ?>">
+                                        <td><?= $tag['tag_id'] ?></td>
+                                        <td>
+                                            <a href="<?= base_url('database-maintenance/tag/movies/' . $tag['tag_id']) ?>"
+                                               class="text-decoration-none">
+                                                <i class="bi bi-tag"></i> <?= esc($tag['name']) ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="<?= base_url('database-maintenance/tag/movies/' . $tag['tag_id']) ?>"
+                                               class="badge bg-info text-decoration-none">
+                                                <?= $tag['movie_count'] ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-tag"
+                                                    data-id="<?= $tag['tag_id'] ?>"
+                                                    data-name="<?= esc($tag['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-tag"
+                                                    data-id="<?= $tag['tag_id'] ?>"
+                                                    data-name="<?= esc($tag['name']) ?>"
+                                                    data-count="<?= $tag['movie_count'] ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; endif; ?>
                                 </tbody>
                             </table>
                         </div>
@@ -444,6 +512,57 @@
         </div>
     </div>
 
+    <!-- Add Tag Modal -->
+    <div class="modal fade" id="addTagModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Tag</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addTagForm">
+                        <div class="mb-3">
+                            <label for="tag_name" class="form-label">Tag Name</label>
+                            <input type="text" class="form-control" id="tag_name" name="name" maxlength="64" required>
+                            <small class="form-text text-muted">Maximum 64 characters</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveTag">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Tag Modal -->
+    <div class="modal fade" id="editTagModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Tag</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editTagForm">
+                        <input type="hidden" id="edit_tag_id">
+                        <div class="mb-3">
+                            <label for="edit_tag_name" class="form-label">Tag Name</label>
+                            <input type="text" class="form-control" id="edit_tag_name" name="name" maxlength="64" required>
+                            <small class="form-text text-muted">Maximum 64 characters</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateTag">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
@@ -457,8 +576,7 @@
             
             // Helper function to save current tab to URL hash
             function saveActiveTab() {
-                const activeTabId = getActiveTabId();
-                window.location.hash = activeTabId;
+                window.location.hash = getActiveTabId();
             }
             
             // Restore active tab from URL hash on page load
@@ -485,13 +603,12 @@
             
             // Helper function to show alerts
             function showAlert(message, type) {
-                const alertHtml = `
+                document.getElementById('alert-container').innerHTML = `
             <div class="alert alert-${type} alert-dismissible fade show" role="alert">
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         `;
-                document.getElementById('alert-container').innerHTML = alertHtml;
                 
                 // Scroll to top of page to show the alert, especially for errors
                 if (type === 'danger') {
@@ -842,6 +959,99 @@
 
                     if (confirm(`Are you sure you want to delete "${name}"?`)) {
                         fetch(`<?= base_url('database-maintenance/codec/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.status === 'success') {
+                                    showAlert(data.message, 'success');
+                                    location.reload();
+                                } else {
+                                    showAlert(data.message, 'danger');
+                                }
+                            });
+                    }
+                });
+            });
+
+            // TAG OPERATIONS
+            document.getElementById('saveTag')?.addEventListener('click', function() {
+                const name = document.getElementById('tag_name').value;
+
+                fetch('<?= base_url('database-maintenance/tag/add') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showAlert(data.message, 'success');
+                            bootstrap.Modal.getInstance(document.getElementById('addTagModal')).hide();
+                            location.reload();
+                        } else {
+                            showAlert(data.message, 'danger');
+                        }
+                    });
+            });
+
+            // Edit tag buttons
+            document.querySelectorAll('.edit-tag').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+
+                    document.getElementById('edit_tag_id').value = id;
+                    document.getElementById('edit_tag_name').value = name;
+
+                    new bootstrap.Modal(document.getElementById('editTagModal')).show();
+                });
+            });
+
+            document.getElementById('updateTag')?.addEventListener('click', function() {
+                const id = document.getElementById('edit_tag_id').value;
+                const name = document.getElementById('edit_tag_name').value;
+
+                fetch(`<?= base_url('database-maintenance/tag/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showAlert(data.message, 'success');
+                            bootstrap.Modal.getInstance(document.getElementById('editTagModal')).hide();
+                            location.reload();
+                        } else {
+                            showAlert(data.message, 'danger');
+                        }
+                    });
+            });
+
+            // Delete tag buttons
+            document.querySelectorAll('.delete-tag').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    const count = parseInt(this.dataset.count);
+
+                    let confirmMessage = `Are you sure you want to delete "${name}"?`;
+                    if (count > 0) {
+                        confirmMessage = `Tag "${name}" is used by ${count} movie(s). Are you sure you want to delete it?`;
+                    }
+
+                    if (confirm(confirmMessage)) {
+                        fetch(`<?= base_url('database-maintenance/tag/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
                                 'X-Requested-With': 'XMLHttpRequest'

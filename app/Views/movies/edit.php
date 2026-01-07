@@ -1,7 +1,7 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
-<?php $movie = isset($movie) && is_array($movie) ? $movie : []; $apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false; $mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : []; $collections = isset($collections) && is_array($collections) ? $collections : []; $volumes = isset($volumes) && is_array($volumes) ? $volumes : []; $videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : []; $ratios = isset($ratios) && is_array($ratios) ? $ratios : []; ?>
+<?php $movie = isset($movie) && is_array($movie) ? $movie : []; $apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false; $mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : []; $collections = isset($collections) && is_array($collections) ? $collections : []; $volumes = isset($volumes) && is_array($volumes) ? $volumes : []; $videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : []; $ratios = isset($ratios) && is_array($ratios) ? $ratios : []; $movieTags = isset($movieTags) && is_array($movieTags) ? $movieTags : []; $allTags = isset($allTags) && is_array($allTags) ? $allTags : []; ?>
 
     <div class="row">
         <div class="col-12">
@@ -354,6 +354,31 @@
                                     </select>
                                 </div>
 
+                                <!-- Tags -->
+                                <div class="mb-3">
+                                    <label class="form-label"><i class="bi bi-tags"></i> Tags</label>
+                                    <?php if (!empty($allTags)): ?>
+                                        <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                            <?php
+                                            $selectedTagIds = array_column($movieTags, 'tag_id');
+                                            foreach ($allTags as $tag):
+                                                $isChecked = in_array($tag['tag_id'], $selectedTagIds);
+                                            ?>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="tag_ids[]"
+                                                           value="<?= $tag['tag_id'] ?>" id="edit_tag_<?= $tag['tag_id'] ?>"
+                                                           <?= $isChecked ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="edit_tag_<?= $tag['tag_id'] ?>">
+                                                        <?= esc($tag['name']) ?>
+                                                    </label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="text-muted small">No tags available. <a href="<?= base_url('database-maintenance/manage-lookups') ?>" target="_blank">Create tags in Database Maintenance</a>.</div>
+                                    <?php endif; ?>
+                                </div>
+
                                 <!-- Status Checkboxes -->
                                 <div class="mb-3">
                                     <div class="form-check">
@@ -554,7 +579,224 @@
             });
 
 
-            // Digital-only fields visibility based on medium selection\n            const mediumSelect = document.getElementById('medium_id');\n            const digitalFields = document.getElementById('digital-only-fields');\n            const vcodecInput = document.getElementById('vcodec_id');\n            const ratioInput = document.getElementById('ratio_id');\n            const widthInput = document.getElementById('width');\n            const heightInput = document.getElementById('height');\n\n            function isDigitalMediumName(name) {\n                if (!name) return false;\n                const n = name.toLowerCase();\n                return n.includes('digital') || n.includes('file');\n            }\n\n            function updateDigitalFieldsVisibility() {\n                const selected = mediumSelect ? mediumSelect.options[mediumSelect.selectedIndex] : null;\n                const name = selected ? selected.textContent : '';\n                const isDigital = isDigitalMediumName(name);\n                if (digitalFields) {\n                    digitalFields.style.display = isDigital ? '' : 'none';\n                }\n                [vcodecInput, ratioInput, widthInput, heightInput].forEach(el => {\n                    if (el) el.disabled = !isDigital;\n                });\n            }\n\n            if (mediumSelect) {\n                mediumSelect.addEventListener('change', updateDigitalFieldsVisibility);\n                updateDigitalFieldsVisibility(); // initialize\n            }\n\n            // Handle API fetch button - Only if it exists (API is available)
+            // Digital-only fields visibility based on medium selection\n            const mediumSelect = document.getElementById('medium_id');\n            const digitalFields = document.getElementById('digital-only-fields');\n            const vcodecInput = document.getElementById('vcodec_id');\n            const ratioInput = document.getElementById('ratio_id');\n            const widthInput = document.getElementById('width');\n            const heightInput = document.getElementById('height');\n\n            function isDigitalMediumName(name) {\n                if (!name) return false;\n                const n = name.toLowerCase();\n                return n.includes('digital') || n.includes('file');\n            }\n\n            function updateDigitalFieldsVisibility() {\n                const selected = mediumSelect ? mediumSelect.options[mediumSelect.selectedIndex] : null;\n                const name = selected ? selected.textContent : '';\n                const isDigital = isDigitalMediumName(name);\n                if (digitalFields) {\n                    digitalFields.style.display = isDigital ? '' : 'none';\n                }\n                [vcodecInput, ratioInput, widthInput, heightInput].forEach(el => {\n                    if (el) el.disabled = !isDigital;\n                });\n            }\n\n            if (mediumSelect) {\n                mediumSelect.addEventListener('change', updateDigitalFieldsVisibility);\n                updateDigitalFieldsVisibility(); // initialize\n            }\n\n            // Function to apply fetched data to the form
+            function applyFetchedData(data) {
+                if (data.title) document.getElementById('title').value = data.title;
+                if (data.o_title) document.getElementById('o_title').value = data.o_title;
+                if (data.director) document.getElementById('director').value = data.director;
+                if (data.year) document.getElementById('year').value = data.year;
+                if (data.runtime) document.getElementById('runtime').value = data.runtime;
+                if (data.genre) document.getElementById('genre').value = data.genre;
+                if (data.country) document.getElementById('country').value = data.country;
+                if (data.studio) document.getElementById('studio').value = data.studio;
+                if (data.classification) document.getElementById('classification').value = data.classification;
+                if (data.plot) document.getElementById('plot').value = data.plot;
+                if (data.cast) document.getElementById('cast').value = data.cast;
+                if (data.notes) document.getElementById('notes').value = data.notes;
+                if (data.site) document.getElementById('site').value = data.site;
+                if (data.rating) document.getElementById('rating').value = data.rating;
+
+                // Auto-resize textareas after updating
+                textareas.forEach(textarea => {
+                    textarea.style.height = 'auto';
+                    textarea.style.height = (textarea.scrollHeight) + 'px';
+                });
+
+                // Poster selection UI: show both existing and fetched, let the user choose
+                const hiddenPosterInput = document.getElementById('fetched_poster_url');
+                const compareCard = document.getElementById('poster-compare-container');
+                const fetchedImg = document.getElementById('fetched-poster-img');
+                const fetchedPlaceholder = document.getElementById('fetched-poster-placeholder');
+                const radioFetched = document.getElementById('poster_choice_fetched');
+                const radioExisting = document.getElementById('poster_choice_existing');
+                const hasExistingPoster = <?= $movie['poster_md5'] ? 'true' : 'false' ?>;
+
+                if (data.poster_url) {
+                    hiddenPosterInput.value = data.poster_url;
+
+                    if (fetchedImg) {
+                        fetchedImg.src = data.poster_url;
+                        fetchedImg.style.display = '';
+                    }
+                    if (fetchedPlaceholder) {
+                        fetchedPlaceholder.style.display = 'none';
+                    }
+                    if (compareCard) {
+                        compareCard.style.display = '';
+                    }
+                    if (radioFetched) {
+                        radioFetched.disabled = false;
+                        radioFetched.checked = true; // default to new poster when one is fetched
+                    }
+                    if (radioExisting && hasExistingPoster) {
+                        radioExisting.disabled = false;
+                    }
+                } else {
+                    if (hiddenPosterInput) hiddenPosterInput.value = '';
+                    if (fetchedImg) {
+                        fetchedImg.src = '';
+                        fetchedImg.style.display = 'none';
+                    }
+                    if (fetchedPlaceholder) {
+                        fetchedPlaceholder.style.display = '';
+                    }
+                    // If there is no fetched poster, hide the compare card unless there is an existing poster and user had it open
+                    if (compareCard && !hasExistingPoster) {
+                        compareCard.style.display = 'none';
+                    }
+                    if (radioFetched) radioFetched.checked = false;
+                    if (radioExisting && hasExistingPoster) radioExisting.checked = true;
+                }
+            }
+
+            // Function to show multiple results modal
+            function showMultipleResultsEdit(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}) {
+                const modalHtml = `
+                    <div class="modal fade" id="selectMovieModalEdit" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Select a Match (${totalResults} results found)</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                                    <div class="list-group" id="movieResultsListEdit">
+                                        ${results.map((result, index) => `
+                                            <a href="#" class="list-group-item list-group-item-action movie-result-item-edit" data-index="${index}">
+                                                <div class="row align-items-center">
+                                                    <div class="col-auto">
+                                                        ${result.poster_url ?
+                                                            `<img src="${result.poster_url}" alt="Poster" style="width: 60px; height: 90px; object-fit: cover;" class="rounded">` :
+                                                            `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 60px; height: 90px;"><small class="text-muted">No poster</small></div>`
+                                                        }
+                                                    </div>
+                                                    <div class="col">
+                                                        <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
+                                                        ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
+                                                        ${result.year ? `<small class="text-muted">Year: ${result.year}</small>` : ''}
+                                                        ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                ${totalPages > 1 ? `
+                                <div class="modal-footer">
+                                    <div class="d-flex justify-content-between w-100 align-items-center">
+                                        <button type="button" class="btn btn-secondary" id="prevPageBtnEdit" ${page <= 1 ? 'disabled' : ''}>
+                                            <i class="bi bi-chevron-left"></i> Previous
+                                        </button>
+                                        <span>Page ${page} of ${totalPages}</span>
+                                        <button type="button" class="btn btn-secondary" id="nextPageBtnEdit" ${page >= totalPages ? 'disabled' : ''}>
+                                            Next <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const existingModal = document.getElementById('selectMovieModalEdit');
+                if (existingModal) existingModal.remove();
+
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+                const modal = new bootstrap.Modal(document.getElementById('selectMovieModalEdit'));
+                modal.show();
+
+                // Handle pagination
+                if (totalPages > 1) {
+                    const prevBtn = document.getElementById('prevPageBtnEdit');
+                    const nextBtn = document.getElementById('nextPageBtnEdit');
+
+                    if (prevBtn) {
+                        prevBtn.addEventListener('click', function() {
+                            modal.hide();
+                            loadPageEdit(page - 1, searchParams, lookupType);
+                        });
+                    }
+
+                    if (nextBtn) {
+                        nextBtn.addEventListener('click', function() {
+                            modal.hide();
+                            loadPageEdit(page + 1, searchParams, lookupType);
+                        });
+                    }
+                }
+
+                document.querySelectorAll('.movie-result-item-edit').forEach(item => {
+                    item.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const index = parseInt(this.dataset.index);
+                        const selected = results[index];
+
+                        modal.hide();
+
+                        // Fetch full details for the selected item
+                        fetchBtn.disabled = true;
+                        const oldHtml = fetchBtn.innerHTML;
+                        fetchBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+
+                        fetch('<?= base_url('movies/fetchDetails') ?>', {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
+                        })
+                        .then(r => r.json())
+                        .then(res => {
+                            if (res.success && res.data) {
+                                applyFetchedData(res.data);
+                                showMessage(res.message + (res.data.poster_url ? ' (Poster ready to save)' : ''), 'success');
+                            } else {
+                                showMessage(res.message || 'Failed to fetch details', 'error');
+                            }
+                        })
+                        .catch(() => {
+                            showMessage('An error occurred while fetching details.', 'error');
+                        })
+                        .finally(() => {
+                            fetchBtn.disabled = false;
+                            fetchBtn.innerHTML = oldHtml;
+                        });
+                    });
+                });
+            }
+
+            function loadPageEdit(page, searchParams, lookupType) {
+                const movieId = <?= $movie['movie_id'] ?>;
+
+                fetchBtn.disabled = true;
+                const oldHtml = fetchBtn.innerHTML;
+                fetchBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+
+                const payload = { ...searchParams, page: page };
+
+                fetch(`<?= base_url('movies/fetchFromApi/') ?>${movieId}`, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success && res.multiple && res.results) {
+                        showMultipleResultsEdit(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);
+                    } else {
+                        showMessage(res.message || 'No more results', 'error');
+                    }
+                })
+                .catch(() => {
+                    showMessage('An error occurred while loading more results.', 'error');
+                })
+                .finally(() => {
+                    fetchBtn.disabled = false;
+                    fetchBtn.innerHTML = oldHtml;
+                });
+            }
+
+            // Handle API fetch button - Only if it exists (API is available)
             const fetchBtn = document.getElementById('fetchFromApi');
             if (fetchBtn) {
                 fetchBtn.addEventListener('click', function() {
@@ -569,6 +811,9 @@
                     const yearInput = document.getElementById('year');
                     const query = (searchInput && searchInput.value.trim()) ? searchInput.value.trim() : (document.getElementById('title')?.value || '');
                     const yearVal = (yearInput && yearInput.value) ? parseInt(yearInput.value, 10) : null;
+                    const lookupType = document.getElementById('apiType')?.value || 'movie';
+
+                    const searchParams = { query: query, year: yearVal, type: lookupType };
 
                     fetch(`<?= base_url('movies/fetchFromApi/') ?>${movieId}`, {
                         method: 'POST',
@@ -576,80 +821,27 @@
                             'X-Requested-With': 'XMLHttpRequest',
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ query: query, year: yearVal, type: (document.getElementById('apiType')?.value || 'movie') })
+                        body: JSON.stringify(searchParams)
                     })
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
-                                // Update form fields with fetched data
-                                if (data.data.title) document.getElementById('title').value = data.data.title;
-                                if (data.data.o_title) document.getElementById('o_title').value = data.data.o_title;
-                                if (data.data.director) document.getElementById('director').value = data.data.director;
-                                if (data.data.year) document.getElementById('year').value = data.data.year;
-                                if (data.data.runtime) document.getElementById('runtime').value = data.data.runtime;
-                                if (data.data.genre) document.getElementById('genre').value = data.data.genre;
-                                if (data.data.country) document.getElementById('country').value = data.data.country;
-                                if (data.data.studio) document.getElementById('studio').value = data.data.studio;
-                                if (data.data.classification) document.getElementById('classification').value = data.data.classification;
-                                if (data.data.plot) document.getElementById('plot').value = data.data.plot;
-                                if (data.data.cast) document.getElementById('cast').value = data.data.cast;
-                                if (data.data.notes) document.getElementById('notes').value = data.data.notes;
-                                if (data.data.site) document.getElementById('site').value = data.data.site;
-                                if (data.data.rating) document.getElementById('rating').value = data.data.rating;
-
-                                // Auto-resize textareas after updating
-                                textareas.forEach(textarea => {
-                                    textarea.style.height = 'auto';
-                                    textarea.style.height = (textarea.scrollHeight) + 'px';
-                                });
-
-                                // Poster selection UI: show both existing and fetched, let the user choose
-                                const hiddenPosterInput = document.getElementById('fetched_poster_url');
-                                const compareCard = document.getElementById('poster-compare-container');
-                                const fetchedImg = document.getElementById('fetched-poster-img');
-                                const fetchedPlaceholder = document.getElementById('fetched-poster-placeholder');
-                                const radioFetched = document.getElementById('poster_choice_fetched');
-                                const radioExisting = document.getElementById('poster_choice_existing');
-                                const hasExistingPoster = <?= $movie['poster_md5'] ? 'true' : 'false' ?>;
-
-                                if (data.data.poster_url) {
-                                    hiddenPosterInput.value = data.data.poster_url;
-
-                                    if (fetchedImg) {
-                                        fetchedImg.src = data.data.poster_url;
-                                        fetchedImg.style.display = '';
-                                    }
-                                    if (fetchedPlaceholder) {
-                                        fetchedPlaceholder.style.display = 'none';
-                                    }
-                                    if (compareCard) {
-                                        compareCard.style.display = '';
-                                    }
-                                    if (radioFetched) {
-                                        radioFetched.disabled = false;
-                                        radioFetched.checked = true; // default to new poster when one is fetched
-                                    }
-                                    if (radioExisting && hasExistingPoster) {
-                                        radioExisting.disabled = false;
-                                    }
+                                if (data.multiple && data.results) {
+                                    // Show selection modal with pagination
+                                    showMultipleResultsEdit(
+                                        data.results,
+                                        lookupType,
+                                        data.page || 1,
+                                        data.total_pages || 1,
+                                        data.total_results || data.results.length,
+                                        searchParams
+                                    );
+                                    showMessage(data.message, 'success');
                                 } else {
-                                    if (hiddenPosterInput) hiddenPosterInput.value = '';
-                                    if (fetchedImg) {
-                                        fetchedImg.src = '';
-                                        fetchedImg.style.display = 'none';
-                                    }
-                                    if (fetchedPlaceholder) {
-                                        fetchedPlaceholder.style.display = '';
-                                    }
-                                    // If there is no fetched poster, hide the compare card unless there is an existing poster and user had it open
-                                    if (compareCard && !hasExistingPoster) {
-                                        compareCard.style.display = 'none';
-                                    }
-                                    if (radioFetched) radioFetched.checked = false;
-                                    if (radioExisting && hasExistingPoster) radioExisting.checked = true;
+                                    // Single result - apply directly
+                                    applyFetchedData(data.data);
+                                    showMessage(data.message + (data.data.poster_url ? ' (Poster ready to save)' : ''), 'success');
                                 }
-
-                                showMessage(data.message + (data.data.poster_url ? ' (Poster ready to save)' : ''), 'success');
                             } else {
                                 showMessage(data.message, 'error');
                             }

@@ -338,12 +338,21 @@ class DatabaseMaintenance extends BaseController
      */
     public function manageLookups()
     {
+        $tagModel = new \App\Models\TagModel();
+        $tags = $tagModel->orderBy('name', 'ASC')->findAll();
+
+        // Get movie count for each tag
+        foreach ($tags as &$tag) {
+            $tag['movie_count'] = $tagModel->getMovieCountForTag($tag['tag_id']);
+        }
+
         $data = [
             'title' => 'Manage Lookup Tables',
             'mediums' => $this->mediaModel->orderBy('name')->findAll(),
             'collections' => $this->collectionModel->orderBy('name')->findAll(),
             'volumes' => $this->volumeModel->orderBy('name')->findAll(),
-            'codecs' => $this->vcodecModel->orderBy('name')->findAll()
+            'codecs' => $this->vcodecModel->orderBy('name')->findAll(),
+            'tags' => $tags
         ];
 
         return view('database_maintenance/manage_lookups', $data);
@@ -729,5 +738,127 @@ class DatabaseMaintenance extends BaseController
             return redirect()->to(base_url('database-maintenance'))
                 ->with('error', 'Error creating backup: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * View all movies for a specific tag
+     */
+    public function viewTagMovies($tagId)
+    {
+        $tagModel = new \App\Models\TagModel();
+        $tag = $tagModel->find($tagId);
+
+        if (!$tag) {
+            throw new \CodeIgniter\Exceptions\PageNotFoundException('Tag not found');
+        }
+
+        // Get all movies with this tag
+        $movies = $this->db->table('movie_tag mt')
+            ->select('m.movie_id, m.title, m.o_title, m.year, m.runtime, m.rating, m.seen, m.loaned, m.poster_md5, med.name as medium_name')
+            ->join('movies m', 'm.movie_id = mt.movie_id')
+            ->join('media med', 'med.medium_id = m.medium_id', 'left')
+            ->where('mt.tag_id', $tagId)
+            ->orderBy('m.title', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $data = [
+            'title' => 'Movies Tagged: ' . $tag['name'],
+            'tag' => $tag,
+            'movies' => $movies,
+            'movieCount' => count($movies)
+        ];
+
+        return view('database_maintenance/tag_movies', $data);
+    }
+
+    /**
+     * Add a new tag
+     */
+    public function addTag()
+    {
+        if ($this->request->isAJAX()) {
+            $tagModel = new \App\Models\TagModel();
+            $data = [
+                'name' => trim($this->request->getPost('name'))
+            ];
+
+            if ($tagModel->insert($data)) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Tag added successfully',
+                    'id' => $tagModel->getInsertID()
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => implode(', ', $tagModel->errors())
+            ]);
+        }
+
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Update an existing tag
+     */
+    public function updateTag($id)
+    {
+        if ($this->request->isAJAX()) {
+            $tagModel = new \App\Models\TagModel();
+            $data = [
+                'tag_id' => $id,
+                'name' => trim($this->request->getPost('name'))
+            ];
+
+            if ($tagModel->update($id, $data)) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Tag updated successfully'
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => implode(', ', $tagModel->errors())
+            ]);
+        }
+
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Delete a tag
+     */
+    public function deleteTag($id)
+    {
+        if ($this->request->isAJAX()) {
+            $tagModel = new \App\Models\TagModel();
+
+            // Check if tag is in use
+            $movieCount = $tagModel->getMovieCountForTag($id);
+
+            if ($movieCount > 0) {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'message' => "Cannot delete: Tag is used by {$movieCount} movie(s). Please remove it from all movies first."
+                ]);
+            }
+
+            if ($tagModel->delete($id)) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Tag deleted successfully'
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Failed to delete tag'
+            ]);
+        }
+
+        return $this->response->setStatusCode(404);
     }
 }

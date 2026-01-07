@@ -48,6 +48,8 @@ class Movies extends BaseController
             'volumes' => $this->movieModel->getVolumes(),
             'videoCodecs' => $this->movieModel->getVideoCodecs(),
             'ratios' => $this->movieModel->getRatios(),
+            'allTags' => $this->movieModel->getTags(),
+            'movieTags' => [],
             'apiAvailable' => $apiAvailable,
             'title' => 'Add Movie'
         ];
@@ -175,6 +177,13 @@ class Movies extends BaseController
         // Insert the movie
         $movieId = $this->movieModel->insert($insertData, true);
         if ($movieId) {
+            // Save tags if provided
+            $tagIds = $this->request->getPost('tag_ids');
+            if (is_array($tagIds) && !empty($tagIds)) {
+                $tagModel = new \App\Models\TagModel();
+                $tagModel->setTagsForMovie($movieId, $tagIds);
+            }
+
             // Handle poster - check in this order: custom upload, selected URL, API data
             $imageData = null;
             
@@ -254,8 +263,15 @@ class Movies extends BaseController
             throw new \CodeIgniter\Exceptions\PageNotFoundException('Movie not found');
         }
 
+        // Get tags for this movie
+        $tagModel = new \App\Models\TagModel();
+        $movieTags = $tagModel->getTagsForMovie($movieId);
+        $allTags = $this->movieModel->getTags();
+
         $data = [
             'movie' => $movie,
+            'movieTags' => $movieTags,
+            'allTags' => $allTags,
             'title' => 'View Movie - ' . ($movie['title'] ?: $movie['o_title'] ?: 'Untitled')
         ];
 
@@ -274,6 +290,11 @@ class Movies extends BaseController
         $apiService = new \App\Libraries\MovieApiService();
         $apiAvailable = $apiService->isApiAvailable();
 
+        // Get tags for this movie
+        $tagModel = new \App\Models\TagModel();
+        $movieTags = $tagModel->getTagsForMovie($movieId);
+        $allTags = $this->movieModel->getTags();
+
         $data = [
             'movie' => $movie,
             'mediaTypes' => $this->movieModel->getMediaTypes(),
@@ -281,6 +302,8 @@ class Movies extends BaseController
             'volumes' => $this->movieModel->getVolumes(),
             'videoCodecs' => $this->movieModel->getVideoCodecs(),
             'ratios' => $this->movieModel->getRatios(),
+            'movieTags' => $movieTags,
+            'allTags' => $allTags,
             'apiAvailable' => $apiAvailable,
             'title' => 'Edit Movie - ' . ($movie['title'] ?: $movie['o_title'] ?: 'Untitled')
         ];
@@ -414,6 +437,13 @@ class Movies extends BaseController
         // Update movie data
         $success = $this->movieModel->update($movieId, $updateData);
 
+        // Update tags
+        $tagIds = $this->request->getPost('tag_ids');
+        if (is_array($tagIds)) {
+            $tagModel = new \App\Models\TagModel();
+            $tagModel->setTagsForMovie($movieId, $tagIds);
+        }
+
         if ($success) {
             session()->setFlashdata('success', 'Movie updated successfully!');
             return redirect()->to(base_url('movies/view/' . $movieId));
@@ -524,11 +554,43 @@ class Movies extends BaseController
                     $apiData = $apiService->getMovieDetails((int)$searchTitle);
                 }
             } else {
-                // Otherwise perform a title search
+                // Get page parameter for pagination
+                $page = isset($payload['page']) && is_numeric($payload['page']) ? (int)$payload['page'] : 1;
+
+                // Otherwise perform a title search - check for multiple results
+                $searchData = [];
                 if ($type === 'tv') {
-                    $apiData = $apiService->searchTv($searchTitle, $searchYear);
+                    $searchData = $apiService->searchTvMultiple($searchTitle, $searchYear, 10, $page);
                 } else {
-                    $apiData = $apiService->searchMovie($searchTitle, $searchYear);
+                    $searchData = $apiService->searchMovieMultiple($searchTitle, $searchYear, 10, $page);
+                }
+
+                $searchResults = $searchData['results'] ?? [];
+                $totalPages = $searchData['total_pages'] ?? 1;
+                $totalResults = $searchData['total_results'] ?? 0;
+                $currentPage = $searchData['page'] ?? 1;
+
+                // If multiple results found, return them for user selection
+                if (count($searchResults) > 1 || $totalPages > 1) {
+                    return $this->response->setJSON([
+                        'success' => true,
+                        'multiple' => true,
+                        'message' => 'Found ' . $totalResults . ' matches. Please select one.',
+                        'results' => $searchResults,
+                        'page' => $currentPage,
+                        'total_pages' => $totalPages,
+                        'total_results' => $totalResults
+                    ]);
+                }
+
+                // If exactly one result, fetch full details
+                if (count($searchResults) === 1 && $totalPages === 1) {
+                    $tmdbId = (int)$searchResults[0]['tmdb_id'];
+                    if ($type === 'tv') {
+                        $apiData = $apiService->getTvDetails($tmdbId);
+                    } else {
+                        $apiData = $apiService->getMovieDetails($tmdbId);
+                    }
                 }
             }
 
@@ -633,10 +695,43 @@ class Movies extends BaseController
 
             // 3) Title search via TMDB (if API available)
             if (!$apiData && $title !== '' && $apiAvailable) {
+                // Get page parameter for pagination
+                $page = isset($payload['page']) && is_numeric($payload['page']) ? (int)$payload['page'] : 1;
+
+                // Search for multiple results
+                $searchData = [];
                 if ($lookupType === 'tv') {
-                    $apiData = $apiService->searchTv($title, $year);
+                    $searchData = $apiService->searchTvMultiple($title, $year, 10, $page);
                 } else {
-                    $apiData = $apiService->searchMovie($title, $year);
+                    $searchData = $apiService->searchMovieMultiple($title, $year, 10, $page);
+                }
+
+                $searchResults = $searchData['results'] ?? [];
+                $totalPages = $searchData['total_pages'] ?? 1;
+                $totalResults = $searchData['total_results'] ?? 0;
+                $currentPage = $searchData['page'] ?? 1;
+
+                // If multiple results found, return them for user selection
+                if (count($searchResults) > 1 || $totalPages > 1) {
+                    return $this->response->setJSON([
+                        'success' => true,
+                        'multiple' => true,
+                        'message' => 'Found ' . $totalResults . ' matches. Please select one.',
+                        'results' => $searchResults,
+                        'page' => $currentPage,
+                        'total_pages' => $totalPages,
+                        'total_results' => $totalResults
+                    ]);
+                }
+
+                // If exactly one result, fetch full details
+                if (count($searchResults) === 1 && $totalPages === 1) {
+                    $tmdbId = (int)$searchResults[0]['tmdb_id'];
+                    if ($lookupType === 'tv') {
+                        $apiData = $apiService->getTvDetails($tmdbId);
+                    } else {
+                        $apiData = $apiService->getMovieDetails($tmdbId);
+                    }
                 }
             }
 
@@ -760,6 +855,70 @@ class Movies extends BaseController
         }
 
         return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Fetch details for a specific TMDB ID (used when user selects from multiple search results)
+     */
+    public function fetchDetails()
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->back();
+        }
+
+        try {
+            $apiService = new \App\Libraries\MovieApiService();
+
+            if (!$apiService->isApiAvailable()) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'TMDB API key not configured.'
+                ]);
+            }
+
+            $payload = $this->request->getJSON(true) ?: [];
+            $tmdbId = isset($payload['tmdb_id']) ? (int)$payload['tmdb_id'] : 0;
+            $type = isset($payload['type']) ? strtolower($payload['type']) : 'movie';
+
+            if (!$tmdbId) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'No TMDB ID provided.'
+                ]);
+            }
+
+            // Fetch full details
+            $apiData = null;
+            if ($type === 'tv') {
+                $apiData = $apiService->getTvDetails($tmdbId);
+            } else {
+                $apiData = $apiService->getMovieDetails($tmdbId);
+            }
+
+            if (!$apiData) {
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => 'Could not fetch details for this selection.'
+                ]);
+            }
+
+            // Generate notes field with TMDB/IMDB IDs if they exist
+            if (isset($apiData['tmdb_id']) || isset($apiData['imdb_id'])) {
+                $apiData['notes'] = add_external_ids_to_notes(null, $apiData['tmdb_id'] ?? null, $apiData['imdb_id'] ?? null);
+            }
+
+            return $this->response->setJSON([
+                'success' => true,
+                'message' => 'Fetched details from TMDB.',
+                'data' => $apiData
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
     }
 
     /**
@@ -907,6 +1066,49 @@ class Movies extends BaseController
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Update tags for a movie (AJAX)
+     */
+    public function updateMovieTags($movieId)
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setStatusCode(404);
+        }
+
+        $movie = $this->movieModel->find($movieId);
+
+        if (!$movie) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Movie not found'
+            ]);
+        }
+
+        $tagIds = $this->request->getPost('tag_ids');
+
+        if (!is_array($tagIds)) {
+            $tagIds = [];
+        }
+
+        // Filter out invalid values
+        $tagIds = array_filter($tagIds, function($id) {
+            return is_numeric($id) && $id > 0;
+        });
+
+        $tagModel = new \App\Models\TagModel();
+        if ($tagModel->setTagsForMovie($movieId, $tagIds)) {
+            return $this->response->setJSON([
+                'status' => 'success',
+                'message' => 'Tags updated successfully'
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status' => 'error',
+            'message' => 'Failed to update tags'
+        ]);
     }
 
     /**
