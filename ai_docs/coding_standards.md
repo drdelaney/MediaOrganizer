@@ -40,6 +40,7 @@
 - Use relative operators when possible (`+=`, `*=`)
 - Logical operators: `||` and `&&` (not `or`/`and`)
 - Conditions: `else if` (not `elseif`)
+- Always use `isset()`
 
 ## Best Practices
 - Verbose naming over abbreviated

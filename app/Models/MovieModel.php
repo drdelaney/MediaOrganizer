@@ -297,6 +297,18 @@ class MovieModel extends Model
     }
 
     /**
+     * Get all tags for dropdown
+     */
+    public function getTags()
+    {
+        return $this->db->table('tags')
+            ->select('tag_id, name')
+            ->orderBy('name')
+            ->get()
+            ->getResultArray();
+    }
+
+    /**
      * Update movie with API data and poster
      */
     public function updateWithApiData($movieId, $apiData, $posterData = null)

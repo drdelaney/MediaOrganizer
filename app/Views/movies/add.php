@@ -1,14 +1,15 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
-<?php 
-$movie = isset($movie) && is_array($movie) ? $movie : []; 
-$apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false; 
-$mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : []; 
-$collections = isset($collections) && is_array($collections) ? $collections : []; 
-$volumes = isset($volumes) && is_array($volumes) ? $volumes : []; 
-$videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : []; 
-$ratios = isset($ratios) && is_array($ratios) ? $ratios : []; 
+<?php
+$movie = isset($movie) && is_array($movie) ? $movie : [];
+$apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false;
+$mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : [];
+$collections = isset($collections) && is_array($collections) ? $collections : [];
+$volumes = isset($volumes) && is_array($volumes) ? $volumes : [];
+$videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : [];
+$ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
+$allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 ?>
 
 <div class="row">
@@ -276,6 +277,27 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                                 <label for="barcode" class="form-label">Barcode</label>
                                 <input type="text" class="form-control" id="barcode" name="barcode" value="<?= esc(old('barcode')) ?>">
                             </div>
+
+                            <!-- Tags -->
+                            <div class="mb-3">
+                                <label class="form-label"><i class="bi bi-tags"></i> Tags</label>
+                                <?php if (!empty($allTags)): ?>
+                                    <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                        <?php foreach ($allTags as $tag): ?>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="tag_ids[]"
+                                                       value="<?= $tag['tag_id'] ?>" id="add_tag_<?= $tag['tag_id'] ?>">
+                                                <label class="form-check-label" for="add_tag_<?= $tag['tag_id'] ?>">
+                                                    <?= esc($tag['name']) ?>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="text-muted small">No tags available. <a href="<?= base_url('database-maintenance/manage-lookups') ?>" target="_blank">Create tags in Database Maintenance</a>.</div>
+                                <?php endif; ?>
+                            </div>
+
                             <div class="mb-3">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="seen" name="seen" value="1" <?= old('seen') ? 'checked' : '' ?>>
@@ -556,6 +578,214 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
             setTimeout(() => { if (alertDiv.parentNode) alertDiv.parentNode.removeChild(alertDiv); }, 5000);
         }
 
+        function displayPreview(d, lookupType) {
+            // Title/subtitle
+            previewTitle.textContent = d.title || d.o_title || 'Untitled';
+            const bits = [];
+            if (d.o_title && d.o_title !== d.title) bits.push('Original: ' + d.o_title);
+            if (d.year) bits.push('Year: ' + d.year);
+            if (d.runtime) bits.push('Runtime: ' + d.runtime + ' min');
+            if (d.genre) bits.push('Genre: ' + d.genre);
+            if (d.country) bits.push('Country: ' + d.country);
+            if (d.studio) bits.push('Studio: ' + d.studio);
+            previewSubtitle.textContent = bits.join(' • ');
+            previewPlot.textContent = d.plot || '';
+
+            // Poster
+            if (d.poster_url) {
+                previewPoster.src = d.poster_url;
+                previewPoster.style.display = '';
+                previewPosterPlaceholder.style.display = 'none';
+                document.getElementById('selected_poster_url').value = d.poster_url;
+            } else {
+                previewPoster.src = '';
+                previewPoster.style.display = 'none';
+                previewPosterPlaceholder.style.display = '';
+                document.getElementById('selected_poster_url').value = '';
+            }
+
+            // Store TMDB ID and type for fetching more posters
+            if (d.tmdb_id) {
+                document.getElementById('tmdb_id_for_posters').value = d.tmdb_id;
+                document.getElementById('media_type_for_posters').value = lookupType;
+                document.getElementById('choosePosterBtn').style.display = '';
+            }
+
+            setPreviewVisible(true);
+
+            // Attach to apply button
+            if (applyBtn) {
+                applyBtn.onclick = function() {
+                    function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; }
+                    setVal('title', d.title);
+                    setVal('o_title', d.o_title);
+                    setVal('director', d.director);
+                    setVal('year', d.year);
+                    setVal('runtime', d.runtime);
+                    setVal('genre', d.genre);
+                    setVal('country', d.country);
+                    setVal('studio', d.studio);
+                    setVal('classification', d.classification);
+                    setVal('cast', d.cast);
+                    setVal('plot', d.plot);
+                    setVal('notes', d.notes);
+                    setVal('site', d.site);
+                    setVal('o_site', d.o_site);
+                    if (d.rating) { const ratingSel = document.getElementById('rating'); if (ratingSel) ratingSel.value = d.rating; }
+                    showToast('Applied preview data to the form. Review and click Save to create the entry.', 'success');
+                };
+            }
+        }
+
+        function showMultipleResults(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}) {
+            // Create modal HTML for selection
+            const modalHtml = `
+                <div class="modal fade" id="selectMovieModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Select a Match (${totalResults} results found)</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                                <div class="list-group" id="movieResultsList">
+                                    ${results.map((result, index) => `
+                                        <a href="#" class="list-group-item list-group-item-action movie-result-item" data-index="${index}">
+                                            <div class="row align-items-center">
+                                                <div class="col-auto">
+                                                    ${result.poster_url ?
+                                                        `<img src="${result.poster_url}" alt="Poster" style="width: 60px; height: 90px; object-fit: cover;" class="rounded">` :
+                                                        `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 60px; height: 90px;"><small class="text-muted">No poster</small></div>`
+                                                    }
+                                                </div>
+                                                <div class="col">
+                                                    <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
+                                                    ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
+                                                    ${result.year ? `<small class="text-muted">Year: ${result.year}</small>` : ''}
+                                                    ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
+                                                </div>
+                                            </div>
+                                        </a>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ${totalPages > 1 ? `
+                            <div class="modal-footer">
+                                <div class="d-flex justify-content-between w-100 align-items-center">
+                                    <button type="button" class="btn btn-secondary" id="prevPageBtn" ${page <= 1 ? 'disabled' : ''}>
+                                        <i class="bi bi-chevron-left"></i> Previous
+                                    </button>
+                                    <span>Page ${page} of ${totalPages}</span>
+                                    <button type="button" class="btn btn-secondary" id="nextPageBtn" ${page >= totalPages ? 'disabled' : ''}>
+                                        Next <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('selectMovieModal');
+            if (existingModal) existingModal.remove();
+
+            // Add modal to page
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('selectMovieModal'));
+            modal.show();
+
+            // Handle pagination
+            if (totalPages > 1) {
+                const prevBtn = document.getElementById('prevPageBtn');
+                const nextBtn = document.getElementById('nextPageBtn');
+
+                if (prevBtn) {
+                    prevBtn.addEventListener('click', function() {
+                        modal.hide();
+                        loadPage(page - 1, searchParams, lookupType);
+                    });
+                }
+
+                if (nextBtn) {
+                    nextBtn.addEventListener('click', function() {
+                        modal.hide();
+                        loadPage(page + 1, searchParams, lookupType);
+                    });
+                }
+            }
+
+            // Handle selection
+            document.querySelectorAll('.movie-result-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const index = parseInt(this.dataset.index);
+                    const selected = results[index];
+
+                    modal.hide();
+
+                    // Fetch full details for the selected item
+                    btn.disabled = true;
+                    const oldHtml = btn.innerHTML;
+                    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+
+                    fetch('<?= base_url('movies/fetchDetails') ?>', {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success && res.data) {
+                            displayPreview(res.data, lookupType);
+                            showToast(res.message, 'success');
+                        } else {
+                            showToast(res.message || 'Failed to fetch details', 'error');
+                        }
+                    })
+                    .catch(() => {
+                        showToast('An error occurred while fetching details.', 'error');
+                    })
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = oldHtml;
+                    });
+                });
+            });
+        }
+
+        function loadPage(page, searchParams, lookupType) {
+            btn.disabled = true;
+            const oldHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+
+            const payload = { ...searchParams, page: page };
+
+            fetch('<?= base_url('movies/lookup') ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.multiple && res.results) {
+                    showMultipleResults(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);
+                } else {
+                    showToast(res.message || 'No more results', 'error');
+                }
+            })
+            .catch(() => {
+                showToast('An error occurred while loading more results.', 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+            });
+        }
+
         if (btn) {
             btn.addEventListener('click', function() {
                 const payload = {
@@ -584,63 +814,22 @@ $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
                 }).then(r => r.json())
                   .then(res => {
                       if (res.success) {
-                          const d = res.data || {};
-                          // Title/subtitle
-                          previewTitle.textContent = d.title || d.o_title || 'Untitled';
-                          const bits = [];
-                          if (d.o_title && d.o_title !== d.title) bits.push('Original: ' + d.o_title);
-                          if (d.year) bits.push('Year: ' + d.year);
-                          if (d.runtime) bits.push('Runtime: ' + d.runtime + ' min');
-                          if (d.genre) bits.push('Genre: ' + d.genre);
-                          if (d.country) bits.push('Country: ' + d.country);
-                          if (d.studio) bits.push('Studio: ' + d.studio);
-                          previewSubtitle.textContent = bits.join(' • ');
-                          previewPlot.textContent = d.plot || '';
-
-                          // Poster
-                          if (d.poster_url) {
-                              previewPoster.src = d.poster_url;
-                              previewPoster.style.display = '';
-                              previewPosterPlaceholder.style.display = 'none';
-                              document.getElementById('selected_poster_url').value = d.poster_url;
+                          if (res.multiple && res.results) {
+                              // Show selection modal with pagination
+                              showMultipleResults(
+                                  res.results,
+                                  payload.lookup_type,
+                                  res.page || 1,
+                                  res.total_pages || 1,
+                                  res.total_results || res.results.length,
+                                  payload
+                              );
+                              showToast(res.message, 'success');
                           } else {
-                              previewPoster.src = '';
-                              previewPoster.style.display = 'none';
-                              previewPosterPlaceholder.style.display = '';
-                              document.getElementById('selected_poster_url').value = '';
-                          }
-                          
-                          // Store TMDB ID and type for fetching more posters
-                          if (d.tmdb_id) {
-                              document.getElementById('tmdb_id_for_posters').value = d.tmdb_id;
-                              document.getElementById('media_type_for_posters').value = payload.lookup_type;
-                              document.getElementById('choosePosterBtn').style.display = '';
-                          }
-
-                          setPreviewVisible(true);
-                          showToast(res.message, 'success');
-
-                          // Attach to apply button
-                          if (applyBtn) {
-                              applyBtn.onclick = function() {
-                                  function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; }
-                                  setVal('title', d.title);
-                                  setVal('o_title', d.o_title);
-                                  setVal('director', d.director);
-                                  setVal('year', d.year);
-                                  setVal('runtime', d.runtime);
-                                  setVal('genre', d.genre);
-                                  setVal('country', d.country);
-                                  setVal('studio', d.studio);
-                                  setVal('classification', d.classification);
-                                  setVal('cast', d.cast);
-                                  setVal('plot', d.plot);
-                                  setVal('notes', d.notes);
-                                  setVal('site', d.site);
-                                  setVal('o_site', d.o_site);
-                                  if (d.rating) { const ratingSel = document.getElementById('rating'); if (ratingSel) ratingSel.value = d.rating; }
-                                  showToast('Applied preview data to the form. Review and click Save to create the entry.', 'success');
-                              };
+                              // Single result - display directly
+                              const d = res.data || {};
+                              displayPreview(d, payload.lookup_type);
+                              showToast(res.message, 'success');
                           }
                       } else {
                           setPreviewVisible(false);

@@ -71,19 +71,99 @@ class MovieApiService
             }
 
             $data = json_decode($response->getBody(), true);
-            
+
             log_message('info', 'TMDB API: Search response received');
-            
+
             if (isset($data['results']) && !empty($data['results'])) {
                 // Get detailed info for the first result
                 $movieId = $data['results'][0]['id'];
                 log_message('info', 'TMDB API: Found movie ID: ' . $movieId);
                 return $this->getMovieDetails($movieId);
             }
-            
+
             log_message('warning', 'TMDB API: No results found for: ' . $title);
             return null;
-            
+
+        } catch (\Exception $e) {
+            log_message('error', 'TMDB API Error: ' . $e->getMessage());
+            throw new \Exception('Failed to fetch movie data from TMDB: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Search for movies by title and return multiple results
+     *
+     * @param string $title The title to search for
+     * @param int|null $year Optional year to filter by
+     * @param int $limit Maximum number of results to return (default 10)
+     * @param int $page Page number for pagination (default 1)
+     * @return array Array with 'results', 'total_results', 'total_pages', 'page'
+     */
+    public function searchMovieMultiple($title, $year = null, $limit = 10, $page = 1)
+    {
+        if (!$this->isApiAvailable()) {
+            throw new \Exception('TMDB API key not configured');
+        }
+
+        $params = [
+            'api_key' => $this->tmdbApiKey,
+            'query' => $title,
+            'language' => 'en-US',
+            'page' => $page
+        ];
+
+        if ($year) {
+            $params['year'] = $year;
+        }
+
+        try {
+            log_message('info', 'TMDB API: Searching for multiple movies: ' . $title . ($year ? ' (' . $year . ')' : '') . ' (page ' . $page . ')');
+
+            $response = $this->client->get('search/movie?' . http_build_query($params));
+
+            if ($response->getStatusCode() !== 200) {
+                throw new \Exception('API request failed with status: ' . $response->getStatusCode());
+            }
+
+            $data = json_decode($response->getBody(), true);
+
+            if (!isset($data['results']) || empty($data['results'])) {
+                log_message('warning', 'TMDB API: No results found for: ' . $title);
+                return [
+                    'results' => [],
+                    'total_results' => 0,
+                    'total_pages' => 0,
+                    'page' => $page
+                ];
+            }
+
+            $results = [];
+            $count = 0;
+
+            foreach ($data['results'] as $movie) {
+                if ($count >= $limit) break;
+
+                $results[] = [
+                    'tmdb_id' => (string)$movie['id'],
+                    'title' => $movie['title'] ?? null,
+                    'original_title' => $movie['original_title'] ?? null,
+                    'year' => $movie['release_date'] ? date('Y', strtotime($movie['release_date'])) : null,
+                    'poster_url' => $movie['poster_path'] ? 'https://image.tmdb.org/t/p/w185' . $movie['poster_path'] : null,
+                    'overview' => $movie['overview'] ?? null,
+                    'type' => 'movie'
+                ];
+                $count++;
+            }
+
+            log_message('info', 'TMDB API: Found ' . count($results) . ' movie results (page ' . $page . ' of ' . ($data['total_pages'] ?? 1) . ')');
+
+            return [
+                'results' => $results,
+                'total_results' => $data['total_results'] ?? count($results),
+                'total_pages' => $data['total_pages'] ?? 1,
+                'page' => $page
+            ];
+
         } catch (\Exception $e) {
             log_message('error', 'TMDB API Error: ' . $e->getMessage());
             throw new \Exception('Failed to fetch movie data from TMDB: ' . $e->getMessage());
@@ -179,6 +259,86 @@ class MovieApiService
             }
             log_message('warning', 'TMDB API: No TV results found for: ' . $title);
             return null;
+        } catch (\Exception $e) {
+            log_message('error', 'TMDB API Error (TV search): ' . $e->getMessage());
+            throw new \Exception('Failed to fetch TV data from TMDB: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Search for TV shows by title and return multiple results
+     *
+     * @param string $title The title to search for
+     * @param int|null $year Optional year to filter by
+     * @param int $limit Maximum number of results to return (default 10)
+     * @param int $page Page number for pagination (default 1)
+     * @return array Array with 'results', 'total_results', 'total_pages', 'page'
+     */
+    public function searchTvMultiple($title, $year = null, $limit = 10, $page = 1)
+    {
+        if (!$this->isApiAvailable()) {
+            throw new \Exception('TMDB API key not configured');
+        }
+
+        $params = [
+            'api_key' => $this->tmdbApiKey,
+            'query' => $title,
+            'language' => 'en-US',
+            'page' => $page
+        ];
+
+        if ($year) {
+            $params['first_air_date_year'] = $year;
+        }
+
+        try {
+            log_message('info', 'TMDB API: Searching for multiple TV shows: ' . $title . ($year ? ' (' . $year . ')' : '') . ' (page ' . $page . ')');
+
+            $response = $this->client->get('search/tv?' . http_build_query($params));
+
+            if ($response->getStatusCode() !== 200) {
+                throw new \Exception('API request failed with status: ' . $response->getStatusCode());
+            }
+
+            $data = json_decode($response->getBody(), true);
+
+            if (!isset($data['results']) || empty($data['results'])) {
+                log_message('warning', 'TMDB API: No TV results found for: ' . $title);
+                return [
+                    'results' => [],
+                    'total_results' => 0,
+                    'total_pages' => 0,
+                    'page' => $page
+                ];
+            }
+
+            $results = [];
+            $count = 0;
+
+            foreach ($data['results'] as $tv) {
+                if ($count >= $limit) break;
+
+                $results[] = [
+                    'tmdb_id' => (string)$tv['id'],
+                    'title' => $tv['name'] ?? null,
+                    'original_title' => $tv['original_name'] ?? null,
+                    'year' => $tv['first_air_date'] ? date('Y', strtotime($tv['first_air_date'])) : null,
+                    'poster_url' => $tv['poster_path'] ? 'https://image.tmdb.org/t/p/w185' . $tv['poster_path'] : null,
+                    'overview' => $tv['overview'] ?? null,
+                    'type' => 'tv'
+                ];
+                $count++;
+            }
+
+            log_message('info', 'TMDB API: Found ' . count($results) . ' TV results (page ' . $page . ' of ' . ($data['total_pages'] ?? 1) . ')');
+
+            return [
+                'results' => $results,
+                'total_results' => $data['total_results'] ?? count($results),
+                'total_pages' => $data['total_pages'] ?? 1,
+                'page' => $page
+            ];
+
         } catch (\Exception $e) {
             log_message('error', 'TMDB API Error (TV search): ' . $e->getMessage());
             throw new \Exception('Failed to fetch TV data from TMDB: ' . $e->getMessage());
