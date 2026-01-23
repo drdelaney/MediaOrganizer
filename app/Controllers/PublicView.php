@@ -1,0 +1,46 @@
+<?php
+
+namespace App\Controllers;
+
+use App\Models\MovieModel;
+
+class PublicView extends BaseController
+{
+    public function index()
+    {
+        $model = new MovieModel();
+        
+        $search = $this->request->getGet('search');
+        $mediumId = $this->request->getGet('medium_id');
+        $wishlist = $this->request->getGet('wishlist') === '1';
+        $alpha = $this->request->getGet('alpha') === '1';
+        
+        // The user wants a basic list sorted by type then ID by default.
+        // If alphabetical sort is checked, sort by title.
+        if ($alpha) {
+            $sortBy = ['title' => 'ASC'];
+        } else {
+            $sortBy = ['type' => 'DESC', 'movie_id' => 'DESC'];
+        }
+        
+        $movies = $model->getMoviesWithDetails($search, 'title', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
+        
+        // If searching and no results found with 'title', try 'all' fields
+        if ($search && empty($movies)) {
+            $movies = $model->getMoviesWithDetails($search, 'all', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
+        }
+
+        $data = [
+            'title' => 'Public Media List',
+            'movies' => $movies,
+            'mediaTypes' => $model->getMediaTypes(),
+            'search' => $search,
+            'selectedMedium' => $mediumId,
+            'wishlist' => $wishlist,
+            'alpha' => $alpha,
+            'hide_nav' => true,
+        ];
+
+        return view('public_view', $data);
+    }
+}

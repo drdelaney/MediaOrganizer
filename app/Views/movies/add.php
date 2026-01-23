@@ -204,7 +204,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                         <div class="card-body">
                             <div class="mb-3">
                                 <label class="form-label">Media Formats <span class="text-danger">*</span> <small class="text-muted">(select at least one)</small></label>
-                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;" id="mediaFormatsContainer">
+                                <div class="border rounded p-2 <?= empty(old('medium_ids')) ? 'border-danger' : '' ?>" style="max-height: 200px; overflow-y: auto;" id="mediaFormatsContainer">
                                     <?php foreach ($mediaTypes as $medium): ?>
                                         <div class="form-check">
                                             <input class="form-check-input medium-checkbox" type="checkbox" 
@@ -219,27 +219,46 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                     <?php endforeach; ?>
                                 </div>
                                 <small class="text-muted">The highest format will be stored as the primary medium.</small>
-                                <div id="mediaFormatError" class="invalid-feedback d-block" style="display: none !important;">
+                                <div id="mediaFormatError" class="invalid-feedback <?= empty(old('medium_ids')) ? 'd-block' : '' ?>">
                                     Please select at least one media format.
                                 </div>
                             </div>
+                            <script>
+                                // Initialize validation state if redirected back with errors
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const form = document.getElementById('addMovieForm');
+                                    if (<?= !empty($errors) ? 'true' : 'false' ?>) {
+                                        form.dataset.validated = 'true';
+                                    }
+                                });
+                            </script>
                             <div class="mb-3">
                                 <label for="collection_id" class="form-label">Collection</label>
-                                <select class="form-select" id="collection_id" name="collection_id">
-                                    <option value="">No Collection</option>
-                                    <?php foreach ($collections as $collection): ?>
-                                        <option value="<?= $collection['collection_id'] ?>" <?= old('collection_id') == $collection['collection_id'] ? 'selected' : '' ?>><?= esc($collection['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select" id="collection_id" name="collection_id">
+                                        <option value="">No Collection</option>
+                                        <?php foreach ($collections as $collection): ?>
+                                            <option value="<?= $collection['collection_id'] ?>" <?= old('collection_id') == $collection['collection_id'] ? 'selected' : '' ?>><?= esc($collection['name']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button class="btn btn-outline-secondary" type="button" id="addNewCollectionBtn" title="Add New Collection">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label for="volume_id" class="form-label">Volume</label>
-                                <select class="form-select" id="volume_id" name="volume_id">
-                                    <option value="">No Volume</option>
-                                    <?php foreach ($volumes as $volume): ?>
-                                        <option value="<?= $volume['volume_id'] ?>" <?= old('volume_id') == $volume['volume_id'] ? 'selected' : '' ?>><?= esc($volume['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select" id="volume_id" name="volume_id">
+                                        <option value="">No Volume</option>
+                                        <?php foreach ($volumes as $volume): ?>
+                                            <option value="<?= $volume['volume_id'] ?>" <?= old('volume_id') == $volume['volume_id'] ? 'selected' : '' ?>><?= esc($volume['name']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button class="btn btn-outline-secondary" type="button" id="addNewVolumeBtn" title="Add New Volume">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label for="vcodec_id" class="form-label">Video Codec</label>
@@ -285,8 +304,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                     <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
                                         <?php foreach ($allTags as $tag): ?>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="tag_ids[]"
-                                                       value="<?= $tag['tag_id'] ?>" id="add_tag_<?= $tag['tag_id'] ?>">
+                                                <input class="form-check-input tag-checkbox" type="checkbox" name="tag_ids[]"
+                                                       value="<?= $tag['tag_id'] ?>" id="add_tag_<?= $tag['tag_id'] ?>"
+                                                       data-name="<?= esc(strtolower($tag['name'])) ?>">
                                                 <label class="form-check-label" for="add_tag_<?= $tag['tag_id'] ?>">
                                                     <?= esc($tag['name']) ?>
                                                 </label>
@@ -303,9 +323,12 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                     <input class="form-check-input" type="checkbox" id="seen" name="seen" value="1" <?= old('seen') ? 'checked' : '' ?>>
                                     <label class="form-check-label" for="seen"><i class="bi bi-eye"></i> Seen</label>
                                 </div>
-                                <div class="form-check">
+                                <div class="form-check d-flex align-items-center gap-2">
                                     <input class="form-check-input" type="checkbox" id="loaned" name="loaned" value="1" <?= old('loaned') ? 'checked' : '' ?>>
-                                    <label class="form-check-label" for="loaned"><i class="bi bi-person-check"></i> Loaned</label>
+                                    <label class="form-check-label" for="loaned"><i class="bi bi-person-check"></i> Loaned <small id="loaned-wishlist-warning" class="text-muted d-none">(Wishlist items cannot be loaned)</small></label>
+                                    <span id="loaned_person_name" class="badge bg-info text-dark <?= old('loaned') ? '' : 'd-none' ?>"><?= esc(old('loaned_person_name')) ?></span>
+                                    <input type="hidden" id="loan_person_id" name="loan_person_id" value="<?= esc(old('loan_person_id')) ?>">
+                                    <input type="hidden" id="loaned_person_name_input" name="loaned_person_name" value="<?= esc(old('loaned_person_name')) ?>">
                                 </div>
                             </div>
                         </div>
@@ -471,11 +494,42 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
     </div>
 </div>
 
+<?= $this->include('movies/_quick_add_modals') ?>
+
 <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Loaned checkbox logic
+        const loanedCheckbox = document.getElementById('loaned');
+        const loanedPersonBadge = document.getElementById('loaned_person_name');
+        const loanPersonIdInput = document.getElementById('loan_person_id');
+        const loanedPersonNameInput = document.getElementById('loaned_person_name_input');
+
+        if (loanedCheckbox) {
+            loanedCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    showLoanModal(function(personId, personName) {
+                        loanPersonIdInput.value = personId;
+                        loanedPersonNameInput.value = personName;
+                        loanedPersonBadge.textContent = personName;
+                        loanedPersonBadge.classList.remove('d-none');
+                    }, function() {
+                        // If modal was closed without confirming, uncheck the checkbox
+                        if (!loanPersonIdInput.value) {
+                            loanedCheckbox.checked = false;
+                        }
+                    });
+                } else {
+                    loanPersonIdInput.value = '';
+                    loanedPersonNameInput.value = '';
+                    loanedPersonBadge.classList.add('d-none');
+                    loanedPersonBadge.textContent = '';
+                }
+            });
+        }
+
         const btn = document.getElementById('lookupPreviewBtn');
         const applyBtn = document.getElementById('applyPreviewBtn');
         const previewCard = document.getElementById('previewCard');
@@ -507,6 +561,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 let isValid = true;
                 let errorMessage = '';
                 
+                // Track that validation has been attempted
+                form.dataset.validated = 'true';
+                
                 // Check original title
                 const oTitleField = document.getElementById('o_title');
                 if (!oTitleField.value.trim()) {
@@ -525,10 +582,10 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 if (mediaCheckboxes.length === 0) {
                     isValid = false;
                     errorMessage += '• At least one media format must be selected\n';
-                    mediaFormatError.style.display = 'block';
+                    mediaFormatError.classList.add('d-block');
                     mediaContainer.classList.add('border-danger');
                 } else {
-                    mediaFormatError.style.display = 'none';
+                    mediaFormatError.classList.remove('d-block');
                     mediaContainer.classList.remove('border-danger');
                 }
                 
@@ -555,11 +612,12 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 const mediaFormatError = document.getElementById('mediaFormatError');
                 const mediaContainer = document.getElementById('mediaFormatsContainer');
                 
+                // Only show/hide error if the user has already attempted to submit or if they are fixing an existing error
                 if (checkedCount > 0) {
-                    mediaFormatError.style.display = 'none';
+                    mediaFormatError.classList.remove('d-block');
                     mediaContainer.classList.remove('border-danger');
                 } else {
-                    mediaFormatError.style.display = 'block';
+                    mediaFormatError.classList.add('d-block');
                     mediaContainer.classList.add('border-danger');
                 }
             });

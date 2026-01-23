@@ -72,7 +72,7 @@ class MovieModel extends Model
      * Get movies with related data
      * Uses fuzzy matching for title/o_title fields
      */
-    public function getMoviesWithDetails($search = null, $searchField = 'title', $limit = 50, $offset = 0)
+    public function getMoviesWithDetails($search = null, $searchField = 'title', $limit = 50, $offset = 0, $tagId = null, $excludeWishlist = false, $sortBy = 'created', $sortOrder = 'DESC', $wishlistOnly = false, $mediumId = null)
     {
         $builder = $this->db->table('movies m')
             ->select('m.*, 
@@ -84,6 +84,36 @@ class MovieModel extends Model
             ->join('volumes v', 'm.volume_id = v.volume_id', 'left')
             ->join('vcodecs vc', 'm.vcodec_id = vc.vcodec_id', 'left')
             ->join('media med', 'm.medium_id = med.medium_id', 'left');
+
+        // Apply medium_id filter if provided
+        if ($mediumId !== null && $mediumId !== '') {
+            $builder->where('m.medium_id', $mediumId);
+        }
+
+        // Log the query if needed for debugging
+        // log_message('debug', 'Sorting by: ' . print_r($sortBy, true));
+
+        if ($tagId) {
+            $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
+                ->where('mt.tag_id', $tagId);
+        } elseif ($wishlistOnly || $excludeWishlist) {
+            $wishlistTag = $this->db->table('tags')
+                ->where('LOWER(name)', 'wishlist')
+                ->get()
+                ->getRowArray();
+            
+            if ($wishlistTag) {
+                if ($wishlistOnly) {
+                    $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
+                        ->where('mt.tag_id', $wishlistTag['tag_id']);
+                } else {
+                    $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+                }
+            } elseif ($wishlistOnly) {
+                // If wishlist tag doesn't exist, return no results for wishlistOnly
+                $builder->where('1=0', null, false);
+            }
+        }
 
         if ($search) {
             // For title searches, we'll use fuzzy matching in PHP after fetching candidates
@@ -121,7 +151,31 @@ class MovieModel extends Model
             }
         }
 
-        $builder->orderBy('m.created', 'DESC');
+        // Apply sorting
+        if (is_array($sortBy)) {
+            foreach ($sortBy as $field => $order) {
+                if ($field === 'title') {
+                    $builder->orderBy('COALESCE(NULLIF(m.title, ""), m.o_title)', $order, false);
+                } elseif ($field === 'type') {
+                    $builder->orderBy('m.medium_id', $order);
+                } elseif ($field === 'movie_id') {
+                    $builder->orderBy('m.movie_id', $order);
+                } else {
+                    $builder->orderBy('m.' . $field, $order);
+                }
+            }
+        } elseif ($sortBy === 'title') {
+            // Sort by title, falling back to o_title if title is empty
+            $builder->orderBy('COALESCE(NULLIF(m.title, ""), m.o_title)', $sortOrder, false);
+        } elseif ($sortBy === 'type') {
+            $builder->orderBy('m.medium_id', $sortOrder);
+        } else {
+            if ($sortBy === 'movie_id') {
+                $builder->orderBy('m.movie_id', $sortOrder);
+            } else {
+                $builder->orderBy('m.' . $sortBy, $sortOrder);
+            }
+        }
 
         // Get all candidates (no limit yet if doing fuzzy search on titles)
         $needsFuzzyFilter = $search && ($searchField === 'title' || $searchField === 'o_title');
@@ -163,7 +217,7 @@ class MovieModel extends Model
      * Count total movies (with search filter)
      * Uses fuzzy matching for title/o_title fields
      */
-    public function countMovies($search = null, $searchField = 'title')
+    public function countMovies($search = null, $searchField = 'title', $tagId = null, $excludeWishlist = false)
     {
         if ($search && ($searchField === 'title' || $searchField === 'o_title')) {
             // For title searches, we need to get all candidates and filter in PHP
@@ -178,8 +232,23 @@ class MovieModel extends Model
             $primaryWord = $searchWords[0] ?? '';
             
             $builder = $this->db->table('movies m')
-                ->select('m.title, m.o_title');
+                ->select('m.title, m.o_title, m.movie_id');
             
+            if ($tagId) {
+                $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
+                    ->where('mt.tag_id', $tagId);
+            } elseif ($excludeWishlist) {
+                // If no tag is explicitly selected and exclusion is requested, exclude movies with the 'wishlist' tag
+                $wishlistTag = $this->db->table('tags')
+                    ->where('LOWER(name)', 'wishlist')
+                    ->get()
+                    ->getRowArray();
+                
+                if ($wishlistTag) {
+                    $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+                }
+            }
+
             if ($primaryWord !== '') {
                 $builder->groupStart()
                     ->like('m.title', $primaryWord)
@@ -206,6 +275,21 @@ class MovieModel extends Model
         
         // Non-title searches use regular LIKE
         $builder = $this->db->table('movies m');
+
+        if ($tagId) {
+            $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
+                ->where('mt.tag_id', $tagId);
+        } elseif ($excludeWishlist) {
+            // If no tag is explicitly selected and exclusion is requested, exclude movies with the 'wishlist' tag
+            $wishlistTag = $this->db->table('tags')
+                ->where('LOWER(name)', 'wishlist')
+                ->get()
+                ->getRowArray();
+            
+            if ($wishlistTag) {
+                $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+            }
+        }
 
         if ($search) {
             if ($searchField === 'all') {
@@ -306,6 +390,17 @@ class MovieModel extends Model
             ->orderBy('name')
             ->get()
             ->getResultArray();
+    }
+
+    /**
+     * Get tag by name (case-insensitive)
+     */
+    public function getTagByName($name)
+    {
+        return $this->db->table('tags')
+            ->where('LOWER(name)', strtolower($name))
+            ->get()
+            ->getRowArray();
     }
 
     /**

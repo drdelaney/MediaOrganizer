@@ -7,6 +7,13 @@ $collections = isset($collections) && is_array($collections) ? $collections : []
 $volumes = isset($volumes) && is_array($volumes) ? $volumes : [];
 $codecs = isset($codecs) && is_array($codecs) ? $codecs : [];
 $tags = isset($tags) && is_array($tags) ? $tags : [];
+$people = isset($people) && is_array($people) ? $people : [];
+$achannels = isset($achannels) && is_array($achannels) ? $achannels : [];
+$acodecs = isset($acodecs) && is_array($acodecs) ? $acodecs : [];
+$languages = isset($languages) && is_array($languages) ? $languages : [];
+$ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
+$subformats = isset($subformats) && is_array($subformats) ? $subformats : [];
+$poster_count = isset($poster_count) ? $poster_count : 0;
 ?>
 
     <div class="row">
@@ -48,6 +55,41 @@ $tags = isset($tags) && is_array($tags) ? $tags : [];
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="tags-tab" data-bs-toggle="tab" data-bs-target="#tags" type="button">
                         <i class="bi bi-tags"></i> Tags
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="people-tab" data-bs-toggle="tab" data-bs-target="#people" type="button">
+                        <i class="bi bi-people"></i> People
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="achannels-tab" data-bs-toggle="tab" data-bs-target="#achannels" type="button">
+                        <i class="bi bi-volume-up"></i> Audio Channels
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="acodecs-tab" data-bs-toggle="tab" data-bs-target="#acodecs" type="button">
+                        <i class="bi bi-file-earmark-music"></i> Audio Codecs
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="languages-tab" data-bs-toggle="tab" data-bs-target="#languages" type="button">
+                        <i class="bi bi-translate"></i> Languages
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="ratios-tab" data-bs-toggle="tab" data-bs-target="#ratios" type="button">
+                        <i class="bi bi-aspect-ratio"></i> Ratios
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="subformats-tab" data-bs-toggle="tab" data-bs-target="#subformats" type="button">
+                        <i class="bi bi-chat-dots"></i> Subtitle Formats
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="posters-tab" data-bs-toggle="tab" data-bs-target="#posters" type="button">
+                        <i class="bi bi-image"></i> Posters
                     </button>
                 </li>
             </ul>
@@ -243,43 +285,305 @@ $tags = isset($tags) && is_array($tags) ? $tags : [];
                                 <tr>
                                     <th>ID</th>
                                     <th>Name</th>
-                                    <th>Movies Using</th>
+                                    <th>Movies</th>
                                     <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
                                 <tbody id="tags-table">
-                                <?php if (isset($tags)): foreach ($tags as $tag): ?>
+                                <?php foreach ($tags as $tag): ?>
                                     <tr data-id="<?= $tag['tag_id'] ?>">
                                         <td><?= $tag['tag_id'] ?></td>
                                         <td>
-                                            <a href="<?= base_url('database-maintenance/tag/movies/' . $tag['tag_id']) ?>"
-                                               class="text-decoration-none">
-                                                <i class="bi bi-tag"></i> <?= esc($tag['name']) ?>
+                                            <a href="<?= base_url('movies?tag=' . $tag['tag_id']) ?>" class="text-decoration-none">
+                                                <?= esc($tag['name']) ?>
                                             </a>
                                         </td>
                                         <td>
-                                            <a href="<?= base_url('database-maintenance/tag/movies/' . $tag['tag_id']) ?>"
-                                               class="badge bg-info text-decoration-none">
-                                                <?= $tag['movie_count'] ?>
-                                            </a>
+                                            <span class="badge bg-secondary"><?= $tag['movie_count'] ?></span>
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-tag"
-                                                    data-id="<?= $tag['tag_id'] ?>"
+                                            <button class="btn btn-sm btn-info edit-tag" 
+                                                    data-id="<?= $tag['tag_id'] ?>" 
                                                     data-name="<?= esc($tag['name']) ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-tag"
-                                                    data-id="<?= $tag['tag_id'] ?>"
+                                            <button class="btn btn-sm btn-danger delete-tag" 
+                                                    data-id="<?= $tag['tag_id'] ?>" 
                                                     data-name="<?= esc($tag['name']) ?>"
                                                     data-count="<?= $tag['movie_count'] ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
                                     </tr>
-                                <?php endforeach; endif; ?>
+                                <?php endforeach; ?>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PEOPLE TAB -->
+                <div class="tab-pane fade" id="people" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-people"></i> People</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addPersonModal">
+                                <i class="bi bi-person-plus"></i> Add Person
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="people-table">
+                                <?php foreach ($people as $person): ?>
+                                    <tr data-id="<?= $person['person_id'] ?>">
+                                        <td><?= $person['person_id'] ?></td>
+                                        <td><?= esc($person['name']) ?></td>
+                                        <td><?= $person['email'] ? esc($person['email']) : '<span class="text-muted">-</span>' ?></td>
+                                        <td><?= $person['phone'] ? esc($person['phone']) : '<span class="text-muted">-</span>' ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-person"
+                                                    data-id="<?= $person['person_id'] ?>"
+                                                    data-name="<?= esc($person['name']) ?>"
+                                                    data-email="<?= esc($person['email']) ?>"
+                                                    data-phone="<?= esc($person['phone']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-person"
+                                                    data-id="<?= $person['person_id'] ?>"
+                                                    data-name="<?= esc($person['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACHANNELS TAB -->
+                <div class="tab-pane fade" id="achannels" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-volume-up"></i> Audio Channels</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addAChannelModal">
+                                <i class="bi bi-plus-circle"></i> Add Audio Channel
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="achannels-table">
+                                <?php foreach ($achannels as $achannel): ?>
+                                    <tr data-id="<?= $achannel['achannel_id'] ?>">
+                                        <td><?= $achannel['achannel_id'] ?></td>
+                                        <td><?= esc($achannel['name']) ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACODECS TAB -->
+                <div class="tab-pane fade" id="acodecs" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-file-earmark-music"></i> Audio Codecs</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addACodecModal">
+                                <i class="bi bi-plus-circle"></i> Add Audio Codec
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="acodecs-table">
+                                <?php foreach ($acodecs as $acodec): ?>
+                                    <tr data-id="<?= $acodec['acodec_id'] ?>">
+                                        <td><?= $acodec['acodec_id'] ?></td>
+                                        <td><?= esc($acodec['name']) ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LANGUAGES TAB -->
+                <div class="tab-pane fade" id="languages" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-translate"></i> Languages</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addLanguageModal">
+                                <i class="bi bi-plus-circle"></i> Add Language
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="languages-table">
+                                <?php foreach ($languages as $language): ?>
+                                    <tr data-id="<?= $language['lang_id'] ?>">
+                                        <td><?= $language['lang_id'] ?></td>
+                                        <td><?= esc($language['name']) ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RATIOS TAB -->
+                <div class="tab-pane fade" id="ratios" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-aspect-ratio"></i> Ratios</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addRatioModal">
+                                <i class="bi bi-plus-circle"></i> Add Ratio
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="ratios-table">
+                                <?php foreach ($ratios as $ratio): ?>
+                                    <tr data-id="<?= $ratio['ratio_id'] ?>">
+                                        <td><?= $ratio['ratio_id'] ?></td>
+                                        <td><?= esc($ratio['name']) ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBFORMATS TAB -->
+                <div class="tab-pane fade" id="subformats" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Subtitle Formats</h5>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addSubformatModal">
+                                <i class="bi bi-plus-circle"></i> Add Subtitle Format
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 150px;">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody id="subformats-table">
+                                <?php foreach ($subformats as $subformat): ?>
+                                    <tr data-id="<?= $subformat['subformat_id'] ?>">
+                                        <td><?= $subformat['subformat_id'] ?></td>
+                                        <td><?= esc($subformat['name']) ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info edit-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name']) ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name']) ?>">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POSTERS TAB -->
+                <div class="tab-pane fade" id="posters" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-image"></i> Posters</h5>
+                            <button class="btn btn-sm btn-warning" id="purge-posters-btn">
+                                <i class="bi bi-trash"></i> Purge Unused Posters
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p>Total posters in database: <strong><?= $poster_count ?></strong></p>
+                            <p class="text-muted small">
+                                Posters are stored in the database and linked to movies by MD5 hash. 
+                                Purging will remove all posters that are not currently associated with any movie.
+                            </p>
+                            <div id="purge-result" class="mt-3" style="display: none;">
+                                <div class="alert alert-success"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -558,6 +862,308 @@ $tags = isset($tags) && is_array($tags) ? $tags : [];
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="updateTag">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Person Modal -->
+    <div class="modal fade" id="addPersonModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Person</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addPersonForm">
+                        <div class="mb-3">
+                            <label for="person_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="person_name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="person_email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="person_email" name="email">
+                        </div>
+                        <div class="mb-3">
+                            <label for="person_phone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="person_phone" name="phone">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="savePerson">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Person Modal -->
+    <div class="modal fade" id="editPersonModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Person</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editPersonForm">
+                        <input type="hidden" id="edit_person_id">
+                        <div class="mb-3">
+                            <label for="edit_person_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_person_name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_person_email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="edit_person_email" name="email">
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_person_phone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="edit_person_phone" name="phone">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updatePerson">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACHANNEL MODALS -->
+    <div class="modal fade" id="addAChannelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Audio Channel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addAChannelForm">
+                        <div class="mb-3">
+                            <label for="achannel_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="achannel_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveAChannel">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="editAChannelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Audio Channel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editAChannelForm">
+                        <input type="hidden" id="edit_achannel_id">
+                        <div class="mb-3">
+                            <label for="edit_achannel_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_achannel_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateAChannel">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACODEC MODALS -->
+    <div class="modal fade" id="addACodecModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Audio Codec</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addACodecForm">
+                        <div class="mb-3">
+                            <label for="acodec_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="acodec_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveACodec">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="editACodecModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Audio Codec</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editACodecForm">
+                        <input type="hidden" id="edit_acodec_id">
+                        <div class="mb-3">
+                            <label for="edit_acodec_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_acodec_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateACodec">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LANGUAGE MODALS -->
+    <div class="modal fade" id="addLanguageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Language</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addLanguageForm">
+                        <div class="mb-3">
+                            <label for="language_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="language_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveLanguage">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="editLanguageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Language</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editLanguageForm">
+                        <input type="hidden" id="edit_language_id">
+                        <div class="mb-3">
+                            <label for="edit_language_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_language_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateLanguage">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RATIO MODALS -->
+    <div class="modal fade" id="addRatioModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Ratio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addRatioForm">
+                        <div class="mb-3">
+                            <label for="ratio_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="ratio_name" name="name" maxlength="5" required>
+                            <small class="text-muted">Max 5 characters (e.g. 16:9)</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveRatio">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="editRatioModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Ratio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editRatioForm">
+                        <input type="hidden" id="edit_ratio_id">
+                        <div class="mb-3">
+                            <label for="edit_ratio_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_ratio_name" name="name" maxlength="5" required>
+                            <small class="text-muted">Max 5 characters (e.g. 16:9)</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateRatio">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SUBFORMAT MODALS -->
+    <div class="modal fade" id="addSubformatModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Subtitle Format</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addSubformatForm">
+                        <div class="mb-3">
+                            <label for="subformat_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="subformat_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveSubformat">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="editSubformatModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Subtitle Format</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editSubformatForm">
+                        <input type="hidden" id="edit_subformat_id">
+                        <div class="mb-3">
+                            <label for="edit_subformat_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="edit_subformat_name" name="name" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="updateSubformat">Update</button>
                 </div>
             </div>
         </div>
@@ -1068,6 +1674,433 @@ $tags = isset($tags) && is_array($tags) ? $tags : [];
                             });
                     }
                 });
+            });
+
+            // PEOPLE OPERATIONS
+            document.getElementById('savePerson').addEventListener('click', function() {
+                const name = document.getElementById('person_name').value;
+                const email = document.getElementById('person_email').value;
+                const phone = document.getElementById('person_phone').value;
+
+                fetch('<?= base_url('people/add') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showAlert(data.message, 'success');
+                            bootstrap.Modal.getInstance(document.getElementById('addPersonModal')).hide();
+                            location.reload();
+                        } else {
+                            showAlert(data.message, 'danger');
+                        }
+                    });
+            });
+
+            // Edit person buttons
+            document.querySelectorAll('.edit-person').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    const email = this.dataset.email;
+                    const phone = this.dataset.phone;
+
+                    document.getElementById('edit_person_id').value = id;
+                    document.getElementById('edit_person_name').value = name;
+                    document.getElementById('edit_person_email').value = email;
+                    document.getElementById('edit_person_phone').value = phone;
+
+                    new bootstrap.Modal(document.getElementById('editPersonModal')).show();
+                });
+            });
+
+            document.getElementById('updatePerson').addEventListener('click', function() {
+                const id = document.getElementById('edit_person_id').value;
+                const name = document.getElementById('edit_person_name').value;
+                const email = document.getElementById('edit_person_email').value;
+                const phone = document.getElementById('edit_person_phone').value;
+
+                fetch(`<?= base_url('people/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showAlert(data.message, 'success');
+                            bootstrap.Modal.getInstance(document.getElementById('editPersonModal')).hide();
+                            location.reload();
+                        } else {
+                            showAlert(data.message, 'danger');
+                        }
+                    });
+            });
+
+            // Delete person buttons
+            document.querySelectorAll('.delete-person').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('people/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.status === 'success') {
+                                    showAlert(data.message, 'success');
+                                    location.reload();
+                                } else {
+                                    showAlert(data.message, 'danger');
+                                }
+                            });
+                    }
+                });
+            });
+
+            // ACHANNEL OPERATIONS
+            document.getElementById('saveAChannel').addEventListener('click', function() {
+                const name = document.getElementById('achannel_name').value;
+                fetch('<?= base_url('database-maintenance/achannel/add') ?>', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('addAChannelModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.edit-achannel').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('edit_achannel_id').value = this.dataset.id;
+                    document.getElementById('edit_achannel_name').value = this.dataset.name;
+                    new bootstrap.Modal(document.getElementById('editAChannelModal')).show();
+                });
+            });
+            document.getElementById('updateAChannel').addEventListener('click', function() {
+                const id = document.getElementById('edit_achannel_id').value;
+                const name = document.getElementById('edit_achannel_name').value;
+                fetch(`<?= base_url('database-maintenance/achannel/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('editAChannelModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.delete-achannel').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('database-maintenance/achannel/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showAlert(data.message, 'success');
+                                location.reload();
+                            } else { showAlert(data.message, 'danger'); }
+                        });
+                    }
+                });
+            });
+
+            // ACODEC OPERATIONS
+            document.getElementById('saveACodec').addEventListener('click', function() {
+                const name = document.getElementById('acodec_name').value;
+                fetch('<?= base_url('database-maintenance/acodec/add') ?>', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('addACodecModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.edit-acodec').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('edit_acodec_id').value = this.dataset.id;
+                    document.getElementById('edit_acodec_name').value = this.dataset.name;
+                    new bootstrap.Modal(document.getElementById('editACodecModal')).show();
+                });
+            });
+            document.getElementById('updateACodec').addEventListener('click', function() {
+                const id = document.getElementById('edit_acodec_id').value;
+                const name = document.getElementById('edit_acodec_name').value;
+                fetch(`<?= base_url('database-maintenance/acodec/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('editACodecModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.delete-acodec').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('database-maintenance/acodec/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showAlert(data.message, 'success');
+                                location.reload();
+                            } else { showAlert(data.message, 'danger'); }
+                        });
+                    }
+                });
+            });
+
+            // LANGUAGE OPERATIONS
+            document.getElementById('saveLanguage').addEventListener('click', function() {
+                const name = document.getElementById('language_name').value;
+                fetch('<?= base_url('database-maintenance/language/add') ?>', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('addLanguageModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.edit-language').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('edit_language_id').value = this.dataset.id;
+                    document.getElementById('edit_language_name').value = this.dataset.name;
+                    new bootstrap.Modal(document.getElementById('editLanguageModal')).show();
+                });
+            });
+            document.getElementById('updateLanguage').addEventListener('click', function() {
+                const id = document.getElementById('edit_language_id').value;
+                const name = document.getElementById('edit_language_name').value;
+                fetch(`<?= base_url('database-maintenance/language/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('editLanguageModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.delete-language').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('database-maintenance/language/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showAlert(data.message, 'success');
+                                location.reload();
+                            } else { showAlert(data.message, 'danger'); }
+                        });
+                    }
+                });
+            });
+
+            // RATIO OPERATIONS
+            document.getElementById('saveRatio').addEventListener('click', function() {
+                const name = document.getElementById('ratio_name').value;
+                fetch('<?= base_url('database-maintenance/ratio/add') ?>', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('addRatioModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.edit-ratio').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('edit_ratio_id').value = this.dataset.id;
+                    document.getElementById('edit_ratio_name').value = this.dataset.name;
+                    new bootstrap.Modal(document.getElementById('editRatioModal')).show();
+                });
+            });
+            document.getElementById('updateRatio').addEventListener('click', function() {
+                const id = document.getElementById('edit_ratio_id').value;
+                const name = document.getElementById('edit_ratio_name').value;
+                fetch(`<?= base_url('database-maintenance/ratio/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('editRatioModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.delete-ratio').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('database-maintenance/ratio/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showAlert(data.message, 'success');
+                                location.reload();
+                            } else { showAlert(data.message, 'danger'); }
+                        });
+                    }
+                });
+            });
+
+            // SUBFORMAT OPERATIONS
+            document.getElementById('saveSubformat').addEventListener('click', function() {
+                const name = document.getElementById('subformat_name').value;
+                fetch('<?= base_url('database-maintenance/subformat/add') ?>', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('addSubformatModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.edit-subformat').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('edit_subformat_id').value = this.dataset.id;
+                    document.getElementById('edit_subformat_name').value = this.dataset.name;
+                    new bootstrap.Modal(document.getElementById('editSubformatModal')).show();
+                });
+            });
+            document.getElementById('updateSubformat').addEventListener('click', function() {
+                const id = document.getElementById('edit_subformat_id').value;
+                const name = document.getElementById('edit_subformat_name').value;
+                fetch(`<?= base_url('database-maintenance/subformat/update') ?>/${id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
+                    body: 'name=' + encodeURIComponent(name)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('editSubformatModal')).hide();
+                        location.reload();
+                    } else { showAlert(data.message, 'danger'); }
+                });
+            });
+            document.querySelectorAll('.delete-subformat').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                        fetch(`<?= base_url('database-maintenance/subformat/delete') ?>/${id}`, {
+                            method: 'POST',
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showAlert(data.message, 'success');
+                                location.reload();
+                            } else { showAlert(data.message, 'danger'); }
+                        });
+                    }
+                });
+            });
+
+            // POSTER OPERATIONS
+            document.getElementById('purge-posters-btn').addEventListener('click', function() {
+                if (confirm('Are you sure you want to purge all unused posters? This cannot be undone.')) {
+                    const btn = this;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Purging...';
+                    
+                    fetch('<?= base_url('database-maintenance/poster/purge') ?>', {
+                        method: 'POST',
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-trash"></i> Purge Unused Posters';
+                        
+                        const resultDiv = document.getElementById('purge-result');
+                        resultDiv.style.display = 'block';
+                        resultDiv.querySelector('.alert').textContent = data.message;
+                        
+                        if (data.status === 'success') {
+                            setTimeout(() => { location.reload(); }, 3000);
+                        }
+                    });
+                }
             });
         });
     </script>

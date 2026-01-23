@@ -5,11 +5,17 @@
 /** @var int $total */
 /** @var string|null $search */
 /** @var string $searchField */
+/** @var string|null $tagId */
+/** @var array $tags */
+/** @var array $mediaTypes */
 /** @var int $currentPage */
 /** @var int $perPage */
 $total = $total ?? 0;
 $search = $search ?? '';
 $searchField = $searchField ?? 'title';
+$tagId = $tagId ?? '';
+$tags = $tags ?? [];
+$mediaTypes = $mediaTypes ?? [];
 $currentPage = $currentPage ?? 1;
 $perPage = $perPage ?? 20;
 ?>
@@ -59,20 +65,35 @@ $perPage = $perPage ?? 20;
                         </select>
                     </div>
                     <div class="col-md-2">
+                        <label for="tag" class="visually-hidden">Tag</label>
+                        <select class="form-select" name="tag" id="tag">
+                            <option value="">All Tags</option>
+                            <?php 
+                            foreach ($tags as $tag): 
+                                $isSelected = $tagId == $tag['tag_id'];
+                            ?>
+                                <option value="<?= $tag['tag_id'] ?>" <?= $isSelected ? 'selected' : '' ?>>
+                                    <?= esc($tag['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
                         <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-search"></i> Search
+                            <i class="bi bi-search"></i>
                         </button>
                     </div>
                     <div class="col-md-3">
-                        <?php if ($search): ?>
-                            <a href="<?= base_url('movies') ?>" class="btn btn-outline-secondary w-100">
-                                <i class="bi bi-x-circle"></i> Clear Search
-                            </a>
-                        <?php else: ?>
+                        <div class="d-flex gap-2">
+                            <?php if ($search || $tagId): ?>
+                                <a href="<?= base_url('movies') ?>" class="btn btn-outline-secondary w-100">
+                                    <i class="bi bi-x-circle"></i> Clear Filters
+                                </a>
+                            <?php endif; ?>
                             <a href="<?= base_url('movies/add') ?>" class="btn btn-success w-100">
                                 <i class="bi bi-plus-circle"></i> Add Movie
                             </a>
-                        <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -83,9 +104,9 @@ $perPage = $perPage ?? 20;
             <div class="text-center py-5">
                 <i class="bi bi-film display-1 text-muted"></i>
                 <h3 class="mt-3 text-muted">No movies found</h3>
-                <?php if ($search): ?>
+                <?php if ($search || $tagId): ?>
                     <p class="text-muted">Try adjusting your search criteria</p>
-                    <a href="<?= base_url('movies') ?>" class="btn btn-primary">View All Movies</a>
+                    <a href="<?= base_url('movies') ?>" class="btn btn-primary">Clear All Filters</a>
                 <?php else: ?>
                     <p class="text-muted">Start building your movie collection</p>
                     <a href="<?= base_url('movies/add') ?>" class="btn btn-success">Add Your First Movie</a>
@@ -115,7 +136,7 @@ $perPage = $perPage ?? 20;
                                     <?php if ($movie['poster_md5']): ?>
                                         <img src="<?= base_url('movies/poster/' . $movie['movie_id']) ?>" 
                                              class="poster-thumbnail" 
-                                             alt="<?= esc($movie['title']) ?>"
+                                             alt="<?= esc($movie['title'] ?: $movie['o_title']) ?>"
                                              loading="lazy">
                                     <?php else: ?>
                                         <div class="bg-light d-flex align-items-center justify-content-center poster-thumbnail">
@@ -192,9 +213,23 @@ $perPage = $perPage ?? 20;
                                         <?php else: ?>
                                             <span class="badge bg-warning"><i class="bi bi-eye-slash"></i> Unseen</span>
                                         <?php endif; ?>
+
+                                        <?php 
+                                        $isWishlist = false;
+                                        if (isset($movie['tags']) && is_array($movie['tags'])) {
+                                            foreach ($movie['tags'] as $tag) {
+                                                if (strtolower($tag['name']) === 'wishlist') {
+                                                    $isWishlist = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        ?>
                                         
                                         <?php if ($movie['loaned']): ?>
                                             <br><span class="badge bg-danger mt-1"><i class="bi bi-person-check"></i> Loaned</span>
+                                        <?php elseif ($isWishlist): ?>
+                                            <br><span class="badge bg-info mt-1"><i class="bi bi-heart"></i> Wishlist</span>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -228,7 +263,8 @@ $perPage = $perPage ?? 20;
                                             <button type="button" 
                                                     class="btn btn-outline-danger loan-movie-btn"
                                                     data-movie-id="<?= $movie['movie_id'] ?>"
-                                                    title="Loan Movie">
+                                                    title="Loan Movie"
+                                                    <?= $isWishlist ? 'disabled' : '' ?>>
                                                 <i class="bi bi-person-check"></i>
                                             </button>
                                         <?php endif; ?>
@@ -307,36 +343,9 @@ $perPage = $perPage ?? 20;
 </div>
 
 <!-- Loan Movie Modal -->
-<div class="modal fade" id="loanMovieModal" tabindex="-1" aria-labelledby="loanMovieModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="loanMovieModalLabel">
-                    <i class="bi bi-person-check"></i> Loan Movie
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="loanModalAlert"></div>
-                <div class="mb-3">
-                    <label for="loanPersonSelect" class="form-label">Select Person to Loan To:</label>
-                    <select class="form-select" id="loanPersonSelect">
-                        <option value="">-- Select a person --</option>
-                    </select>
-                </div>
-                <div class="text-muted small">
-                    <i class="bi bi-info-circle"></i> The movie will be marked as loaned out to the selected person.
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmLoanBtn">
-                    <i class="bi bi-check-circle"></i> Confirm Loan
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<div id="loanModalPlaceholder"></div>
+
+<?= $this->include('movies/_quick_add_modals') ?>
 
 <?= $this->endsection() ?>
 
@@ -423,7 +432,7 @@ $perPage = $perPage ?? 20;
                         showMessage(data.message, 'error');
                     }
                 })
-                .catch(error => {
+                .catch(() => {
                     this.innerHTML = originalHtml;
                     showMessage('An error occurred while updating the movie status', 'error');
                 })
@@ -435,81 +444,43 @@ $perPage = $perPage ?? 20;
 
         // Loan movie functionality
         let currentLoanMovieId = null;
-        const loanModal = new bootstrap.Modal(document.getElementById('loanMovieModal'));
 
         // Load people list when loan button is clicked
         document.querySelectorAll('.loan-movie-btn').forEach(function(loanBtn) {
             loanBtn.addEventListener('click', function() {
                 currentLoanMovieId = this.dataset.movieId;
                 
-                // Fetch list of people
-                fetch('<?= base_url('movies/getPeople') ?>', {
-                    method: 'GET',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        const selectElement = document.getElementById('loanPersonSelect');
-                        selectElement.innerHTML = '<option value="">-- Select a person --</option>';
-                        
-                        data.people.forEach(person => {
-                            const option = document.createElement('option');
-                            option.value = person.person_id;
-                            option.textContent = person.name;
-                            selectElement.appendChild(option);
-                        });
-                        
-                        loanModal.show();
-                    } else {
-                        showMessage('Failed to load people list', 'error');
-                    }
-                })
-                .catch(error => {
-                    showMessage('Error loading people list', 'error');
+                showLoanModal(function(personId) {
+                    const confirmBtn = document.getElementById('confirmLoanBtn');
+                    
+                    confirmBtn.disabled = true;
+                    confirmBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+
+                    fetch(`<?= base_url('movies/loan/') ?>${currentLoanMovieId}`, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: 'person_id=' + personId
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showMessage(data.message, 'success');
+                            setTimeout(() => location.reload(), 1500);
+                        } else {
+                            alert(data.message);
+                        }
+                    })
+                    .catch(() => {
+                        alert('Error processing loan');
+                    })
+                    .finally(() => {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Loan';
+                    });
                 });
-            });
-        });
-
-        // Confirm loan
-        document.getElementById('confirmLoanBtn').addEventListener('click', function() {
-            const personId = document.getElementById('loanPersonSelect').value;
-            const alertDiv = document.getElementById('loanModalAlert');
-            
-            if (!personId) {
-                alertDiv.innerHTML = '<div class="alert alert-danger">Please select a person</div>';
-                return;
-            }
-
-            this.disabled = true;
-            this.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
-
-            fetch(`<?= base_url('movies/loan/') ?>${currentLoanMovieId}`, {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: 'person_id=' + personId
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    loanModal.hide();
-                    showMessage(data.message, 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    alertDiv.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
-                }
-            })
-            .catch(error => {
-                alertDiv.innerHTML = '<div class="alert alert-danger">Error processing loan</div>';
-            })
-            .finally(() => {
-                this.disabled = false;
-                this.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Loan';
             });
         });
 
@@ -543,7 +514,7 @@ $perPage = $perPage ?? 20;
                         showMessage(data.message, 'error');
                     }
                 })
-                .catch(error => {
+                .catch(() => {
                     this.innerHTML = originalHtml;
                     this.disabled = false;
                     showMessage('Error processing return', 'error');

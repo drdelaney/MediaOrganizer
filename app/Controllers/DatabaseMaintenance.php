@@ -6,6 +6,14 @@ use App\Models\MediaModel;
 use App\Models\CollectionModel;
 use App\Models\VolumeModel;
 use App\Models\VCodecModel;
+use App\Models\PeopleModel;
+use App\Models\AChannelModel;
+use App\Models\ACodecModel;
+use App\Models\LanguageModel;
+use App\Models\PosterModel;
+use App\Models\RatioModel;
+use App\Models\SubformatModel;
+
 class DatabaseMaintenance extends BaseController
 {
     protected $db;
@@ -13,6 +21,13 @@ class DatabaseMaintenance extends BaseController
     protected $collectionModel;
     protected $volumeModel;
     protected $vcodecModel;
+    protected $peopleModel;
+    protected $achannelModel;
+    protected $acodecModel;
+    protected $languageModel;
+    protected $posterModel;
+    protected $ratioModel;
+    protected $subformatModel;
 
     public function __construct()
     {
@@ -21,6 +36,13 @@ class DatabaseMaintenance extends BaseController
         $this->collectionModel = new CollectionModel();
         $this->volumeModel = new VolumeModel();
         $this->vcodecModel = new VCodecModel();
+        $this->peopleModel = new PeopleModel();
+        $this->achannelModel = new AChannelModel();
+        $this->acodecModel = new ACodecModel();
+        $this->languageModel = new LanguageModel();
+        $this->posterModel = new PosterModel();
+        $this->ratioModel = new RatioModel();
+        $this->subformatModel = new SubformatModel();
     }
 
     /**
@@ -352,7 +374,14 @@ class DatabaseMaintenance extends BaseController
             'collections' => $this->collectionModel->orderBy('name')->findAll(),
             'volumes' => $this->volumeModel->orderBy('name')->findAll(),
             'codecs' => $this->vcodecModel->orderBy('name')->findAll(),
-            'tags' => $tags
+            'tags' => $tags,
+            'people' => $this->peopleModel->orderBy('name')->findAll(),
+            'achannels' => $this->achannelModel->orderBy('name')->findAll(),
+            'acodecs' => $this->acodecModel->orderBy('name')->findAll(),
+            'languages' => $this->languageModel->orderBy('name')->findAll(),
+            'ratios' => $this->ratioModel->orderBy('name')->findAll(),
+            'subformats' => $this->subformatModel->orderBy('name')->findAll(),
+            'poster_count' => $this->posterModel->countAllResults()
         ];
 
         return view('database_maintenance/manage_lookups', $data);
@@ -859,6 +888,219 @@ class DatabaseMaintenance extends BaseController
             ]);
         }
 
+        return $this->response->setStatusCode(404);
+    }
+
+    // ACHANNEL MANAGEMENT
+    public function addAChannel()
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->achannelModel->insert(['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio channel added successfully', 'id' => $this->achannelModel->getInsertID()]);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->achannelModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function updateAChannel($id)
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->achannelModel->update($id, ['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio channel updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->achannelModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function deleteAChannel($id)
+    {
+        if ($this->request->isAJAX()) {
+            $inUse = $this->db->table('movie_lang')->where('achannel_id', $id)->countAllResults();
+            if ($inUse > 0) {
+                return $this->response->setJSON(['status' => 'error', 'message' => "Cannot delete: Audio channel is used by {$inUse} movie language entry(s)"]);
+            }
+            if ($this->achannelModel->delete($id)) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio channel deleted successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to delete audio channel']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    // ACODEC MANAGEMENT
+    public function addACodec()
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->acodecModel->insert(['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio codec added successfully', 'id' => $this->acodecModel->getInsertID()]);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->acodecModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function updateACodec($id)
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->acodecModel->update($id, ['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio codec updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->acodecModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function deleteACodec($id)
+    {
+        if ($this->request->isAJAX()) {
+            $inUse = $this->db->table('movie_lang')->where('acodec_id', $id)->countAllResults();
+            if ($inUse > 0) {
+                return $this->response->setJSON(['status' => 'error', 'message' => "Cannot delete: Audio codec is used by {$inUse} movie language entry(s)"]);
+            }
+            if ($this->acodecModel->delete($id)) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Audio codec deleted successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to delete audio codec']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    // LANGUAGE MANAGEMENT
+    public function addLanguage()
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->languageModel->insert(['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Language added successfully', 'id' => $this->languageModel->getInsertID()]);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->languageModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function updateLanguage($id)
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->languageModel->update($id, ['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Language updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->languageModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function deleteLanguage($id)
+    {
+        if ($this->request->isAJAX()) {
+            $inUse = $this->db->table('movie_lang')->where('lang_id', $id)->countAllResults();
+            if ($inUse > 0) {
+                return $this->response->setJSON(['status' => 'error', 'message' => "Cannot delete: Language is used by {$inUse} movie language entry(s)"]);
+            }
+            if ($this->languageModel->delete($id)) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Language deleted successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to delete language']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    // RATIO MANAGEMENT
+    public function addRatio()
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->ratioModel->insert(['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Ratio added successfully', 'id' => $this->ratioModel->getInsertID()]);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->ratioModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function updateRatio($id)
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->ratioModel->update($id, ['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Ratio updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->ratioModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function deleteRatio($id)
+    {
+        if ($this->request->isAJAX()) {
+            $inUse = $this->db->table('movies')->where('ratio_id', $id)->countAllResults();
+            if ($inUse > 0) {
+                return $this->response->setJSON(['status' => 'error', 'message' => "Cannot delete: Ratio is used by {$inUse} movie(s)"]);
+            }
+            if ($this->ratioModel->delete($id)) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Ratio deleted successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to delete ratio']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    // SUBFORMAT MANAGEMENT
+    public function addSubformat()
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->subformatModel->insert(['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Subtitle format added successfully', 'id' => $this->subformatModel->getInsertID()]);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->subformatModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function updateSubformat($id)
+    {
+        if ($this->request->isAJAX()) {
+            $name = $this->request->getPost('name');
+            if ($this->subformatModel->update($id, ['name' => $name])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Subtitle format updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->subformatModel->errors())]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    public function deleteSubformat($id)
+    {
+        if ($this->request->isAJAX()) {
+            $inUse = $this->db->table('movie_lang')->where('subformat_id', $id)->countAllResults();
+            if ($inUse > 0) {
+                return $this->response->setJSON(['status' => 'error', 'message' => "Cannot delete: Subtitle format is used by {$inUse} movie language entry(s)"]);
+            }
+            if ($this->subformatModel->delete($id)) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Subtitle format deleted successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to delete subtitle format']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    // POSTER MANAGEMENT
+    public function purgePosters()
+    {
+        if ($this->request->isAJAX()) {
+            $affectedRows = $this->posterModel->purgeUnused();
+            return $this->response->setJSON([
+                'status' => 'success',
+                'message' => "Purged {$affectedRows} unused poster(s) from the database."
+            ]);
+        }
         return $this->response->setStatusCode(404);
     }
 }

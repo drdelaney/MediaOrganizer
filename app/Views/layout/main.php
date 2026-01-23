@@ -31,6 +31,7 @@
 </head>
 <body>
     <!-- Navigation -->
+    <?php if (!isset($hide_nav) || !$hide_nav): ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand" href="<?= base_url() ?>">
@@ -54,13 +55,20 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= base_url('loans') ?>">
-                            <i class="bi bi-person-check-fill"></i> Loaned Movies
+                        <a class="nav-link" href="<?= base_url('public') ?>">
+                            <i class="bi bi-globe"></i> Public List
                         </a>
                     </li>
+                    <?php if ($wishlistTag = get_wishlist_tag()): ?>
+                        <li class="nav-item">
+                            <a class="nav-link" href="<?= base_url('movies?tag=' . $wishlistTag['tag_id']) ?>">
+                                <i class="bi bi-heart"></i> Wishlist
+                            </a>
+                        </li>
+                    <?php endif; ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= base_url('people') ?>">
-                            <i class="bi bi-people"></i> Loaned Users
+                        <a class="nav-link" href="<?= base_url('loans') ?>">
+                            <i class="bi bi-person-check-fill"></i> Loaned Movies
                         </a>
                     </li>
                     <?php if (session()->get('authenticated')): ?>
@@ -105,6 +113,7 @@
             </div>
         </div>
     </nav>
+    <?php endif; ?>
 
     <!-- Main Content -->
     <main class="container my-4">
@@ -112,6 +121,7 @@
     </main>
 
     <!-- Footer -->
+    <?php if (!isset($hide_nav) || !$hide_nav): ?>
     <footer class="bg-light py-4 mt-5">
         <div class="container">
             <div class="row">
@@ -128,6 +138,7 @@
             </div>
         </div>
     </footer>
+    <?php endif; ?>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

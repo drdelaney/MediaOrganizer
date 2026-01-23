@@ -17,18 +17,21 @@ class Movies extends BaseController
     {
         $search = $this->request->getGet('search');
         $searchField = $this->request->getGet('searchField') ?: 'title';
+        $tagId = $this->request->getGet('tag');
         $page = (int) ($this->request->getGet('page') ?? 1);
         $perPage = 20;
         $offset = ($page - 1) * $perPage;
 
         $data = [
-            'movies' => $this->movieModel->getMoviesWithDetails($search, $searchField, $perPage, $offset),
-            'total' => $this->movieModel->countMovies($search, $searchField),
+            'movies' => $this->movieModel->getMoviesWithDetails($search, $searchField, $perPage, $offset, $tagId, true, 'created', 'DESC'),
+            'total' => $this->movieModel->countMovies($search, $searchField, $tagId, true),
             'currentPage' => $page,
             'perPage' => $perPage,
             'search' => $search,
             'searchField' => $searchField,
+            'tagId' => $tagId,
             'mediaTypes' => $this->movieModel->getMediaTypes(),
+            'tags' => $this->movieModel->getTags(),
             'title' => 'Media Library'
         ];
 
@@ -170,13 +173,41 @@ class Movies extends BaseController
         // Assign a unique sequential number since movies.number is NOT NULL and UNIQUE
         $insertData['number'] = $this->movieModel->getNextAvailableNumber();
         $insertData['seen'] = $this->request->getPost('seen') ? 1 : 0;
-        $insertData['loaned'] = $this->request->getPost('loaned') ? 1 : 0;
+        
+        // Check if "wishlist" tag is among the tags to be added
+        $tagIds = $this->request->getPost('tag_ids');
+        $isWishlist = false;
+        if (is_array($tagIds) && !empty($tagIds)) {
+            $tagModel = new \App\Models\TagModel();
+            foreach ($tagIds as $tagId) {
+                $tag = $tagModel->find($tagId);
+                if ($tag && strtolower($tag['name']) === 'wishlist') {
+                    $isWishlist = true;
+                    break;
+                }
+            }
+        }
+
+        // Cannot loan a wishlist movie
+        if ($isWishlist) {
+            $insertData['loaned'] = 0;
+        } else {
+            $insertData['loaned'] = $this->request->getPost('loaned') ? 1 : 0;
+        }
+
         $insertData['created'] = date('Y-m-d H:i:s');
         $insertData['updated'] = $insertData['created'];
 
         // Insert the movie
         $movieId = $this->movieModel->insert($insertData, true);
         if ($movieId) {
+            // Handle loan if provided
+            $loanPersonId = $this->request->getPost('loan_person_id');
+            if ($insertData['loaned'] && $loanPersonId) {
+                $loanModel = new \App\Models\LoanModel();
+                $loanModel->loanMovie($movieId, $loanPersonId);
+            }
+
             // Save tags if provided
             $tagIds = $this->request->getPost('tag_ids');
             if (is_array($tagIds) && !empty($tagIds)) {
@@ -286,6 +317,10 @@ class Movies extends BaseController
             throw new \CodeIgniter\Exceptions\PageNotFoundException('Movie not found');
         }
 
+        // Get current loan if any
+        $loanModel = new \App\Models\LoanModel();
+        $currentLoan = $loanModel->getActiveLoanForMovie($movieId);
+
         // Check if TMDB API is available
         $apiService = new \App\Libraries\MovieApiService();
         $apiAvailable = $apiService->isApiAvailable();
@@ -304,6 +339,7 @@ class Movies extends BaseController
             'ratios' => $this->movieModel->getRatios(),
             'movieTags' => $movieTags,
             'allTags' => $allTags,
+            'currentLoan' => $currentLoan,
             'apiAvailable' => $apiAvailable,
             'title' => 'Edit Movie - ' . ($movie['title'] ?: $movie['o_title'] ?: 'Untitled')
         ];
@@ -423,9 +459,48 @@ class Movies extends BaseController
             'vcodec_id' => $this->request->getPost('vcodec_id') ?: null,
             'ratio_id' => $this->request->getPost('ratio_id') ?: null,
             'seen' => $this->request->getPost('seen') ? 1 : 0,
-            'loaned' => $this->request->getPost('loaned') ? 1 : 0,
             'updated' => date('Y-m-d H:i:s')
         ];
+
+        // Check for wishlist tag in the posted tag_ids
+        $tagIds = $this->request->getPost('tag_ids');
+        $tagIdsSent = $this->request->getPost('tag_ids_sent');
+        $isWishlist = false;
+
+        if (is_array($tagIds) || $tagIdsSent) {
+            $submittedTags = is_array($tagIds) ? $tagIds : [];
+            if (!empty($submittedTags)) {
+                $tagModel = new \App\Models\TagModel();
+                foreach ($submittedTags as $tagId) {
+                    $tag = $tagModel->find($tagId);
+                    if ($tag && strtolower($tag['name']) === 'wishlist') {
+                        $isWishlist = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // If tag_ids wasn't sent, check existing tags
+            $tagModel = new \App\Models\TagModel();
+            $existingTags = $tagModel->getTagsForMovie($movieId);
+            foreach ($existingTags as $tag) {
+                if (strtolower($tag['name']) === 'wishlist') {
+                    $isWishlist = true;
+                    break;
+                }
+            }
+        }
+
+        // Cannot loan a wishlist movie
+        if ($isWishlist) {
+            $updateData['loaned'] = 0;
+            
+            // If it was already loaned, we might need to handle returning it, 
+            // but for now let's just force it to 0. 
+            // In a real scenario, we might want to prevent adding the "wishlist" tag if it's loaned.
+        } else {
+            $updateData['loaned'] = $this->request->getPost('loaned') ? 1 : 0;
+        }
         
         // Add multiple medium_ids to notes
         if (!empty($mediumIds)) {
@@ -439,12 +514,36 @@ class Movies extends BaseController
 
         // Update tags
         $tagIds = $this->request->getPost('tag_ids');
-        if (is_array($tagIds)) {
+        $tagIdsSent = $this->request->getPost('tag_ids_sent');
+        if (is_array($tagIds) || $tagIdsSent) {
             $tagModel = new \App\Models\TagModel();
-            $tagModel->setTagsForMovie($movieId, $tagIds);
+            $tagModel->setTagsForMovie($movieId, is_array($tagIds) ? $tagIds : []);
         }
 
         if ($success) {
+            // Handle loan changes
+            $loanPersonId = $this->request->getPost('loan_person_id');
+            if ($updateData['loaned'] && $loanPersonId) {
+                $loanModel = new \App\Models\LoanModel();
+                $currentLoan = $loanModel->getActiveLoanForMovie($movieId);
+                
+                // Only create a new loan if it's not already loaned to the same person
+                if (!$currentLoan || $currentLoan['person_id'] != $loanPersonId) {
+                    // If it was already loaned to someone else, return it first
+                    if ($currentLoan) {
+                        $loanModel->returnMovie($movieId);
+                    }
+                    $loanModel->loanMovie($movieId, $loanPersonId);
+                }
+            } elseif (!$updateData['loaned']) {
+                // If checkbox is unchecked, ensuring it's returned
+                $loanModel = new \App\Models\LoanModel();
+                $currentLoan = $loanModel->getActiveLoanForMovie($movieId);
+                if ($currentLoan) {
+                    $loanModel->returnMovie($movieId);
+                }
+            }
+
             session()->setFlashdata('success', 'Movie updated successfully!');
             return redirect()->to(base_url('movies/view/' . $movieId));
         } else {
@@ -854,6 +953,94 @@ class Movies extends BaseController
             ]);
         }
 
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Add a new person via AJAX
+     */
+    public function addPerson()
+    {
+        if ($this->request->isAJAX()) {
+            $peopleModel = new \App\Models\PeopleModel();
+            
+            $data = [
+                'name'  => $this->request->getPost('name'),
+                'email' => $this->request->getPost('email'),
+                'phone' => $this->request->getPost('phone'),
+            ];
+
+            if ($peopleModel->insert($data)) {
+                return $this->response->setJSON([
+                    'status'    => 'success',
+                    'person_id' => $peopleModel->getInsertID(),
+                    'name'      => $data['name']
+                ]);
+            } else {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'errors' => $peopleModel->errors()
+                ]);
+            }
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Add a new collection via AJAX
+     */
+    public function addCollection()
+    {
+        if ($this->request->isAJAX()) {
+            $collectionModel = new \App\Models\CollectionModel();
+            
+            $data = [
+                'name'   => $this->request->getPost('name'),
+                'loaned' => 0,
+            ];
+
+            if ($collectionModel->insert($data)) {
+                return $this->response->setJSON([
+                    'status'        => 'success',
+                    'collection_id' => $collectionModel->getInsertID(),
+                    'name'          => $data['name']
+                ]);
+            } else {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'errors' => $collectionModel->errors()
+                ]);
+            }
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Add a new volume via AJAX
+     */
+    public function addVolume()
+    {
+        if ($this->request->isAJAX()) {
+            $volumeModel = new \App\Models\VolumeModel();
+            
+            $data = [
+                'name'   => $this->request->getPost('name'),
+                'loaned' => 0,
+            ];
+
+            if ($volumeModel->insert($data)) {
+                return $this->response->setJSON([
+                    'status'    => 'success',
+                    'volume_id' => $volumeModel->getInsertID(),
+                    'name'      => $data['name']
+                ]);
+            } else {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'errors' => $volumeModel->errors()
+                ]);
+            }
+        }
         return $this->response->setStatusCode(404);
     }
 

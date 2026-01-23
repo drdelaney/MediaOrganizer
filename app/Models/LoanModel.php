@@ -71,6 +71,22 @@ class LoanModel extends Model
             return ['success' => false, 'message' => 'Movie is already loaned out'];
         }
 
+        // Check if movie is tagged with "wishlist"
+        $tagModel = new \App\Models\TagModel();
+        $tags = $tagModel->getTagsForMovie($movieId);
+        $isWishlist = false;
+        foreach ($tags as $tag) {
+            if (strtolower($tag['name']) === 'wishlist') {
+                $isWishlist = true;
+                break;
+            }
+        }
+
+        if ($isWishlist) {
+            $db->transRollback();
+            return ['success' => false, 'message' => 'Cannot loan a movie that is on the wishlist'];
+        }
+
         // Create loan record
         $loanData = [
             'movie_id' => $movieId,

@@ -75,9 +75,11 @@
                             <a href="<?= base_url('movies/add') ?>" class="btn btn-success">
                                 <i class="bi bi-plus-circle"></i> Add Movie/TV
                             </a>
-                            <a href="<?= base_url('people') ?>" class="btn btn-outline-secondary">
-                                <i class="bi bi-people"></i> Manage Loaned Users
-                            </a>
+                            <?php if (session()->get('authenticated')): ?>
+                                <a href="<?= base_url('database-maintenance/manage-lookups') ?>" class="btn btn-outline-secondary">
+                                    <i class="bi bi-people"></i> Manage People
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -97,7 +99,10 @@
                             <li><i class="bi bi-check text-success"></i> Movie catalog management</li>
                             <li><i class="bi bi-check text-success"></i> Search and filtering</li>
                             <li><i class="bi bi-check text-success"></i> Rating and status tracking</li>
+                            <li><i class="bi bi-check text-success"></i> Loan management</li>
+                            <li><i class="bi bi-check text-success"></i> Wishlist support if the wishlist tag exists</li>
                             <li><i class="bi bi-check text-success"></i> Dark/Light theme support</li>
+                            <li><i class="bi bi-check text-success"></i> Public view for sharing lists</li>
                             <li><i class="bi bi-check text-success"></i> Sadly vibe coded as an experiment</li>
                         </ul>
                     </div>

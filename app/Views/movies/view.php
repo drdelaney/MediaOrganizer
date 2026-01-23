@@ -28,7 +28,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                             <?php if ($movie['poster_md5']): ?>
                                 <img src="<?= base_url('movies/poster/' . $movie['movie_id']) . '?v=' . urlencode($movie['poster_md5']) ?>"
                                      class="img-fluid rounded movie-poster"
-                                     alt="<?= esc($movie['title']) ?>"
+                                     alt="<?= esc($movie['title'] ?: $movie['o_title']) ?>"
                                      style="max-height: 400px;">
                             <?php else: ?>
                                 <div class="bg-light rounded d-flex align-items-center justify-content-center"
@@ -190,9 +190,23 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                         <?php else: ?>
                                             <span class="badge bg-warning"><i class="bi bi-eye-slash"></i> Unseen</span>
                                         <?php endif; ?>
+
+                                        <?php 
+                                        $isWishlist = false;
+                                        if (isset($movieTags) && is_array($movieTags)) {
+                                            foreach ($movieTags as $tag) {
+                                                if (strtolower($tag['name']) === 'wishlist') {
+                                                    $isWishlist = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        ?>
                                         
                                         <?php if ($movie['loaned']): ?>
                                             <span class="badge bg-danger"><i class="bi bi-person-check"></i> Loaned</span>
+                                        <?php elseif ($isWishlist): ?>
+                                            <span class="badge bg-info"><i class="bi bi-heart"></i> Wishlist</span>
                                         <?php endif; ?>
                                     </span>
                                     
@@ -780,7 +794,7 @@ function updatePosterDisplay(posterUrl) {
         container.innerHTML = `
             <img src="${posterUrl}"
                  class="img-fluid rounded movie-poster"
-                 alt="<?= esc($movie['title']) ?>"
+                 alt="<?= esc($movie['title'] ?: $movie['o_title']) ?>"
                  style="max-height: 400px;">
         `;
     } else {

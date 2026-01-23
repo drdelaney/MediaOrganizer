@@ -58,7 +58,7 @@
                                 <?php if ($movie['poster_md5']): ?>
                                     <img src="<?= base_url('movies/poster/' . $movie['movie_id']) . '?v=' . urlencode($movie['poster_md5']) ?>" 
                                          class="img-fluid rounded shadow-sm poster-image" 
-                                         alt="<?= esc($movie['title']) ?>"
+                                         alt="<?= esc($movie['title'] ?: $movie['o_title']) ?>"
                                          style="max-height: 300px; max-width: 200px;"
                                          id="poster-preview">
                                 <?php else: ?>
@@ -266,28 +266,38 @@
 
                                 <div class="mb-3">
                                     <label for="collection_id" class="form-label">Collection</label>
-                                    <select class="form-select" id="collection_id" name="collection_id">
-                                        <option value="">No Collection</option>
-                                        <?php foreach ($collections as $collection): ?>
-                                            <option value="<?= $collection['collection_id'] ?>"
-                                                    <?= old('collection_id', $movie['collection_id']) == $collection['collection_id'] ? 'selected' : '' ?>>
-                                                <?= esc($collection['name']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <div class="input-group">
+                                        <select class="form-select" id="collection_id" name="collection_id">
+                                            <option value="">No Collection</option>
+                                            <?php foreach ($collections as $collection): ?>
+                                                <option value="<?= $collection['collection_id'] ?>"
+                                                        <?= old('collection_id', $movie['collection_id']) == $collection['collection_id'] ? 'selected' : '' ?>>
+                                                    <?= esc($collection['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn btn-outline-secondary" type="button" id="addNewCollectionBtn" title="Add New Collection">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="volume_id" class="form-label">Volume</label>
-                                    <select class="form-select" id="volume_id" name="volume_id">
-                                        <option value="">No Volume</option>
-                                        <?php foreach ($volumes as $volume): ?>
-                                            <option value="<?= $volume['volume_id'] ?>"
-                                                    <?= old('volume_id', $movie['volume_id']) == $volume['volume_id'] ? 'selected' : '' ?>>
-                                                <?= esc($volume['name']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <div class="input-group">
+                                        <select class="form-select" id="volume_id" name="volume_id">
+                                            <option value="">No Volume</option>
+                                            <?php foreach ($volumes as $volume): ?>
+                                                <option value="<?= $volume['volume_id'] ?>"
+                                                        <?= old('volume_id', $movie['volume_id']) == $volume['volume_id'] ? 'selected' : '' ?>>
+                                                    <?= esc($volume['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn btn-outline-secondary" type="button" id="addNewVolumeBtn" title="Add New Volume">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div id="digital-only-fields">
@@ -361,8 +371,12 @@
                                         <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
                                             <?php
                                             $selectedTagIds = array_column($movieTags, 'tag_id');
+                                            $isWishlist = false;
                                             foreach ($allTags as $tag):
                                                 $isChecked = in_array($tag['tag_id'], $selectedTagIds);
+                                                if ($isChecked && strtolower($tag['name']) === 'wishlist') {
+                                                    $isWishlist = true;
+                                                }
                                             ?>
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" name="tag_ids[]"
@@ -374,6 +388,8 @@
                                                 </div>
                                             <?php endforeach; ?>
                                         </div>
+                                        <!-- Hidden field to ensure tag_ids is always sent even if no tags are selected -->
+                                        <input type="hidden" name="tag_ids_sent" value="1">
                                     <?php else: ?>
                                         <div class="text-muted small">No tags available. <a href="<?= base_url('database-maintenance/manage-lookups') ?>" target="_blank">Create tags in Database Maintenance</a>.</div>
                                     <?php endif; ?>
@@ -388,12 +404,28 @@
                                             <i class="bi bi-eye"></i> Seen
                                         </label>
                                     </div>
-                                    <div class="form-check">
+                                    <div class="form-check d-flex align-items-center gap-2">
                                         <input class="form-check-input" type="checkbox" id="loaned" name="loaned" value="1"
-                                                <?= old('loaned', $movie['loaned']) ? 'checked' : '' ?>>
+                                                <?= old('loaned', $movie['loaned']) ? 'checked' : '' ?>
+                                                <?= $isWishlist ? 'disabled' : '' ?>>
                                         <label class="form-check-label" for="loaned">
                                             <i class="bi bi-person-check"></i> Loaned
+                                            <?php if ($isWishlist): ?>
+                                                <small class="text-muted">(Wishlist items cannot be loaned)</small>
+                                            <?php endif; ?>
                                         </label>
+
+                                        <?php 
+                                        $loanedPersonName = '';
+                                        $loanPersonId = '';
+                                        if (isset($currentLoan) && $currentLoan) {
+                                            $loanedPersonName = $currentLoan['person_name'];
+                                            $loanPersonId = $currentLoan['person_id'];
+                                        }
+                                        ?>
+                                        <span id="loaned_person_name" class="badge bg-info text-dark <?= $movie['loaned'] ? '' : 'd-none' ?>"><?= esc(old('loaned_person_name', $loanedPersonName)) ?></span>
+                                        <input type="hidden" id="loan_person_id" name="loan_person_id" value="<?= esc(old('loan_person_id', $loanPersonId)) ?>">
+                                        <input type="hidden" id="loaned_person_name_input" name="loaned_person_name" value="<?= esc(old('loaned_person_name', $loanedPersonName)) ?>">
                                     </div>
                                 </div>
                             </div>
@@ -556,11 +588,88 @@
         </div>
     </div>
 
-<?= $this->endsection() ?>
+    <?= $this->include('movies/_quick_add_modals') ?>
+
+    <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Loaned checkbox logic
+            const loanedCheckbox = document.getElementById('loaned');
+            const loanedPersonBadge = document.getElementById('loaned_person_name');
+            const loanPersonIdInput = document.getElementById('loan_person_id');
+            const loanedPersonNameInput = document.getElementById('loaned_person_name_input');
+            const movieId = <?= $movie['movie_id'] ?>;
+
+            if (loanedCheckbox) {
+                loanedCheckbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        showLoanModal(function(personId, personName) {
+                            // Use AJAX to loan movie immediately
+                            fetch(`<?= base_url('movies/loan/') ?>${movieId}`, {
+                                method: 'POST',
+                                headers: { 
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Content-Type': 'application/x-www-form-urlencoded'
+                                },
+                                body: 'person_id=' + personId
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.status === 'success') {
+                                    loanPersonIdInput.value = personId;
+                                    loanedPersonNameInput.value = personName;
+                                    loanedPersonBadge.textContent = personName;
+                                    loanedPersonBadge.classList.remove('d-none');
+                                } else {
+                                    alert(data.message);
+                                    loanedCheckbox.checked = false;
+                                }
+                            })
+                            .catch(() => {
+                                alert('Error processing loan');
+                                loanedCheckbox.checked = false;
+                            });
+                        }, function() {
+                            // If modal was closed without confirming, uncheck the checkbox
+                            if (!loanPersonIdInput.value) {
+                                loanedCheckbox.checked = false;
+                            }
+                        });
+                    } else {
+                        // Check if it was already loaned in the database
+                        // In edit mode, we want to save return status immediately
+                        if (!confirm('Are you sure you want to mark this movie as returned?')) {
+                            this.checked = true;
+                            return;
+                        }
+                        
+                        // Use AJAX to return movie immediately
+                        fetch(`<?= base_url('movies/returnLoan/') ?>${movieId}`, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                loanPersonIdInput.value = '';
+                                loanedPersonNameInput.value = '';
+                                loanedPersonBadge.classList.add('d-none');
+                                loanedPersonBadge.textContent = '';
+                            } else {
+                                alert(data.message);
+                                this.checked = true;
+                            }
+                        })
+                        .catch(() => {
+                            alert('Error processing return');
+                            this.checked = true;
+                        });
+                    }
+                });
+            }
+
             // Handle poster image error
             const posterImg = document.querySelector('.poster-image');
             if (posterImg) {
