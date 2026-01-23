@@ -10,6 +10,7 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('login', 'Auth::login');
 $routes->post('authenticate', 'Auth::authenticate');
 $routes->get('logout', 'Auth::logout');
+$routes->get('public', 'PublicView::index');
 
 // Re-authentication for maintenance
 $routes->get('reauth', 'Auth::reauth');
@@ -42,6 +43,9 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->post('movies/loan/(:num)', 'Movies::loan/$1');
     $routes->post('movies/returnLoan/(:num)', 'Movies::returnLoan/$1');
     $routes->get('movies/getPeople', 'Movies::getPeople');
+    $routes->post('movies/addPerson', 'Movies::addPerson');
+    $routes->post('movies/addCollection', 'Movies::addCollection');
+    $routes->post('movies/addVolume', 'Movies::addVolume');
 
     // Tag management for movies (AJAX)
     $routes->post('movies/updateTags/(:num)', 'Movies::updateMovieTags/$1');
@@ -50,8 +54,8 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('settings/password', 'Auth::changePassword');
     $routes->post('settings/password', 'Auth::updatePassword');
 
-    // People (loaned users) management
-    $routes->get('people', 'People::index');
+    // People (loaned users) management (AJAX endpoints)
+    // $routes->get('people', 'People::index'); // Standalone page no longer used
     $routes->post('people/add', 'People::add');
     $routes->post('people/update/(:num)', 'People::update/$1');
     $routes->post('people/delete/(:num)', 'People::delete/$1');
@@ -99,4 +103,32 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     $routes->post('tag/add', 'DatabaseMaintenance::addTag');
     $routes->post('tag/update/(:num)', 'DatabaseMaintenance::updateTag/$1');
     $routes->post('tag/delete/(:num)', 'DatabaseMaintenance::deleteTag/$1');
+
+    // AChannel routes
+    $routes->post('achannel/add', 'DatabaseMaintenance::addAChannel');
+    $routes->post('achannel/update/(:num)', 'DatabaseMaintenance::updateAChannel/$1');
+    $routes->post('achannel/delete/(:num)', 'DatabaseMaintenance::deleteAChannel/$1');
+
+    // ACodec routes
+    $routes->post('acodec/add', 'DatabaseMaintenance::addACodec');
+    $routes->post('acodec/update/(:num)', 'DatabaseMaintenance::updateACodec/$1');
+    $routes->post('acodec/delete/(:num)', 'DatabaseMaintenance::deleteACodec/$1');
+
+    // Language routes
+    $routes->post('language/add', 'DatabaseMaintenance::addLanguage');
+    $routes->post('language/update/(:num)', 'DatabaseMaintenance::updateLanguage/$1');
+    $routes->post('language/delete/(:num)', 'DatabaseMaintenance::deleteLanguage/$1');
+
+    // Ratio routes
+    $routes->post('ratio/add', 'DatabaseMaintenance::addRatio');
+    $routes->post('ratio/update/(:num)', 'DatabaseMaintenance::updateRatio/$1');
+    $routes->post('ratio/delete/(:num)', 'DatabaseMaintenance::deleteRatio/$1');
+
+    // Subformat routes
+    $routes->post('subformat/add', 'DatabaseMaintenance::addSubformat');
+    $routes->post('subformat/update/(:num)', 'DatabaseMaintenance::updateSubformat/$1');
+    $routes->post('subformat/delete/(:num)', 'DatabaseMaintenance::deleteSubformat/$1');
+
+    // Poster routes
+    $routes->post('poster/purge', 'DatabaseMaintenance::purgePosters');
 });

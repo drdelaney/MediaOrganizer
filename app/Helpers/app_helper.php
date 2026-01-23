@@ -288,3 +288,16 @@ if (!function_exists('titles_match')) {
         return $norm1 === $norm2;
     }
 }
+
+/**
+ * Get the wishlist tag if it exists
+ * 
+ * @return array|null The wishlist tag data or null if not found
+ */
+if (!function_exists('get_wishlist_tag')) {
+    function get_wishlist_tag(): ?array
+    {
+        $movieModel = new \App\Models\MovieModel();
+        return $movieModel->getTagByName('wishlist');
+    }
+}
