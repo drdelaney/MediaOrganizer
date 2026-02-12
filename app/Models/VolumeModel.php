@@ -11,6 +11,7 @@ class VolumeModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'volume_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[volumes.name,volume_id,{volume_id}]',
         'loaned' => 'in_list[0,1]'
     ];

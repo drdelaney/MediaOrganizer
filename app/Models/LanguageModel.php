@@ -11,6 +11,7 @@ class LanguageModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'lang_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[languages.name,lang_id,{lang_id}]'
     ];
 

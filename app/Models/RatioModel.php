@@ -11,6 +11,7 @@ class RatioModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'ratio_id' => 'permit_empty',
         'name' => 'required|max_length[5]|is_unique[ratios.name,ratio_id,{ratio_id}]'
     ];
 

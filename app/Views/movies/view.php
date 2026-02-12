@@ -354,7 +354,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 <a href="<?= base_url('movies/edit/' . $movie['movie_id']) ?>" class="btn btn-primary me-2">
                     <i class="bi bi-pencil"></i> Edit Movie
                 </a>
-                <button type="button" class="btn btn-danger" onclick="confirmDelete(<?= $movie['movie_id'] ?>, '<?= esc(addslashes($movie['title'] ?: $movie['o_title'] ?: 'this movie'), 'js') ?>')">
+                <button type="button" class="btn btn-danger" onclick="confirmDelete(<?= $movie['movie_id'] ?>, '<?= esc($movie['title'] ?: $movie['o_title'] ?: 'this movie', 'js') ?>')">
                     <i class="bi bi-trash"></i> Delete Movie
                 </button>
             </div>
@@ -449,6 +449,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     <!-- Upload Custom Poster Tab -->
                     <div class="tab-pane fade" id="upload-poster" role="tabpanel">
                         <form id="uploadPosterForm" enctype="multipart/form-data">
+                            <?= csrf_field() ?>
                             <div class="mb-3">
                                 <label for="posterFile" class="form-label">Choose Image File</label>
                                 <input type="file" class="form-control" id="posterFile" name="poster_file" accept="image/*" required>
@@ -526,7 +527,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok && response.status === 403) {
+                    throw new Error('CSRF validation failed. Please refresh the page.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     // Update button
@@ -613,7 +619,12 @@ document.getElementById('fetchPostersBtn').addEventListener('click', function() 
             'Content-Type': 'application/json'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok && response.status === 403) {
+            throw new Error('CSRF validation failed. Please refresh the page.');
+        }
+        return response.json();
+    })
     .then(data => {
         document.getElementById('posterLoadingSpinner').style.display = 'none';
 
@@ -673,11 +684,16 @@ function savePoster(posterUrl) {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/x-www-form-urlencoded'
         },
         body: 'poster_url=' + encodeURIComponent(posterUrl)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok && response.status === 403) {
+            throw new Error('CSRF validation failed. Please refresh the page.');
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             showMessage(data.message, 'success');
@@ -708,6 +724,7 @@ document.getElementById('uploadPosterForm').addEventListener('submit', function(
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
+            '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
         },
         body: formData
     })

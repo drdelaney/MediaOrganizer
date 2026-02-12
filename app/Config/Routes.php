@@ -10,7 +10,7 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('login', 'Auth::login');
 $routes->post('authenticate', 'Auth::authenticate');
 $routes->get('logout', 'Auth::logout');
-$routes->get('public', 'PublicView::index');
+$routes->match(['get', 'post'], 'public', 'PublicView::index');
 
 // Re-authentication for maintenance
 $routes->get('reauth', 'Auth::reauth');
@@ -21,7 +21,7 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('/', 'Home::index');
 
     // Movie routes
-    $routes->get('movies', 'Movies::index');
+    $routes->match(['get', 'post'], 'movies', 'Movies::index');
     $routes->get('movies/view/(:num)', 'Movies::view/$1');
     $routes->get('movies/edit/(:num)', 'Movies::edit/$1');
     $routes->post('movies/update/(:num)', 'Movies::update/$1');

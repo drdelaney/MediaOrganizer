@@ -120,10 +120,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $medium['medium_id'] ?></td>
                                         <td><?= esc($medium['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-medium" data-id="<?= $medium['medium_id'] ?>" data-name="<?= esc($medium['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-medium" data-id="<?= $medium['medium_id'] ?>" data-name="<?= esc($medium['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-medium" data-id="<?= $medium['medium_id'] ?>" data-name="<?= esc($medium['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-medium" data-id="<?= $medium['medium_id'] ?>" data-name="<?= esc($medium['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -163,13 +163,13 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td>
                                             <button class="btn btn-sm btn-info edit-collection"
                                                     data-id="<?= $collection['collection_id'] ?>"
-                                                    data-name="<?= esc($collection['name']) ?>"
+                                                    data-name="<?= esc($collection['name'], 'attr') ?>"
                                                     data-loaned="<?= $collection['loaned'] ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-collection"
                                                     data-id="<?= $collection['collection_id'] ?>"
-                                                    data-name="<?= esc($collection['name']) ?>">
+                                                    data-name="<?= esc($collection['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -209,13 +209,13 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td>
                                             <button class="btn btn-sm btn-info edit-volume"
                                                     data-id="<?= $volume['volume_id'] ?>"
-                                                    data-name="<?= esc($volume['name']) ?>"
+                                                    data-name="<?= esc($volume['name'], 'attr') ?>"
                                                     data-loaned="<?= $volume['loaned'] ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-volume"
                                                     data-id="<?= $volume['volume_id'] ?>"
-                                                    data-name="<?= esc($volume['name']) ?>">
+                                                    data-name="<?= esc($volume['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -253,12 +253,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td>
                                             <button class="btn btn-sm btn-info edit-codec"
                                                     data-id="<?= $codec['vcodec_id'] ?>"
-                                                    data-name="<?= esc($codec['name']) ?>">
+                                                    data-name="<?= esc($codec['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-codec"
                                                     data-id="<?= $codec['vcodec_id'] ?>"
-                                                    data-name="<?= esc($codec['name']) ?>">
+                                                    data-name="<?= esc($codec['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -304,12 +304,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td>
                                             <button class="btn btn-sm btn-info edit-tag" 
                                                     data-id="<?= $tag['tag_id'] ?>" 
-                                                    data-name="<?= esc($tag['name']) ?>">
+                                                    data-name="<?= esc($tag['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-tag" 
                                                     data-id="<?= $tag['tag_id'] ?>" 
-                                                    data-name="<?= esc($tag['name']) ?>"
+                                                    data-name="<?= esc($tag['name'], 'attr') ?>"
                                                     data-count="<?= $tag['movie_count'] ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
@@ -352,14 +352,14 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td>
                                             <button class="btn btn-sm btn-info edit-person"
                                                     data-id="<?= $person['person_id'] ?>"
-                                                    data-name="<?= esc($person['name']) ?>"
-                                                    data-email="<?= esc($person['email']) ?>"
-                                                    data-phone="<?= esc($person['phone']) ?>">
+                                                    data-name="<?= esc($person['name'], 'attr') ?>"
+                                                    data-email="<?= esc($person['email'], 'attr') ?>"
+                                                    data-phone="<?= esc($person['phone'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-person"
                                                     data-id="<?= $person['person_id'] ?>"
-                                                    data-name="<?= esc($person['name']) ?>">
+                                                    data-name="<?= esc($person['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -395,10 +395,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $achannel['achannel_id'] ?></td>
                                         <td><?= esc($achannel['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-achannel" data-id="<?= $achannel['achannel_id'] ?>" data-name="<?= esc($achannel['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -434,10 +434,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $acodec['acodec_id'] ?></td>
                                         <td><?= esc($acodec['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-acodec" data-id="<?= $acodec['acodec_id'] ?>" data-name="<?= esc($acodec['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -473,10 +473,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $language['lang_id'] ?></td>
                                         <td><?= esc($language['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-language" data-id="<?= $language['lang_id'] ?>" data-name="<?= esc($language['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -512,10 +512,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $ratio['ratio_id'] ?></td>
                                         <td><?= esc($ratio['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-ratio" data-id="<?= $ratio['ratio_id'] ?>" data-name="<?= esc($ratio['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -551,10 +551,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                         <td><?= $subformat['subformat_id'] ?></td>
                                         <td><?= esc($subformat['name']) ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info edit-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name']) ?>">
+                                            <button class="btn btn-sm btn-info edit-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name'], 'attr') ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name']) ?>">
+                                            <button class="btn btn-sm btn-danger delete-subformat" data-id="<?= $subformat['subformat_id'] ?>" data-name="<?= esc($subformat['name'], 'attr') ?>">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </td>
@@ -602,6 +602,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addMediumForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="medium_name" class="form-label">Medium Name</label>
                             <input type="text" class="form-control" id="medium_name" name="name" required>
@@ -626,6 +627,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editMediumForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_medium_id">
                         <div class="mb-3">
                             <label for="edit_medium_name" class="form-label">Medium Name</label>
@@ -651,6 +653,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addCollectionForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="collection_name" class="form-label">Collection Name</label>
                             <input type="text" class="form-control" id="collection_name" name="name" required>
@@ -682,6 +685,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editCollectionForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_collection_id">
                         <div class="mb-3">
                             <label for="edit_collection_name" class="form-label">Collection Name</label>
@@ -714,6 +718,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addVolumeForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="volume_name" class="form-label">Volume Name</label>
                             <input type="text" class="form-control" id="volume_name" name="name" required>
@@ -745,6 +750,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editVolumeForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_volume_id">
                         <div class="mb-3">
                             <label for="edit_volume_name" class="form-label">Volume Name</label>
@@ -777,6 +783,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addCodecForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="codec_name" class="form-label">Codec Name</label>
                             <input type="text" class="form-control" id="codec_name" name="name" required>
@@ -801,6 +808,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editCodecForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_codec_id">
                         <div class="mb-3">
                             <label for="edit_codec_name" class="form-label">Codec Name</label>
@@ -826,6 +834,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addTagForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="tag_name" class="form-label">Tag Name</label>
                             <input type="text" class="form-control" id="tag_name" name="name" maxlength="64" required>
@@ -851,6 +860,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editTagForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_tag_id">
                         <div class="mb-3">
                             <label for="edit_tag_name" class="form-label">Tag Name</label>
@@ -877,6 +887,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addPersonForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="person_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="person_name" name="name" required>
@@ -909,6 +920,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editPersonForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_person_id">
                         <div class="mb-3">
                             <label for="edit_person_name" class="form-label">Name</label>
@@ -942,6 +954,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addAChannelForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="achannel_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="achannel_name" name="name" required>
@@ -964,6 +977,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editAChannelForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_achannel_id">
                         <div class="mb-3">
                             <label for="edit_achannel_name" class="form-label">Name</label>
@@ -989,6 +1003,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addACodecForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="acodec_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="acodec_name" name="name" required>
@@ -1011,6 +1026,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editACodecForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_acodec_id">
                         <div class="mb-3">
                             <label for="edit_acodec_name" class="form-label">Name</label>
@@ -1036,6 +1052,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addLanguageForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="language_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="language_name" name="name" required>
@@ -1058,6 +1075,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editLanguageForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_language_id">
                         <div class="mb-3">
                             <label for="edit_language_name" class="form-label">Name</label>
@@ -1083,6 +1101,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addRatioForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="ratio_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="ratio_name" name="name" maxlength="5" required>
@@ -1106,6 +1125,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editRatioForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_ratio_id">
                         <div class="mb-3">
                             <label for="edit_ratio_name" class="form-label">Name</label>
@@ -1132,6 +1152,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="addSubformatForm">
+                        <?= csrf_field() ?>
                         <div class="mb-3">
                             <label for="subformat_name" class="form-label">Name</label>
                             <input type="text" class="form-control" id="subformat_name" name="name" required>
@@ -1154,6 +1175,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 </div>
                 <div class="modal-body">
                     <form id="editSubformatForm">
+                        <?= csrf_field() ?>
                         <input type="hidden" id="edit_subformat_id">
                         <div class="mb-3">
                             <label for="edit_subformat_name" class="form-label">Name</label>
@@ -1168,6 +1190,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
             </div>
         </div>
     </div>
+
 
 <?= $this->endsection() ?>
 
@@ -1205,6 +1228,37 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 button.addEventListener('shown.bs.tab', function() {
                     saveActiveTab();
                 });
+            });
+
+            // Handle Enter key in modals: highlight Save/Update button instead of submitting/closing
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    const activeModal = document.querySelector('.modal.show');
+                    if (activeModal) {
+                        // Check if an input or select has focus
+                        const focusedElement = document.activeElement;
+                        if (focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'SELECT')) {
+                            // If it's a select, Enter might be used to pick an option (though usually not in standard HTML select)
+                            // But for text inputs, we definitely want to prevent submission
+                            event.preventDefault(); // Prevent form submission or default Enter behavior
+                            
+                            // Find the primary button (Save or Update) in the modal footer
+                            const primaryBtn = activeModal.querySelector('.modal-footer .btn-primary');
+                            if (primaryBtn) {
+                                // Clear existing focus first to ensure the highlight is visible if it was already focused
+                                primaryBtn.blur();
+                                setTimeout(() => {
+                                    primaryBtn.focus();
+                                    // Add a temporary highlight effect
+                                    primaryBtn.classList.add('btn-highlight-pulse');
+                                    setTimeout(() => {
+                                        primaryBtn.classList.remove('btn-highlight-pulse');
+                                    }, 1500);
+                                }, 10);
+                            }
+                        }
+                    }
+                }
             });
             
             // Helper function to show alerts
@@ -1389,7 +1443,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         fetch(`<?= base_url('database-maintenance/collection/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'X-Requested-With': 'XMLHttpRequest',
+                                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
                             .then(response => response.json())
@@ -1414,7 +1469,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-Requested-With': 'XMLHttpRequest',
+                        '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                     },
                     body: 'name=' + encodeURIComponent(name) + '&loaned=' + loaned
                 })
@@ -1480,7 +1536,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         fetch(`<?= base_url('database-maintenance/volume/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'X-Requested-With': 'XMLHttpRequest',
+                                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
                             .then(response => response.json())
@@ -1567,7 +1624,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         fetch(`<?= base_url('database-maintenance/codec/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'X-Requested-With': 'XMLHttpRequest',
+                                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
                             .then(response => response.json())
@@ -1660,7 +1718,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         fetch(`<?= base_url('database-maintenance/tag/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'X-Requested-With': 'XMLHttpRequest',
+                                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
                             .then(response => response.json())
@@ -1755,7 +1814,8 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         fetch(`<?= base_url('people/delete') ?>/${id}`, {
                             method: 'POST',
                             headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
+                                'X-Requested-With': 'XMLHttpRequest',
+                                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
                             .then(response => response.json())

@@ -11,6 +11,7 @@ class ACodecModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'acodec_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[acodecs.name,acodec_id,{acodec_id}]'
     ];
 

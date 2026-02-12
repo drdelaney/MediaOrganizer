@@ -11,6 +11,7 @@ class SubformatModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'subformat_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[subformats.name,subformat_id,{subformat_id}]'
     ];
 

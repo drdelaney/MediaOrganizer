@@ -15,10 +15,25 @@ class Movies extends BaseController
 
     public function index()
     {
-        $search = $this->request->getGet('search');
-        $searchField = $this->request->getGet('searchField') ?: 'title';
-        $tagId = $this->request->getGet('tag');
-        $page = (int) ($this->request->getGet('page') ?? 1);
+        $search = $this->request->getVar('search');
+        $searchField = $this->request->getVar('searchField') ?: 'title';
+        
+        // Validate searchField
+        $allowedSearchFields = ['title', 'o_title', 'director', 'genre', 'country', 'studio', 'barcode', 'notes', 'year', 'movie_id', 'all'];
+        if (!in_array($searchField, $allowedSearchFields)) {
+            $searchField = 'title';
+        }
+
+        $tagId = $this->request->getVar('tag');
+        $page = (int) ($this->request->getVar('page') ?? 1);
+
+        if ($this->request->getVar('serendipitous')) {
+            $randomMovie = $this->movieModel->getRandomUnseenMovie();
+            if ($randomMovie) {
+                return redirect()->to(base_url('movies?search=' . $randomMovie['movie_id'] . '&searchField=movie_id'));
+            }
+            return redirect()->to(base_url('movies'))->with('error', 'No unseen movies found!');
+        }
         $perPage = 20;
         $offset = ($page - 1) * $perPage;
 

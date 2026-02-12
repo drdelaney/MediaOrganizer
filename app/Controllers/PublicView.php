@@ -10,10 +10,10 @@ class PublicView extends BaseController
     {
         $model = new MovieModel();
         
-        $search = $this->request->getGet('search');
-        $mediumId = $this->request->getGet('medium_id');
-        $wishlist = $this->request->getGet('wishlist') === '1';
-        $alpha = $this->request->getGet('alpha') === '1';
+        $search = $this->request->getVar('search');
+        $mediumId = $this->request->getVar('medium_id');
+        $wishlist = $this->request->getVar('wishlist') === '1';
+        $alpha = $this->request->getVar('alpha') === '1';
         
         // The user wants a basic list sorted by type then ID by default.
         // If alphabetical sort is checked, sort by title.

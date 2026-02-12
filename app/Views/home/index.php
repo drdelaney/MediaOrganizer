@@ -10,9 +10,12 @@
             <div class="container-fluid py-5">
                 <h1 class="display-4 fw-bold">Welcome to <?= esc(app_name()) ?></h1>
                 <p class="fs-4">Organize and manage your movie collection with ease.</p>
-                <a href="<?= base_url('movies') ?>" class="btn btn-light btn-lg me-2">
-                    <i class="bi bi-collection-play"></i> Browse Movies
-                </a>
+                <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-light btn-lg me-2">
+                        <i class="bi bi-collection-play"></i> My Library
+                    </button>
+                </form>
                 <a href="<?= base_url('movies/add') ?>" class="btn btn-success btn-lg">
                     <i class="bi bi-plus-circle"></i> Add Movie/TV
                 </a>
@@ -46,9 +49,12 @@
                                 <p class="mb-0">Quick Actions</p>
                             </div>
                             <div class="align-self-center">
-                                <a href="<?= base_url('movies') ?>" class="btn btn-sm btn-outline-dark">
-                                    Manage
-                                </a>
+                                <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
+                                    <?= csrf_field() ?>
+                                    <button type="submit" class="btn btn-sm btn-outline-dark">
+                                        Manage
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -66,12 +72,19 @@
                     <div class="card-body">
                         <p class="card-text">Get started with your media collection:</p>
                         <div class="d-grid gap-2">
-                            <a href="<?= base_url('movies') ?>" class="btn btn-primary">
-                                <i class="bi bi-list"></i> View All Movies
-                            </a>
-                            <a href="<?= base_url('movies') ?>?search=" class="btn btn-outline-primary">
-                                <i class="bi bi-search"></i> Search Movies
-                            </a>
+                            <form method="post" action="<?= base_url('movies') ?>" class="d-grid">
+                                <?= csrf_field() ?>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-list"></i> View All Movies
+                                </button>
+                            </form>
+                            <form method="post" action="<?= base_url('movies') ?>" class="d-grid">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="search" value="">
+                                <button type="submit" class="btn btn-outline-primary">
+                                    <i class="bi bi-search"></i> Search Movies
+                                </button>
+                            </form>
                             <a href="<?= base_url('movies/add') ?>" class="btn btn-success">
                                 <i class="bi bi-plus-circle"></i> Add Movie/TV
                             </a>

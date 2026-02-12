@@ -26,7 +26,8 @@ $alpha = $alpha ?? false;
 
 <div class="row mb-4">
     <div class="col">
-        <form action="<?= base_url('public') ?>" method="get" class="row g-3">
+        <form action="<?= base_url('public') ?>" method="post" class="row g-3">
+            <?= csrf_field() ?>
             <div class="col-md-2">
                 <label for="searchInput" class="visually-hidden">Search media</label>
                 <input type="text" name="search" id="searchInput" class="form-control" placeholder="Search media..." value="<?= esc($search) ?>">
@@ -62,7 +63,10 @@ $alpha = $alpha ?? false;
                 <button type="submit" class="btn btn-primary w-100">Filter</button>
             </div>
             <div class="col-md-2">
-                <a href="<?= base_url('public') ?>" class="btn btn-secondary w-100">Clear</a>
+                <form action="<?= base_url('public') ?>" method="post">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-secondary w-100">Clear</button>
+                </form>
             </div>
         </form>
     </div>
@@ -86,29 +90,30 @@ $alpha = $alpha ?? false;
                     <tr>
                         <td><?= esc($movie['medium_name'] ?? 'Unknown') ?></td>
                         <td>
-                            <span data-bs-toggle="tooltip" data-bs-html="true" data-bs-custom-class="public-tooltip" style="cursor: help;" title="
-                                <strong>Classification:</strong> <?= esc($movie['classification'] ?: 'N/A') ?><br>
-                                <strong>Runtime:</strong> <?= $movie['runtime'] ? esc($movie['runtime']) . ' min' : 'N/A' ?><br>
-                                <strong>Rating:</strong> <?= $movie['rating'] ? esc($movie['rating']) . '/5' : 'N/A' ?><br>
-                                <strong>Media Types:</strong> <?php 
-                                    $mediumNames = [];
-                                    if (!empty($movie['notes']) && strpos($movie['notes'], '<!medium_id>') !== false) {
-                                        $mediumIds = get_medium_ids_from_notes($movie['notes']);
-                                        if (!empty($mediumIds)) {
-                                            foreach ($mediumIds as $mId) {
-                                                if (isset($typesMap[$mId])) {
-                                                    $mediumNames[] = $typesMap[$mId];
-                                                }
-                                            }
+                            <?php
+                            $tooltipContent = 'Classification: ' . esc($movie['classification'] ?: 'N/A') .
+                                'Runtime: ' . ($movie['runtime'] ? esc($movie['runtime']) . ' min' : 'N/A') .
+                                'Rating: ' . ($movie['rating'] ? esc($movie['rating']) . '/5' : 'N/A') .
+                                'Media Types: ';
+
+                            $mediumNames = [];
+                            if (!empty($movie['notes']) && strpos($movie['notes'], '<!medium_id>') !== false) {
+                                $mediumIds = get_medium_ids_from_notes($movie['notes']);
+                                if (!empty($mediumIds)) {
+                                    foreach ($mediumIds as $mId) {
+                                        if (isset($typesMap[$mId])) {
+                                            $mediumNames[] = $typesMap[$mId];
                                         }
                                     }
-                                    if (empty($mediumNames) && !empty($movie['medium_name'])) {
-                                        $mediumNames = [$movie['medium_name']];
-                                    }
-                                    echo !empty($mediumNames) ? esc(implode(', ', $mediumNames)) : 'N/A';
-                                ?><br>
-                                <strong>Status:</strong> <?= $movie['loaned'] ? 'Loaned' : 'Available' ?>
-                            ">
+                                }
+                            }
+                            if (empty($mediumNames) && !empty($movie['medium_name'])) {
+                                $mediumNames = [$movie['medium_name']];
+                            }
+                            $tooltipContent .= !empty($mediumNames) ? esc(implode(', ', $mediumNames)) : 'N/A';
+                            $tooltipContent .= 'Status: ' . ($movie['loaned'] ? 'Loaned' : 'Available');
+                            ?>
+                            <span data-bs-toggle="tooltip" data-bs-html="true" data-bs-custom-class="public-tooltip" style="cursor: help;" title="<?= esc($tooltipContent, 'attr') ?>">
                                 <?= esc($movie['title'] ?: $movie['o_title']) ?>
                             </span>
                         </td>

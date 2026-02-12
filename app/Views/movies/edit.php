@@ -106,6 +106,7 @@
 
             <!-- Edit Form -->
             <form action="<?= base_url('movies/update/' . $movie['movie_id']) ?>" method="post">
+                <?= csrf_field() ?>
                 <input type="hidden" id="fetched_poster_url" name="fetched_poster_url" value="">
 
                 <!-- Poster selection (existing vs fetched) -->
@@ -851,10 +852,18 @@
 
                         fetch('<?= base_url('movies/fetchDetails') ?>', {
                             method: 'POST',
-                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                            headers: { 
+                                'X-Requested-With': 'XMLHttpRequest', 
+                                'Content-Type': 'application/json'
+                            },
                             body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
                         })
-                        .then(r => r.json())
+                        .then(r => {
+                            if (!r.ok && r.status === 403) {
+                                throw new Error('CSRF validation failed. Please refresh the page.');
+                            }
+                            return r.json();
+                        })
                         .then(res => {
                             if (res.success && res.data) {
                                 applyFetchedData(res.data);
@@ -885,10 +894,18 @@
 
                 fetch(`<?= base_url('movies/fetchFromApi/') ?>${movieId}`, {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                    headers: { 
+                        'X-Requested-With': 'XMLHttpRequest', 
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(payload)
                 })
-                .then(r => r.json())
+                .then(r => {
+                    if (!r.ok && r.status === 403) {
+                        throw new Error('CSRF validation failed. Please refresh the page.');
+                    }
+                    return r.json();
+                })
                 .then(res => {
                     if (res.success && res.multiple && res.results) {
                         showMultipleResultsEdit(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);

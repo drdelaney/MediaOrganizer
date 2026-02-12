@@ -68,6 +68,33 @@ class MovieModel extends Model
         return $movie;
     }
 
+    public function getRandomUnseenMovie()
+    {
+        $wishlistTag = $this->db->table('tags')
+            ->where('LOWER(name)', 'wishlist')
+            ->get()
+            ->getRowArray();
+
+        $builder = $this->db->table('movies m')
+            ->where('m.seen', 0);
+
+        if ($wishlistTag) {
+            $subQuery = $this->db->table('movie_tag')
+                ->select('movie_id')
+                ->where('tag_id', $wishlistTag['tag_id']);
+            $builder->whereNotIn('m.movie_id', $subQuery);
+        }
+
+        // Use different random order based on database driver
+        if ($this->db->DBDriver === 'SQLite3') {
+            $builder->orderBy('RANDOM()');
+        } else {
+            $builder->orderBy('RAND()');
+        }
+
+        return $builder->limit(1)->get()->getRowArray();
+    }
+
     /**
      * Get movies with related data
      * Uses fuzzy matching for title/o_title fields
@@ -107,7 +134,10 @@ class MovieModel extends Model
                     $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
                         ->where('mt.tag_id', $wishlistTag['tag_id']);
                 } else {
-                    $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+                    $subQuery = $this->db->table('movie_tag')
+                        ->select('movie_id')
+                        ->where('tag_id', $wishlistTag['tag_id']);
+                    $builder->whereNotIn('m.movie_id', $subQuery);
                 }
             } elseif ($wishlistOnly) {
                 // If wishlist tag doesn't exist, return no results for wishlistOnly
@@ -147,7 +177,17 @@ class MovieModel extends Model
                     ->groupEnd();
             } else {
                 // Non-title fields use regular LIKE
-                $builder->like('m.' . $searchField, $search);
+                $allowedFields = ['director', 'genre', 'country', 'studio', 'barcode', 'notes', 'year', 'movie_id'];
+                if (in_array($searchField, $allowedFields)) {
+                    if ($searchField === 'movie_id') {
+                        $builder->where('m.movie_id', $search);
+                    } else {
+                        $builder->like('m.' . $searchField, $search);
+                    }
+                } else {
+                    // Default to title if field not allowed
+                    $builder->like('m.title', $search);
+                }
             }
         }
 
@@ -161,7 +201,10 @@ class MovieModel extends Model
                 } elseif ($field === 'movie_id') {
                     $builder->orderBy('m.movie_id', $order);
                 } else {
-                    $builder->orderBy('m.' . $field, $order);
+                    $allowedSortFields = ['movie_id', 'title', 'o_title', 'year', 'director', 'rating', 'runtime', 'created', 'updated'];
+                    if (in_array($field, $allowedSortFields)) {
+                        $builder->orderBy('m.' . $field, $order);
+                    }
                 }
             }
         } elseif ($sortBy === 'title') {
@@ -173,7 +216,10 @@ class MovieModel extends Model
             if ($sortBy === 'movie_id') {
                 $builder->orderBy('m.movie_id', $sortOrder);
             } else {
-                $builder->orderBy('m.' . $sortBy, $sortOrder);
+                $allowedSortFields = ['movie_id', 'title', 'o_title', 'year', 'director', 'rating', 'runtime', 'created', 'updated'];
+                if (in_array($sortBy, $allowedSortFields)) {
+                    $builder->orderBy('m.' . $sortBy, $sortOrder);
+                }
             }
         }
 
@@ -245,7 +291,10 @@ class MovieModel extends Model
                     ->getRowArray();
                 
                 if ($wishlistTag) {
-                    $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+                    $subQuery = $this->db->table('movie_tag')
+                        ->select('movie_id')
+                        ->where('tag_id', $wishlistTag['tag_id']);
+                    $builder->whereNotIn('m.movie_id', $subQuery);
                 }
             }
 
@@ -287,7 +336,10 @@ class MovieModel extends Model
                 ->getRowArray();
             
             if ($wishlistTag) {
-                $builder->where("m.movie_id NOT IN (SELECT movie_id FROM movie_tag WHERE tag_id = {$wishlistTag['tag_id']})");
+                $subQuery = $this->db->table('movie_tag')
+                    ->select('movie_id')
+                    ->where('tag_id', $wishlistTag['tag_id']);
+                $builder->whereNotIn('m.movie_id', $subQuery);
             }
         }
 
@@ -302,7 +354,17 @@ class MovieModel extends Model
                     ->orLike('m.studio', $search)
                     ->groupEnd();
             } else {
-                $builder->like('m.' . $searchField, $search);
+                $allowedFields = ['director', 'genre', 'country', 'studio', 'barcode', 'notes', 'year', 'movie_id'];
+                if (in_array($searchField, $allowedFields)) {
+                    if ($searchField === 'movie_id') {
+                        $builder->where('m.movie_id', $search);
+                    } else {
+                        $builder->like('m.' . $searchField, $search);
+                    }
+                } else {
+                    // Default to title if field not allowed
+                    $builder->like('m.title', $search);
+                }
             }
         }
 

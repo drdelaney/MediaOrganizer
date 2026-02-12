@@ -11,6 +11,7 @@ class MediaModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'medium_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[media.name,medium_id,{medium_id}]'
     ];
 
