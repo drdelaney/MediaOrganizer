@@ -30,7 +30,7 @@ class Movies extends BaseController
         if ($this->request->getVar('serendipitous')) {
             $randomMovie = $this->movieModel->getRandomUnseenMovie();
             if ($randomMovie) {
-                return redirect()->to(base_url('movies?search=' . $randomMovie['movie_id'] . '&searchField=movie_id'));
+                return redirect()->to(base_url('movies?search=' . $randomMovie['movie_id'] . '&searchField=movie_id&serendipitous_found=1'));
             }
             return redirect()->to(base_url('movies'))->with('error', 'No unseen movies found!');
         }

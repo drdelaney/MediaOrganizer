@@ -91,9 +91,9 @@ $alpha = $alpha ?? false;
                         <td><?= esc($movie['medium_name'] ?? 'Unknown') ?></td>
                         <td>
                             <?php
-                            $tooltipContent = 'Classification: ' . esc($movie['classification'] ?: 'N/A') .
-                                'Runtime: ' . ($movie['runtime'] ? esc($movie['runtime']) . ' min' : 'N/A') .
-                                'Rating: ' . ($movie['rating'] ? esc($movie['rating']) . '/5' : 'N/A') .
+                            $tooltipContent = 'Classification: ' . esc($movie['classification'] ?: 'N/A') . "\n" .
+                                'Runtime: ' . ($movie['runtime'] ? esc($movie['runtime']) . ' min' : 'N/A') . "\n" .
+                                'Rating: ' . ($movie['rating'] ? esc($movie['rating']) . '/5' : 'N/A') . "\n" .
                                 'Media Types: ';
 
                             $mediumNames = [];
@@ -111,7 +111,7 @@ $alpha = $alpha ?? false;
                                 $mediumNames = [$movie['medium_name']];
                             }
                             $tooltipContent .= !empty($mediumNames) ? esc(implode(', ', $mediumNames)) : 'N/A';
-                            $tooltipContent .= 'Status: ' . ($movie['loaned'] ? 'Loaned' : 'Available');
+                            $tooltipContent .= "\n" . 'Status: ' . ($movie['loaned'] ? 'Loaned' : 'Available');
                             ?>
                             <span data-bs-toggle="tooltip" data-bs-html="true" data-bs-custom-class="public-tooltip" style="cursor: help;" title="<?= esc($tooltipContent, 'attr') ?>">
                                 <?= esc($movie['title'] ?: $movie['o_title']) ?>

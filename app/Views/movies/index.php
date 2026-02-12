@@ -44,8 +44,7 @@ $perPage = $perPage ?? 20;
 
         <!-- Search Form -->
         <div class="search-form mb-4">
-            <form method="post" action="<?= base_url('movies') ?>">
-                <?= csrf_field() ?>
+            <form method="get" action="<?= base_url('movies') ?>">
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label for="search" class="visually-hidden">Search</label>
@@ -80,31 +79,20 @@ $perPage = $perPage ?? 20;
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary w-100" title="Search">
+                            <button type="submit" class="btn btn-primary" title="Search">
                                 <i class="bi bi-search"></i>
                             </button>
-                            <form method="post" action="<?= base_url('movies') ?>" class="w-100">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="serendipitous" value="1">
-                                <button type="submit" class="btn btn-warning w-100" title="Feeling Serendipitous!">
-                                    <i class="bi bi-dice-5"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="d-flex gap-2">
                             <?php if ($search || $tagId): ?>
-                                <form method="post" action="<?= base_url('movies') ?>" class="w-100">
-                                    <?= csrf_field() ?>
-                                    <button type="submit" class="btn btn-outline-secondary w-100">
-                                        <i class="bi bi-x-circle"></i> Clear
-                                    </button>
-                                </form>
+                                <a href="<?= base_url('movies') ?>" class="btn btn-outline-secondary" title="Clear Filters">
+                                    <i class="bi bi-x-circle"></i> Clear
+                                </a>
                             <?php endif; ?>
-                            <a href="<?= base_url('movies/add') ?>" class="btn btn-success w-100">
+                            <a href="<?= base_url('movies?serendipitous=1') ?>" class="btn btn-warning" title="Feeling Serendipitous!">
+                                <i class="bi bi-dice-5"></i>
+                            </a>
+                            <a href="<?= base_url('movies/add') ?>" class="btn btn-success" title="Add Movie">
                                 <i class="bi bi-plus-circle"></i> Add
                             </a>
                         </div>
@@ -120,10 +108,7 @@ $perPage = $perPage ?? 20;
                 <h3 class="mt-3 text-muted">No movies found</h3>
                 <?php if ($search || $tagId): ?>
                     <p class="text-muted">Try adjusting your search criteria</p>
-                    <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
-                        <?= csrf_field() ?>
-                        <button type="submit" class="btn btn-primary">Clear All Filters</button>
-                    </form>
+                    <a href="<?= base_url('movies') ?>" class="btn btn-primary">Clear All Filters</a>
                 <?php else: ?>
                     <p class="text-muted">Start building your movie collection</p>
                     <a href="<?= base_url('movies/add') ?>" class="btn btn-success">Add Your First Movie</a>
@@ -305,60 +290,57 @@ $perPage = $perPage ?? 20;
                         <!-- Previous Page -->
                         <?php if ($currentPage > 1): ?>
                             <li class="page-item">
-                                <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="page" value="<?= $currentPage - 1 ?>">
-                                    <?php if ($search): ?>
-                                        <input type="hidden" name="search" value="<?= esc($search) ?>">
-                                        <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
-                                    <?php endif; ?>
-                                    <?php if ($tagId): ?>
-                                        <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="page-link">
-                                        <i class="bi bi-chevron-left"></i> Previous
-                                    </button>
-                                </form>
+                                <?php 
+                                $prevQuery = ['page' => $currentPage - 1];
+                                if ($search) {
+                                    $prevQuery['search'] = $search;
+                                    $prevQuery['searchField'] = $searchField;
+                                }
+                                if ($tagId) {
+                                    $prevQuery['tag'] = $tagId;
+                                }
+                                ?>
+                                <a href="<?= base_url('movies?' . http_build_query($prevQuery)) ?>" class="page-link">
+                                    <i class="bi bi-chevron-left"></i> Previous
+                                </a>
                             </li>
                         <?php endif; ?>
 
                         <!-- Page Numbers -->
                         <?php for ($page = $startPage; $page <= $endPage; $page++): ?>
                             <li class="page-item <?= $page === $currentPage ? 'active' : '' ?>">
-                                <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="page" value="<?= $page ?>">
-                                    <?php if ($search): ?>
-                                        <input type="hidden" name="search" value="<?= esc($search) ?>">
-                                        <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
-                                    <?php endif; ?>
-                                    <?php if ($tagId): ?>
-                                        <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="page-link">
-                                        <?= $page ?>
-                                    </button>
-                                </form>
+                                <?php 
+                                $pageQuery = ['page' => $page];
+                                if ($search) {
+                                    $pageQuery['search'] = $search;
+                                    $pageQuery['searchField'] = $searchField;
+                                }
+                                if ($tagId) {
+                                    $pageQuery['tag'] = $tagId;
+                                }
+                                ?>
+                                <a href="<?= base_url('movies?' . http_build_query($pageQuery)) ?>" class="page-link">
+                                    <?= $page ?>
+                                </a>
                             </li>
                         <?php endfor; ?>
 
                         <!-- Next Page -->
                         <?php if ($currentPage < $totalPages): ?>
                             <li class="page-item">
-                                <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="page" value="<?= $currentPage + 1 ?>">
-                                    <?php if ($search): ?>
-                                        <input type="hidden" name="search" value="<?= esc($search) ?>">
-                                        <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
-                                    <?php endif; ?>
-                                    <?php if ($tagId): ?>
-                                        <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="page-link">
-                                        Next <i class="bi bi-chevron-right"></i>
-                                    </button>
-                                </form>
+                                <?php 
+                                $nextQuery = ['page' => $currentPage + 1];
+                                if ($search) {
+                                    $nextQuery['search'] = $search;
+                                    $nextQuery['searchField'] = $searchField;
+                                }
+                                if ($tagId) {
+                                    $nextQuery['tag'] = $tagId;
+                                }
+                                ?>
+                                <a href="<?= base_url('movies?' . http_build_query($nextQuery)) ?>" class="page-link">
+                                    Next <i class="bi bi-chevron-right"></i>
+                                </a>
                             </li>
                         <?php endif; ?>
                     </ul>
@@ -366,11 +348,13 @@ $perPage = $perPage ?? 20;
 
                 <!-- Page Jump Dropdown -->
                 <div class="d-flex justify-content-center align-items-center mb-2">
-                    <form class="d-flex align-items-center gap-2" method="post" action="<?= base_url('movies') ?>">
-                        <?= csrf_field() ?>
+                    <form class="d-flex align-items-center gap-2" method="get" action="<?= base_url('movies') ?>">
                         <?php if ($search): ?>
                             <input type="hidden" name="search" value="<?= esc($search) ?>">
                             <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
+                        <?php endif; ?>
+                        <?php if ($tagId): ?>
+                            <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
                         <?php endif; ?>
                         <label for="pageSelect" class="me-2 mb-0">Page:</label>
                         <select id="pageSelect" name="page" class="form-select" style="width: auto;" onchange="this.form.submit()">
