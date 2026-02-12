@@ -28,6 +28,11 @@ class DatabaseMaintenance extends BaseController
     protected $posterModel;
     protected $ratioModel;
     protected $subformatModel;
+    protected $allowedTables = [
+        'achannels', 'acodecs', 'collections', 'languages', 'media',
+        'movie_lang', 'movie_tag', 'movies', 'people', 'posters',
+        'ratios', 'subformats', 'tags', 'vcodecs', 'volumes'
+    ];
 
     public function __construct()
     {
@@ -83,8 +88,12 @@ class DatabaseMaintenance extends BaseController
             $results = [];
 
             foreach ($tables as $table) {
-                $this->db->query("OPTIMIZE TABLE `{$table}`");
-                $results[] = "Optimized table: {$table}";
+                if ($this->validateTable($table)) {
+                    $this->db->query("OPTIMIZE TABLE `{$table}`");
+                    $results[] = "Optimized table: {$table}";
+                } else {
+                    $results[] = "Skipped invalid table: {$table}";
+                }
             }
 
             return $this->response->setJSON([
@@ -111,11 +120,16 @@ class DatabaseMaintenance extends BaseController
             $results = [];
 
             foreach ($tables as $table) {
+                if (!$this->validateTable($table)) {
+                    $results[] = "Skipped invalid table: {$table}";
+                    continue;
+                }
+
                 // Check current engine
                 $engineQuery = "SELECT ENGINE FROM information_schema.TABLES 
                                WHERE TABLE_SCHEMA = DATABASE() 
-                               AND TABLE_NAME = '{$table}'";
-                $engineResult = $this->db->query($engineQuery)->getRowArray();
+                               AND TABLE_NAME = ?";
+                $engineResult = $this->db->query($engineQuery, [$table])->getRowArray();
 
                 if ($engineResult && $engineResult['ENGINE'] !== 'InnoDB') {
                     $this->db->query("ALTER TABLE `{$table}` ENGINE = InnoDB");
@@ -314,11 +328,23 @@ class DatabaseMaintenance extends BaseController
     }
 
     /**
+     * Validate table name against whitelist
+     */
+    private function validateTable($table)
+    {
+        return in_array($table, $this->allowedTables);
+    }
+
+    /**
      * Re-index a specific table
      */
     private function reindexTable($table)
     {
         try {
+            if (!$this->validateTable($table)) {
+                return "Error: Invalid table name {$table}";
+            }
+
             // Get table information
             $query = "SHOW INDEX FROM `{$table}`";
             $indexes = $this->db->query($query)->getResultArray();
@@ -350,9 +376,10 @@ class DatabaseMaintenance extends BaseController
                     ROUND(((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024), 2) as size_mb
                   FROM information_schema.TABLES 
                   WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME IN ?
                   ORDER BY TABLE_NAME";
 
-        return $this->db->query($query)->getResultArray();
+        return $this->db->query($query, [$this->allowedTables])->getResultArray();
     }
 
     /**
@@ -414,8 +441,12 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
+            $data = [
+                'medium_id' => $id,
+                'name' => $name
+            ];
 
-            if ($this->mediaModel->update($id, ['name' => $name])) {
+            if ($this->mediaModel->update($id, $data)) {
                 return $this->response->setJSON([
                     'status' => 'success',
                     'message' => 'Medium updated successfully'
@@ -490,6 +521,7 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $data = [
+                'collection_id' => $id,
                 'name' => $this->request->getPost('name'),
                 'loaned' => $this->request->getPost('loaned') ?: 0
             ];
@@ -568,6 +600,7 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $data = [
+                'volume_id' => $id,
                 'name' => $this->request->getPost('name'),
                 'loaned' => $this->request->getPost('loaned') ?: 0
             ];
@@ -643,8 +676,12 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
+            $data = [
+                'vcodec_id' => $id,
+                'name' => $name
+            ];
 
-            if ($this->vcodecModel->update($id, ['name' => $name])) {
+            if ($this->vcodecModel->update($id, $data)) {
                 return $this->response->setJSON([
                     'status' => 'success',
                     'message' => 'Codec updated successfully'
@@ -709,6 +746,10 @@ class DatabaseMaintenance extends BaseController
             $dump .= "/*!40101 SET NAMES utf8mb4 */;\n\n";
             
             foreach ($tables as $table) {
+                if (!$this->validateTable($table)) {
+                    continue;
+                }
+
                 // Add table structure
                 $dump .= "--\n-- Table structure for table `{$table}`\n--\n\n";
                 $dump .= "DROP TABLE IF EXISTS `{$table}`;\n";
@@ -718,7 +759,7 @@ class DatabaseMaintenance extends BaseController
                 $dump .= $createTable['Create Table'] . ";\n\n";
                 
                 // Get table data
-                $rows = $this->db->query("SELECT * FROM `{$table}`")->getResultArray();
+                $rows = $this->db->table($table)->get()->getResultArray();
                 
                 if (!empty($rows)) {
                     $dump .= "--\n-- Dumping data for table `{$table}`\n--\n\n";
@@ -733,9 +774,7 @@ class DatabaseMaintenance extends BaseController
                             if ($value === null) {
                                 $values[] = 'NULL';
                             } else {
-                                // Escape single quotes and backslashes
-                                $value = str_replace(['\\', "'"], ['\\\\', "\\'"], $value);
-                                $values[] = "'" . $value . "'";
+                                $values[] = $this->db->escape($value);
                             }
                         }
                         $dump .= "INSERT INTO `{$table}` ({$columnList}) VALUES (" . implode(', ', $values) . ");\n";
@@ -908,7 +947,11 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
-            if ($this->achannelModel->update($id, ['name' => $name])) {
+            $data = [
+                'achannel_id' => $id,
+                'name' => $name
+            ];
+            if ($this->achannelModel->update($id, $data)) {
                 return $this->response->setJSON(['status' => 'success', 'message' => 'Audio channel updated successfully']);
             }
             return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->achannelModel->errors())]);
@@ -948,7 +991,11 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
-            if ($this->acodecModel->update($id, ['name' => $name])) {
+            $data = [
+                'acodec_id' => $id,
+                'name' => $name
+            ];
+            if ($this->acodecModel->update($id, $data)) {
                 return $this->response->setJSON(['status' => 'success', 'message' => 'Audio codec updated successfully']);
             }
             return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->acodecModel->errors())]);
@@ -988,7 +1035,11 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
-            if ($this->languageModel->update($id, ['name' => $name])) {
+            $data = [
+                'lang_id' => $id,
+                'name' => $name
+            ];
+            if ($this->languageModel->update($id, $data)) {
                 return $this->response->setJSON(['status' => 'success', 'message' => 'Language updated successfully']);
             }
             return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->languageModel->errors())]);
@@ -1028,7 +1079,11 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
-            if ($this->ratioModel->update($id, ['name' => $name])) {
+            $data = [
+                'ratio_id' => $id,
+                'name' => $name
+            ];
+            if ($this->ratioModel->update($id, $data)) {
                 return $this->response->setJSON(['status' => 'success', 'message' => 'Ratio updated successfully']);
             }
             return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->ratioModel->errors())]);
@@ -1068,7 +1123,11 @@ class DatabaseMaintenance extends BaseController
     {
         if ($this->request->isAJAX()) {
             $name = $this->request->getPost('name');
-            if ($this->subformatModel->update($id, ['name' => $name])) {
+            $data = [
+                'subformat_id' => $id,
+                'name' => $name
+            ];
+            if ($this->subformatModel->update($id, $data)) {
                 return $this->response->setJSON(['status' => 'success', 'message' => 'Subtitle format updated successfully']);
             }
             return $this->response->setJSON(['status' => 'error', 'message' => implode(', ', $this->subformatModel->errors())]);

@@ -70,8 +70,8 @@ $movieCount = isset($movieCount) ? $movieCount : count($movies);
                                                     <br><small class="text-muted"><?= esc($movie['o_title']) ?></small>
                                                 <?php endif; ?>
                                             </td>
-                                            <td><?= $movie['year'] ?: '<span class="text-muted">-</span>' ?></td>
-                                            <td><?= $movie['runtime'] ? $movie['runtime'] . ' min' : '<span class="text-muted">-</span>' ?></td>
+                                            <td><?= esc($movie['year']) ?: '<span class="text-muted">-</span>' ?></td>
+                                            <td><?= $movie['runtime'] ? esc($movie['runtime']) . ' min' : '<span class="text-muted">-</span>' ?></td>
                                             <td><?= $movie['medium_name'] ? esc($movie['medium_name']) : '<span class="text-muted">-</span>' ?></td>
                                             <td>
                                                 <?php if ($movie['rating']): ?>

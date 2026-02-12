@@ -7,11 +7,14 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="addCollectionAlert"></div>
-                <div class="mb-3">
-                    <label for="new_collection_name" class="form-label">Collection Name</label>
-                    <input type="text" class="form-control" id="new_collection_name" placeholder="Enter collection name">
-                </div>
+                <form id="quickAddCollectionForm">
+                    <?= csrf_field() ?>
+                    <div id="addCollectionAlert"></div>
+                    <div class="mb-3">
+                        <label for="new_collection_name" class="form-label">Collection Name</label>
+                        <input type="text" class="form-control" id="new_collection_name" placeholder="Enter collection name">
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -30,11 +33,14 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="addVolumeAlert"></div>
-                <div class="mb-3">
-                    <label for="new_volume_name" class="form-label">Volume Name</label>
-                    <input type="text" class="form-control" id="new_volume_name" placeholder="Enter volume name">
-                </div>
+                <form id="quickAddVolumeForm">
+                    <?= csrf_field() ?>
+                    <div id="addVolumeAlert"></div>
+                    <div class="mb-3">
+                        <label for="new_volume_name" class="form-label">Volume Name</label>
+                        <input type="text" class="form-control" id="new_volume_name" placeholder="Enter volume name">
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -53,19 +59,22 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="addPersonAlert"></div>
-                <div class="mb-3">
-                    <label for="new_person_name" class="form-label">Name</label>
-                    <input type="text" class="form-control" id="new_person_name" placeholder="Enter name">
-                </div>
-                <div class="mb-3">
-                    <label for="new_person_email" class="form-label">Email</label>
-                    <input type="email" class="form-control" id="new_person_email" placeholder="Enter email">
-                </div>
-                <div class="mb-3">
-                    <label for="new_person_phone" class="form-label">Phone (Optional)</label>
-                    <input type="text" class="form-control" id="new_person_phone" placeholder="Enter phone number">
-                </div>
+                <form id="quickAddPersonForm">
+                    <?= csrf_field() ?>
+                    <div id="addPersonAlert"></div>
+                    <div class="mb-3">
+                        <label for="new_person_name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="new_person_name" placeholder="Enter name">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_person_email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="new_person_email" placeholder="Enter email">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_person_phone" class="form-label">Phone (Optional)</label>
+                        <input type="text" class="form-control" id="new_person_phone" placeholder="Enter phone number">
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -86,21 +95,24 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="loanModalAlert"></div>
-                <div class="mb-3">
-                    <label for="loanPersonSelect" class="form-label">Select Person to Loan To:</label>
-                    <div class="input-group">
-                        <select class="form-select" id="loanPersonSelect">
-                            <option value="">-- Select a person --</option>
-                        </select>
-                        <button class="btn btn-outline-secondary" type="button" id="addNewPersonBtn" title="Add New Person">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
+                <form id="loanMovieForm">
+                    <?= csrf_field() ?>
+                    <div id="loanModalAlert"></div>
+                    <div class="mb-3">
+                        <label for="loanPersonSelect" class="form-label">Select Person to Loan To:</label>
+                        <div class="input-group">
+                            <select class="form-select" id="loanPersonSelect">
+                                <option value="">-- Select a person --</option>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" id="addNewPersonBtn" title="Add New Person">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="text-muted small">
-                    <i class="bi bi-info-circle"></i> The movie will be marked as loaned out to the selected person.
-                </div>
+                    <div class="text-muted small">
+                        <i class="bi bi-info-circle"></i> The movie will be marked as loaned out to the selected person.
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -140,9 +152,16 @@ document.addEventListener('DOMContentLoaded', function() {
         // Fetch list of people
         fetch('<?= base_url('movies/getPeople') ?>', {
             method: 'GET',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok && response.status === 403) {
+                throw new Error('CSRF validation failed. Please refresh the page.');
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.status === 'success') {
                 data.people.forEach(person => {
@@ -202,10 +221,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('<?= base_url('movies/addCollection') ?>', {
                 method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok && response.status === 403) {
+                    throw new Error('CSRF validation failed. Please refresh the page.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.status === 'success') {
                     const select = document.getElementById('collection_id');
@@ -253,10 +279,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('<?= base_url('movies/addVolume') ?>', {
                 method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok && response.status === 403) {
+                    throw new Error('CSRF validation failed. Please refresh the page.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.status === 'success') {
                     const select = document.getElementById('volume_id');
@@ -308,10 +341,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('<?= base_url('movies/addPerson') ?>', {
                 method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok && response.status === 403) {
+                    throw new Error('CSRF validation failed. Please refresh the page.');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.status === 'success') {
                     // Check if we are on index page with loanPersonSelect or somewhere else

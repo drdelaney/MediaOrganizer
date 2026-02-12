@@ -4,10 +4,12 @@ namespace App\Controllers;
 class Auth extends BaseController
 {
     protected $passwordFile;
+    protected $configModel;
 
     public function __construct()
     {
         $this->passwordFile = WRITEPATH . 'auth/password.json';
+        $this->configModel = new \App\Models\ConfigurationModel();
         helper('cookie');
     }
 
@@ -24,6 +26,11 @@ class Auth extends BaseController
     // Process login
     public function authenticate()
     {
+        // Check if password is set up
+        if ($this->getStoredPasswordHash() === null) {
+            return redirect()->back()->with('error', 'Authentication is not configured. Please set "auth.initialPassword" in your .env file to populate the initial password.');
+        }
+
         $password = $this->request->getPost('password');
 
         if ($this->verifyPassword($password)) {
@@ -52,41 +59,48 @@ class Auth extends BaseController
     private function verifyPassword($password)
     {
         $storedHash = $this->getStoredPasswordHash();
+        if (!$storedHash) {
+            return false;
+        }
         return password_verify($password, $storedHash);
     }
 
-    // Get stored password hash or create from initial password
+    // Get stored password hash or migrate if necessary
     private function getStoredPasswordHash()
     {
-        if (!file_exists($this->passwordFile)) {
-            $this->initializePassword();
+        // 1. Check database first
+        $dbHash = $this->configModel->getParam('password_hash');
+        if ($dbHash) {
+            return $dbHash;
         }
 
-        $data = json_decode(file_get_contents($this->passwordFile), true);
-        return $data['password_hash'];
+        // 2. Database empty, check if we can migrate from file
+        if (file_exists($this->passwordFile)) {
+            $data = json_decode(file_get_contents($this->passwordFile), true);
+            if (isset($data['password_hash'])) {
+                $hash = $data['password_hash'];
+                $this->savePasswordHash($hash); // Save to DB
+                // We ignore the file from now on as per requirements
+                return $hash;
+            }
+        }
+
+        // 3. No DB, no file, check .env
+        $initialPassword = env('auth.initialPassword');
+        if ($initialPassword) {
+            $hash = password_hash($initialPassword, PASSWORD_DEFAULT);
+            $this->savePasswordHash($hash);
+            return $hash;
+        }
+
+        // 4. No password found
+        return null;
     }
 
-    // Initialize password from .env
-    private function initializePassword()
-    {
-        $initialPassword = env('auth.initialPassword', 'admin123');
-        $this->savePasswordHash(password_hash($initialPassword, PASSWORD_DEFAULT));
-    }
-
-    // Save password hash to file
+    // Save password hash to database
     private function savePasswordHash($hash)
     {
-        $dir = dirname($this->passwordFile);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        $data = [
-            'password_hash' => $hash,
-            'updated_at' => date('c')
-        ];
-
-        file_put_contents($this->passwordFile, json_encode($data));
+        $this->configModel->setParam('password_hash', $hash);
     }
 
     // Set authentication cookie for remember-me functionality
@@ -173,6 +187,11 @@ class Auth extends BaseController
     // Process re-authentication
     public function processReauth()
     {
+        // Check if password is set up
+        if ($this->getStoredPasswordHash() === null) {
+            return redirect()->back()->with('error', 'Authentication is not configured. Please set "auth.initialPassword" in your .env file to populate the initial password.');
+        }
+
         $password = $this->request->getPost('password');
 
         if ($this->verifyPassword($password)) {

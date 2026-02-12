@@ -52,6 +52,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
         <!-- Add Form -->
         <form action="<?= base_url('movies/store') ?>" method="post" id="addMovieForm" enctype="multipart/form-data">
+            <?= csrf_field() ?>
             <input type="hidden" id="selected_poster_url" name="selected_poster_url" value="">
             <input type="hidden" id="tmdb_id_for_posters" name="tmdb_id_for_posters" value="">
             <input type="hidden" id="media_type_for_posters" name="media_type_for_posters" value="">
@@ -792,10 +793,18 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
                     fetch('<?= base_url('movies/fetchDetails') ?>', {
                         method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                        headers: { 
+                            'X-Requested-With': 'XMLHttpRequest', 
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
                     })
-                    .then(r => r.json())
+                    .then(r => {
+                        if (!r.ok && r.status === 403) {
+                            throw new Error('CSRF validation failed. Please refresh the page.');
+                        }
+                        return r.json();
+                    })
                     .then(res => {
                         if (res.success && res.data) {
                             displayPreview(res.data, lookupType);
@@ -824,11 +833,19 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
             fetch('<?= base_url('movies/lookup') ?>', {
                 method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest', 
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(payload)
             })
-            .then(r => r.json())
-            .then(res => {
+        .then(r => {
+            if (!r.ok && r.status === 403) {
+                throw new Error('CSRF validation failed. Please refresh the page.');
+            }
+            return r.json();
+        })
+        .then(res => {
                 if (res.success && res.multiple && res.results) {
                     showMultipleResults(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);
                 } else {
@@ -867,9 +884,17 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
                 fetch('<?= base_url('movies/lookup') ?>', {
                     method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                    headers: { 
+                        'X-Requested-With': 'XMLHttpRequest', 
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(payload)
-                }).then(r => r.json())
+                }).then(r => {
+                    if (!r.ok && r.status === 403) {
+                        throw new Error('CSRF validation failed. Please refresh the page.');
+                    }
+                    return r.json();
+                })
                   .then(res => {
                       if (res.success) {
                           if (res.multiple && res.results) {
@@ -942,7 +967,12 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 },
                 body: JSON.stringify({ tmdb_id: tmdbId, type: mediaType })
             })
-            .then(response => response.json())
+            .then(r => {
+                if (!r.ok && r.status === 403) {
+                    throw new Error('CSRF validation failed. Please refresh the page.');
+                }
+                return r.json();
+            })
             .then(data => {
                 document.getElementById('addPosterLoadingSpinner').style.display = 'none';
 

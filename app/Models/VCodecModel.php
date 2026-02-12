@@ -11,6 +11,7 @@ class VCodecModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'vcodec_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[vcodecs.name,vcodec_id,{vcodec_id}]'
     ];
 

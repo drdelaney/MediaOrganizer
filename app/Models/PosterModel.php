@@ -18,9 +18,15 @@ class PosterModel extends Model
     {
         $db = \Config\Database::connect();
         
-        // Find posters not used in movies table
-        $query = "DELETE FROM posters WHERE md5sum NOT IN (SELECT DISTINCT poster_md5 FROM movies WHERE poster_md5 IS NOT NULL)";
-        $db->query($query);
+        // Find posters not used in movies table using Query Builder
+        $subQuery = $db->table('movies')
+            ->select('poster_md5')
+            ->where('poster_md5 IS NOT NULL')
+            ->distinct();
+        
+        $db->table('posters')
+            ->whereNotIn('md5sum', $subQuery)
+            ->delete();
         
         return $db->affectedRows();
     }

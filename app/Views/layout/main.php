@@ -13,7 +13,11 @@
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- Custom Dark Mode CSS -->
+    <link href="<?= base_url('assets/js/dark-mode.js') ?>" rel="prefetch"> <!-- Pre-fetching for performance -->
     <link href="<?= base_url('assets/css/dark-mode.css') ?>" rel="stylesheet">
+    
+    <!-- CSRF Token for AJAX -->
+    <meta name="<?= csrf_header() ?>" content="<?= csrf_hash() ?>">
     
     <style>
         /* noinspection CssUnusedSymbol */
@@ -26,6 +30,11 @@
         /* noinspection CssUnusedSymbol */
         .rating-stars {
             color: #ffc107;
+        }
+        /* noinspection CssUnusedSymbol */
+        .btn-highlight-pulse {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5);
+            transition: box-shadow 0.2s ease-in-out;
         }
     </style>
 </head>
@@ -61,9 +70,13 @@
                     </li>
                     <?php if ($wishlistTag = get_wishlist_tag()): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="<?= base_url('movies?tag=' . $wishlistTag['tag_id']) ?>">
-                                <i class="bi bi-heart"></i> Wishlist
-                            </a>
+                            <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="tag" value="<?= $wishlistTag['tag_id'] ?>">
+                                <button type="submit" class="nav-link btn btn-link" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
+                                    <i class="bi bi-heart"></i> Wishlist
+                                </button>
+                            </form>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
@@ -144,6 +157,88 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Dark Mode JS -->
     <script src="<?= base_url('assets/js/dark-mode.js') ?>"></script>
+    
+    <script>
+        /**
+         * Global fetch wrapper to include CSRF token in all POST/PUT/DELETE requests
+         */
+        (function() {
+            const { fetch: originalFetch } = window;
+            
+            // Helper to get cookie value
+            const getCookie = (name) => {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            };
+
+            window.fetch = async (...args) => {
+                let [resource, config] = args;
+                
+                // Ensure config exists for method check
+                if (!config) {
+                    config = {};
+                }
+                
+                // Standardize method
+                const method = config.method ? config.method.toUpperCase() : 'GET';
+                
+                if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+                    const csrfHeaderName = '<?= csrf_header() ?>';
+                    const csrfTokenName = '<?= csrf_token() ?>';
+                    const csrfCookieName = '<?= config('Security')->cookieName ?>';
+                    
+                    // Try to get token from cookie first (most up-to-date), then meta tag
+                    let token = getCookie(csrfCookieName);
+                    if (!token) {
+                        const csrfMeta = document.querySelector(`meta[name="${csrfHeaderName}"]`);
+                        if (csrfMeta) {
+                            token = csrfMeta.content;
+                        }
+                    }
+                    
+                    if (token) {
+                        config.headers = config.headers || {};
+                        
+                        // Handle different header types
+                        if (config.headers instanceof Headers) {
+                            config.headers.set(csrfHeaderName, token);
+                        } else {
+                            if (typeof config.headers.set === 'function') {
+                                config.headers.set(csrfHeaderName, token);
+                            } else {
+                                config.headers[csrfHeaderName] = token;
+                            }
+                        }
+                        
+                        // Also inject as form field for FormData
+                        if (config.body instanceof FormData) {
+                            config.body.set(csrfTokenName, token);
+                        }
+                    }
+                }
+                
+                const response = await originalFetch(resource, config);
+                
+                // Update meta tag if a new token is provided in the response headers
+                const newToken = response.headers.get('<?= csrf_header() ?>');
+                if (newToken) {
+                    const csrfMeta = document.querySelector(`meta[name="<?= csrf_header() ?>"]`);
+                    if (csrfMeta) {
+                        csrfMeta.content = newToken;
+                    }
+                }
+                
+                // If we get a 403, it might be a CSRF expiry
+                if (response.status === 403) {
+                    console.warn('Possible CSRF failure (403).');
+                }
+                
+                return response;
+            };
+        })();
+    </script>
     
     <!-- Page-specific scripts -->
     <?= $this->renderSection('scripts') ?>

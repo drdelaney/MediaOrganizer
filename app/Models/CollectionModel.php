@@ -11,6 +11,7 @@ class CollectionModel extends Model
     protected $useTimestamps = false;
 
     protected $validationRules = [
+        'collection_id' => 'permit_empty',
         'name' => 'required|max_length[64]|is_unique[collections.name,collection_id,{collection_id}]',
         'loaned' => 'in_list[0,1]'
     ];

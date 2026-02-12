@@ -150,20 +150,33 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showResults(data, operation) {
-        let html = `<div class="alert alert-${data.status === 'success' ? 'success' : 'danger'}">`;
-        html += `<h6><i class="bi bi-${data.status === 'success' ? 'check-circle' : 'x-circle'}"></i> ${operation}</h6>`;
-        html += `<p><strong>${data.message}</strong></p>`;
+        resultsContent.innerHTML = '';
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${data.status === 'success' ? 'success' : 'danger'}`;
+        
+        const h6 = document.createElement('h6');
+        h6.innerHTML = `<i class="bi bi-${data.status === 'success' ? 'check-circle' : 'x-circle'}"></i> `;
+        h6.appendChild(document.createTextNode(operation));
+        alertDiv.appendChild(h6);
+        
+        const p = document.createElement('p');
+        const strong = document.createElement('strong');
+        strong.textContent = data.message;
+        p.appendChild(strong);
+        alertDiv.appendChild(p);
         
         if (data.results && data.results.length > 0) {
-            html += '<ul class="mb-0">';
+            const ul = document.createElement('ul');
+            ul.className = 'mb-0';
             data.results.forEach(result => {
-                html += `<li>${result}</li>`;
+                const li = document.createElement('li');
+                li.textContent = result;
+                ul.appendChild(li);
             });
-            html += '</ul>';
+            alertDiv.appendChild(ul);
         }
-        html += '</div>';
 
-        resultsContent.innerHTML = html;
+        resultsContent.appendChild(alertDiv);
         resultsArea.style.display = 'block';
         resultsArea.scrollIntoView({ behavior: 'smooth' });
     }

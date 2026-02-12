@@ -41,6 +41,16 @@ Global development guidelines.
 - 
 
 ## Security
+- **CSRF Protection**: All `POST`, `PUT`, `DELETE`, and `PATCH` requests must include CSRF protection.
+    - **Forms**: Always include `<?= csrf_field() ?>` inside every non-GET form.
+    - **AJAX (fetch)**: Ensure the CSRF token is included in the headers (as defined in `app/Config/Security.php`, usually `X-CSRF-TOKEN`).
+    - Use the global fetch interceptor in `app/Views/layout/main.php` but provide explicit headers for critical or complex flows.
+- **SQL Injection Prevention**:
+    - **MANDATORY**: Always use CodeIgniter's Query Builder for all database interactions.
+    - **Raw Queries**: Avoid raw SQL queries (`$db->query()`) whenever possible. If absolutely necessary, use parameter binding (`?` placeholders) and never interpolate variables directly into the SQL string.
+    - **Query Builder**: Rely on Query Builder methods like `where()`, `like()`, `whereIn()`, etc., which automatically handle parameter binding and escaping.
+    - **Dynamic Fields**: When using dynamic field names (e.g., for sorting or searching) or structural SQL elements like table names (e.g., in maintenance tasks), always use an allow-list to validate the name against a set of known safe values.
+    - **Escaping**: Use `$db->escape()` when manual escaping is required (e.g., in database backup exports). Wrap table/column names in backticks (`` ` ``) and validate them against an allow-list.
 - Follow industry-standard security practices, including OWASP Top Ten, HIPAA, NIST, and ISO 27001 guidelines, as applicable.
 - Implement consistent role-based access control (RBAC) for all APIs, ensuring proper authorization checks at the endpoint level.
 - Use secure communication protocols and validate all inputs to prevent injection attacks (e.g., SQL injection, XSS).

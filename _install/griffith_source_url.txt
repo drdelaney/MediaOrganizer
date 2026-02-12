@@ -1,0 +1,2 @@
+# Location of Griffith source code
+https://github.com/FiloSottile/Griffith
