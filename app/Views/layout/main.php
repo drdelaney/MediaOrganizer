@@ -70,13 +70,9 @@
                     </li>
                     <?php if ($wishlistTag = get_wishlist_tag()): ?>
                         <li class="nav-item">
-                            <form method="post" action="<?= base_url('movies') ?>" class="d-inline">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="tag" value="<?= $wishlistTag['tag_id'] ?>">
-                                <button type="submit" class="nav-link btn btn-link" style="padding-top: 0.5rem; padding-bottom: 0.5rem;">
-                                    <i class="bi bi-heart"></i> Wishlist
-                                </button>
-                            </form>
+                            <a class="nav-link" href="<?= base_url('movies?tag=' . $wishlistTag['tag_id']) ?>">
+                                <i class="bi bi-heart"></i> Wishlist
+                            </a>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
