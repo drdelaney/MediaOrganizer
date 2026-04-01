@@ -25,6 +25,20 @@ class ConfigurationModel extends Model
     }
 
     /**
+     * Ensure a configuration parameter exists in the database
+     *
+     * @param string $param
+     * @param string $default
+     * @return void
+     */
+    public function ensureParam(string $param, string $default): void
+    {
+        if (!$this->where('param', $param)->first()) {
+            $this->setParam($param, $default);
+        }
+    }
+
+    /**
      * Set a configuration value
      *
      * @param string $param

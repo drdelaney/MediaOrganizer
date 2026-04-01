@@ -12,43 +12,45 @@ $routes->post('authenticate', 'Auth::authenticate');
 $routes->get('logout', 'Auth::logout');
 $routes->match(['get', 'post'], 'public', 'PublicView::index');
 
-// Re-authentication for maintenance
-$routes->get('reauth', 'Auth::reauth');
-$routes->post('reauth', 'Auth::processReauth');
+// Re-authentication for maintenance (require basic authentication)
+$routes->group('', ['filter' => 'auth'], function($routes) {
+    $routes->get('reauth', 'Auth::reauth');
+    $routes->post('reauth', 'Auth::processReauth');
+});
 
 // Protected routes (require authentication)
 $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('/', 'Home::index');
 
-    // Movie routes
-    $routes->match(['get', 'post'], 'movies', 'Movies::index');
-    $routes->get('movies/view/(:num)', 'Movies::view/$1');
-    $routes->get('movies/edit/(:num)', 'Movies::edit/$1');
-    $routes->post('movies/update/(:num)', 'Movies::update/$1');
-    $routes->get('movies/delete/(:num)', 'Movies::delete/$1');
-    $routes->post('movies/toggleSeen/(:num)', 'Movies::toggleSeen/$1');
-    $routes->post('movies/fetchFromApi/(:num)', 'Movies::fetchFromApi/$1');
-    $routes->get('movies/poster/(:num)', 'Movies::poster/$1');
-    $routes->post('movies/fetchPosters/(:num)', 'Movies::fetchPosters/$1');
-    $routes->post('movies/updatePoster/(:num)', 'Movies::updatePoster/$1');
+    // Media routes
+    $routes->match(['get', 'post'], 'media', 'Media::index');
+    $routes->get('media/view/(:num)', 'Media::view/$1');
+    $routes->get('media/edit/(:num)', 'Media::edit/$1');
+    $routes->post('media/update/(:num)', 'Media::update/$1');
+    $routes->get('media/delete/(:num)', 'Media::delete/$1');
+    $routes->post('media/toggleSeen/(:num)', 'Media::toggleSeen/$1');
+    $routes->post('media/fetchFromApi/(:num)', 'Media::fetchFromApi/$1');
+    $routes->get('media/poster/(:num)', 'Media::poster/$1');
+    $routes->post('media/fetchPosters/(:num)', 'Media::fetchPosters/$1');
+    $routes->post('media/updatePoster/(:num)', 'Media::updatePoster/$1');
 
     // Add/create routes
-    $routes->get('movies/add', 'Movies::add');
-    $routes->post('movies/store', 'Movies::store');
-    $routes->post('movies/lookup', 'Movies::lookup');
-    $routes->post('movies/fetchDetails', 'Movies::fetchDetails');
-    $routes->post('movies/fetchPostersForNew', 'Movies::fetchPostersForNew');
+    $routes->get('media/add', 'Media::add');
+    $routes->post('media/store', 'Media::store');
+    $routes->post('media/lookup', 'Media::lookup');
+    $routes->post('media/fetchDetails', 'Media::fetchDetails');
+    $routes->post('media/fetchPostersForNew', 'Media::fetchPostersForNew');
 
     // Loan management routes
-    $routes->post('movies/loan/(:num)', 'Movies::loan/$1');
-    $routes->post('movies/returnLoan/(:num)', 'Movies::returnLoan/$1');
-    $routes->get('movies/getPeople', 'Movies::getPeople');
-    $routes->post('movies/addPerson', 'Movies::addPerson');
-    $routes->post('movies/addCollection', 'Movies::addCollection');
-    $routes->post('movies/addVolume', 'Movies::addVolume');
+    $routes->post('media/loan/(:num)', 'Media::loan/$1');
+    $routes->post('media/returnLoan/(:num)', 'Media::returnLoan/$1');
+    $routes->get('media/getPeople', 'Media::getPeople');
+    $routes->post('media/addPerson', 'Media::addPerson');
+    $routes->post('media/addCollection', 'Media::addCollection');
+    $routes->post('media/addVolume', 'Media::addVolume');
 
-    // Tag management for movies (AJAX)
-    $routes->post('movies/updateTags/(:num)', 'Movies::updateMovieTags/$1');
+    // Tag management for media (AJAX)
+    $routes->post('media/updateMediaTags/(:num)', 'Media::updateMediaTags/$1');
 
     // Password management
     $routes->get('settings/password', 'Auth::changePassword');
@@ -60,7 +62,7 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->post('people/update/(:num)', 'People::update/$1');
     $routes->post('people/delete/(:num)', 'People::delete/$1');
 
-    // Loans (currently loaned movies) management
+    // Loans (currently loaned media) management
     $routes->get('loans', 'Loans::index');
     $routes->post('loans/returnLoan/(:num)', 'Loans::returnLoan/$1');
     $routes->post('loans/sendReminder', 'Loans::sendReminder');
@@ -99,7 +101,7 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     $routes->post('codec/delete/(:num)', 'DatabaseMaintenance::deleteCodec/$1');
 
     // Tag routes
-    $routes->get('tag/movies/(:num)', 'DatabaseMaintenance::viewTagMovies/$1');
+    $routes->get('tag/media/(:num)', 'DatabaseMaintenance::viewTagMedia/$1');
     $routes->post('tag/add', 'DatabaseMaintenance::addTag');
     $routes->post('tag/update/(:num)', 'DatabaseMaintenance::updateTag/$1');
     $routes->post('tag/delete/(:num)', 'DatabaseMaintenance::deleteTag/$1');
@@ -131,4 +133,7 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
 
     // Poster routes
     $routes->post('poster/purge', 'DatabaseMaintenance::purgePosters');
+
+    // Config routes
+    $routes->post('config/update', 'DatabaseMaintenance::updateConfig');
 });

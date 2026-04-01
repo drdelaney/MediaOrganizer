@@ -59,8 +59,8 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= base_url('movies') ?>">
-                            <i class="bi bi-film"></i> Movies
+                        <a class="nav-link" href="<?= base_url('media') ?>">
+                            <i class="bi bi-film"></i> Media
                         </a>
                     </li>
                     <li class="nav-item">
@@ -70,14 +70,14 @@
                     </li>
                     <?php if ($wishlistTag = get_wishlist_tag()): ?>
                         <li class="nav-item">
-                            <a class="nav-link" href="<?= base_url('movies?tag=' . $wishlistTag['tag_id']) ?>">
+                            <a class="nav-link" href="<?= base_url('media?tag=' . $wishlistTag['tag_id']) ?>">
                                 <i class="bi bi-heart"></i> Wishlist
                             </a>
                         </li>
                     <?php endif; ?>
                     <li class="nav-item">
                         <a class="nav-link" href="<?= base_url('loans') ?>">
-                            <i class="bi bi-person-check-fill"></i> Loaned Movies
+                            <i class="bi bi-person-check-fill"></i> Loaned Media
                         </a>
                     </li>
                     <?php if (session()->get('authenticated')): ?>
@@ -226,9 +226,26 @@
                     }
                 }
                 
-                // If we get a 403, it might be a CSRF expiry
+                // If we get a 403, it might be a CSRF failure
                 if (response.status === 403) {
                     console.warn('Possible CSRF failure (403).');
+                }
+                
+                // Handle session expiration for AJAX
+                if (response.status === 401) {
+                    try {
+                        const data = await response.clone().json();
+                        if (data.reauth) {
+                            window.location.href = '<?= base_url('reauth') ?>';
+                            return response;
+                        }
+                    } catch (e) {
+                        // Not JSON or no reauth flag, handle as usual
+                    }
+                    
+                    // Fallback for standard auth expiration
+                    window.location.href = '<?= base_url('login') ?>';
+                    return response;
                 }
                 
                 return response;

@@ -11,13 +11,13 @@ class LoanModel extends Model
     protected $useTimestamps = false;
 
     /**
-     * Get active loan for a movie
+     * Get active loan for media
      */
-    public function getActiveLoanForMovie($movieId)
+    public function getActiveLoanForMedia($mediaId)
     {
         return $this->select('loans.*, people.name as person_name, people.email, people.phone')
             ->join('people', 'people.person_id = loans.person_id')
-            ->where('loans.movie_id', $movieId)
+            ->where('loans.movie_id', $mediaId)
             ->where('loans.return_date IS NULL')
             ->first();
     }
@@ -35,45 +35,85 @@ class LoanModel extends Model
     }
 
     /**
-     * Get all currently loaned movies with details
+     * Get all currently loaned media with details (including orphaned records)
      */
-    public function getAllLoanedMovies()
+    public function getAllLoanedMedia()
     {
-        return $this->select('loans.*, 
-                             movies.movie_id, movies.title, movies.o_title, movies.year, 
-                             movies.director, movies.genre, movies.poster_md5,
-                             people.person_id, people.name as person_name, 
-                             people.email as person_email, people.phone as person_phone,
-                             media.name as medium_name')
-            ->join('movies', 'movies.movie_id = loans.movie_id')
-            ->join('people', 'people.person_id = loans.person_id')
-            ->join('media', 'movies.medium_id = media.medium_id', 'left')
-            ->where('loans.return_date IS NULL')
-            ->orderBy('loans.date', 'DESC')
-            ->findAll();
+        // First get all media marked as loaned
+        $mediaModel = new \App\Models\MediaModel();
+        $loanedMovies = $mediaModel->where('loaned', 1)->findAll();
+        
+        if (empty($loanedMovies)) {
+            return [];
+        }
+
+        $results = [];
+        foreach ($loanedMovies as $movie) {
+            // Try to find the active loan record for each
+            $loan = $this->select('loans.*, 
+                                 people.person_id, people.name as person_name, 
+                                 people.email as person_email, people.phone as person_phone')
+                ->join('people', 'people.person_id = loans.person_id', 'left')
+                ->where('loans.movie_id', $movie['movie_id'])
+                ->where('loans.return_date IS NULL')
+                ->first();
+
+            // Get medium name if movie has medium_id
+            $mediumName = '';
+            if (!empty($movie['medium_id'])) {
+                $db = \Config\Database::connect();
+                $medium = $db->table('media')->where('medium_id', $movie['medium_id'])->get()->getRowArray();
+                $mediumName = $medium['name'] ?? '';
+            }
+
+            if ($loan) {
+                $results[] = array_merge($movie, $loan, ['medium_name' => $mediumName]);
+            } else {
+                // Orphaned loan: media is marked as loaned but no record in loans table
+                $results[] = array_merge($movie, [
+                    'loan_id' => null,
+                    'person_id' => null,
+                    'person_name' => 'Unknown (Orphaned Record)',
+                    'person_email' => null,
+                    'person_phone' => null,
+                    'date' => null,
+                    'medium_name' => $mediumName
+                ]);
+            }
+        }
+
+        // Sort by date descending (nulls last)
+        usort($results, function($a, $b) {
+            if ($a['date'] === $b['date']) return 0;
+            if ($a['date'] === null) return 1;
+            if ($b['date'] === null) return -1;
+            return strcmp($b['date'], $a['date']);
+        });
+
+        return $results;
     }
 
     /**
-     * Loan a movie to a person
+     * Loan media to a person
      */
-    public function loanMovie($movieId, $personId)
+    public function loanMedia($mediaId, $personId)
     {
         $db = \Config\Database::connect();
         $db->transStart();
 
-        // Check if movie is already loaned
-        $existingLoan = $this->where('movie_id', $movieId)
+        // Check if media is already loaned
+        $existingLoan = $this->where('movie_id', $mediaId)
             ->where('return_date IS NULL')
             ->first();
 
         if ($existingLoan) {
             $db->transRollback();
-            return ['success' => false, 'message' => 'Movie is already loaned out'];
+            return ['success' => false, 'message' => 'Media is already loaned out'];
         }
 
-        // Check if movie is tagged with "wishlist"
+        // Check if media is tagged with "wishlist"
         $tagModel = new \App\Models\TagModel();
-        $tags = $tagModel->getTagsForMovie($movieId);
+        $tags = $tagModel->getTagsForMedia($mediaId);
         $isWishlist = false;
         foreach ($tags as $tag) {
             if (strtolower($tag['name']) === 'wishlist') {
@@ -84,14 +124,14 @@ class LoanModel extends Model
 
         if ($isWishlist) {
             $db->transRollback();
-            return ['success' => false, 'message' => 'Cannot loan a movie that is on the wishlist'];
+            return ['success' => false, 'message' => 'Cannot loan media that is on the wishlist'];
         }
 
         // Create loan record
         $loanData = [
-            'movie_id' => $movieId,
+            'movie_id' => $mediaId,
             'person_id' => $personId,
-            'date' => date('Y-m-d'),
+            'date' => gmdate('Y-m-d'),
             'return_date' => null
         ];
 
@@ -100,11 +140,11 @@ class LoanModel extends Model
             return ['success' => false, 'message' => 'Failed to create loan record'];
         }
 
-        // Update movie loaned status
-        $movieModel = new \App\Models\MovieModel();
-        if (!$movieModel->update($movieId, ['loaned' => 1])) {
+        // Update media loaned status
+        $mediaModel = new \App\Models\MediaModel();
+        if (!$mediaModel->update($mediaId, ['loaned' => 1])) {
             $db->transRollback();
-            return ['success' => false, 'message' => 'Failed to update movie status'];
+            return ['success' => false, 'message' => 'Failed to update media status'];
         }
 
         $db->transComplete();
@@ -113,38 +153,35 @@ class LoanModel extends Model
             return ['success' => false, 'message' => 'Transaction failed'];
         }
 
-        return ['success' => true, 'message' => 'Movie loaned successfully'];
+        return ['success' => true, 'message' => 'Media loaned successfully'];
     }
 
     /**
-     * Return a loaned movie
+     * Return loaned media
      */
-    public function returnMovie($movieId)
+    public function returnMedia($mediaId)
     {
         $db = \Config\Database::connect();
         $db->transStart();
 
         // Find active loan
-        $loan = $this->where('movie_id', $movieId)
+        $loan = $this->where('movie_id', $mediaId)
             ->where('return_date IS NULL')
             ->first();
 
-        if (!$loan) {
+        // Update media loaned status anyway if it's marked as loaned
+        $movieModel = new \App\Models\MediaModel();
+        if (!$movieModel->update($mediaId, ['loaned' => 0])) {
             $db->transRollback();
-            return ['success' => false, 'message' => 'No active loan found for this movie'];
+            return ['success' => false, 'message' => 'Failed to update media status'];
         }
 
-        // Update loan with return date
-        if (!$this->update($loan['loan_id'], ['return_date' => date('Y-m-d')])) {
-            $db->transRollback();
-            return ['success' => false, 'message' => 'Failed to update loan record'];
-        }
-
-        // Update movie loaned status
-        $movieModel = new \App\Models\MovieModel();
-        if (!$movieModel->update($movieId, ['loaned' => 0])) {
-            $db->transRollback();
-            return ['success' => false, 'message' => 'Failed to update movie status'];
+        if ($loan) {
+            // Update loan with return date
+            if (!$this->update($loan['loan_id'], ['return_date' => gmdate('Y-m-d')])) {
+                $db->transRollback();
+                return ['success' => false, 'message' => 'Failed to update loan record'];
+            }
         }
 
         $db->transComplete();
@@ -153,6 +190,10 @@ class LoanModel extends Model
             return ['success' => false, 'message' => 'Transaction failed'];
         }
 
-        return ['success' => true, 'message' => 'Movie returned successfully'];
+        if (!$loan) {
+            return ['success' => true, 'message' => 'Media status was fixed (no active loan record found)'];
+        }
+
+        return ['success' => true, 'message' => 'Media returned successfully'];
     }
 }

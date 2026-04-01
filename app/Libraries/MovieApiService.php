@@ -45,7 +45,7 @@ class MovieApiService
     /**
      * Search for a movie by title and optional year
      */
-    public function searchMovie($title, $year = null)
+    public function searchMedia($title, $year = null)
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');
@@ -78,7 +78,7 @@ class MovieApiService
                 // Get detailed info for the first result
                 $movieId = $data['results'][0]['id'];
                 log_message('info', 'TMDB API: Found movie ID: ' . $movieId);
-                return $this->getMovieDetails($movieId);
+                return $this->getMediaDetails($movieId);
             }
 
             log_message('warning', 'TMDB API: No results found for: ' . $title);
@@ -173,7 +173,7 @@ class MovieApiService
     /**
      * Get detailed movie information by TMDB ID
      */
-    public function getMovieDetails($tmdbId)
+    public function getMediaDetails($tmdbId)
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');
@@ -807,11 +807,11 @@ class MovieApiService
             }
             if ($type === 'movie' && !empty($movieResults)) {
                 $tmdbId = $movieResults[0]['id'];
-                return $this->getMovieDetails($tmdbId);
+                return $this->getMediaDetails($tmdbId);
             }
             // Fallback to whichever exists
             if (!empty($movieResults)) {
-                return $this->getMovieDetails($movieResults[0]['id']);
+                return $this->getMediaDetails($movieResults[0]['id']);
             }
             if (!empty($tvResults)) {
                 return $this->getTvDetails($tvResults[0]['id']);
@@ -877,7 +877,7 @@ class MovieApiService
                 if ($type === 'tv') {
                     return $this->searchTv($clean, $year);
                 }
-                return $this->searchMovie($clean, $year);
+                return $this->searchMedia($clean, $year);
             }
 
             // 3) Fallback minimal dataset

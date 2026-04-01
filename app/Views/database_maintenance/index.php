@@ -133,8 +133,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) return;
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;
             showResults(data, operation);
         })
         .catch(error => {
@@ -263,8 +267,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) return;
+            return response.json();
+        })
         .then(data => {
+            if (!data) return;
             showEnvironmentResults(data);
         })
         .catch(error => {

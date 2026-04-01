@@ -13,6 +13,11 @@ class AuthFilter implements FilterInterface
         if (!session()->get('authenticated')) {
             // Only check cookie if remember-me was enabled
             if (!$this->checkAuthCookie()) {
+                if ($request->isAJAX()) {
+                    return service('response')
+                        ->setJSON(['status' => 'error', 'message' => 'Session expired. Please log in again.'])
+                        ->setStatusCode(401);
+                }
                 return redirect()->to('/login')
                     ->with('message', 'Please log in to continue');
             }

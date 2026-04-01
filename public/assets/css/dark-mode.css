@@ -1,7 +1,7 @@
 /* Dark mode styles for Media Organizer */
 [data-bs-theme="dark"] {
     --bs-body-bg: #212529;
-    --bs-body-color: #dee2e6;
+    --bs-body-color: #f8f9fa;
     --bs-emphasis-color: #ffffff;
     --bs-secondary-bg: #343a40;
     --bs-tertiary-bg: #2b3035;
@@ -12,7 +12,7 @@
 }
 
 [data-bs-theme="dark"] .text-muted {
-    color: #adb5bd !important;
+    color: #ced4da !important;
 }
 
 [data-bs-theme="dark"] .poster-thumbnail {
@@ -79,6 +79,44 @@
 
 [data-bs-theme="dark"] .theme-toggle .moon-icon {
     opacity: 0;
+}
+
+[data-bs-theme="dark"] .ts-control,
+[data-bs-theme="dark"] .ts-control input,
+[data-bs-theme="dark"] .ts-dropdown {
+    color: #f8f9fa !important;
+    background-color: var(--bs-secondary-bg) !important;
+}
+
+[data-bs-theme="dark"] .ts-dropdown .option {
+    color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .ts-dropdown .active {
+    background-color: #0d6efd !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .ts-control .item {
+    color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .text-dark {
+    color: #f8f9fa !important;
+}
+
+[data-bs-theme="dark"] .badge.text-dark {
+    color: #212529 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-dark {
+    color: #f8f9fa;
+    border-color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .btn-outline-dark:hover {
+    background-color: #f8f9fa;
+    color: #212529;
 }
 
 [data-bs-theme="light"] .theme-toggle .moon-icon {

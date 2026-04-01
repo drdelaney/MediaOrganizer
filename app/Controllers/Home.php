@@ -2,18 +2,18 @@
 
 namespace App\Controllers;
 
-use App\Models\MovieModel;
+use App\Models\MediaModel;
 
 class Home extends BaseController
 {
     public function index()
     {
-        $movieModel = new MovieModel();
-        $totalMovies = $movieModel->countMovies();
+        $mediaModel = new MediaModel();
+        $totalMedia = $mediaModel->countMedia(null, 'title', null, true);
         
         $data = [
             'title' => app_name() . ' - Home',
-            'totalMovies' => $totalMovies
+            'totalMedia' => $totalMedia
         ];
 
         return view('home/index', $data);

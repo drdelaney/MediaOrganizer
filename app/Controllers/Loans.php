@@ -10,31 +10,32 @@ class Loans extends BaseController
 
     public function __construct()
     {
+        helper(['form', 'url', 'timezone']);
         $this->loanModel = new LoanModel();
     }
 
     /**
-     * Display all currently loaned movies
+     * Display all currently loaned media
      */
     public function index()
     {
-        $loanedMovies = $this->loanModel->getAllLoanedMovies();
+        $loanedMedia = $this->loanModel->getAllLoanedMedia();
 
         $data = [
-            'title' => 'Currently Loaned Movies',
-            'loanedMovies' => $loanedMovies
+            'title' => 'Currently Loaned Media',
+            'loanedMedia' => $loanedMedia
         ];
 
         return view('loans/index', $data);
     }
 
     /**
-     * Return a loaned movie
+     * Return a loaned media
      */
-    public function returnLoan($movieId)
+    public function returnLoan($mediaId)
     {
         if ($this->request->isAJAX()) {
-            $result = $this->loanModel->returnMovie($movieId);
+            $result = $this->loanModel->returnMedia($mediaId);
 
             return $this->response->setJSON([
                 'status' => $result['success'] ? 'success' : 'error',
@@ -61,8 +62,8 @@ class Loans extends BaseController
             }
 
             // Get all loan details for selected loans
-            $loanedMovies = $this->loanModel->getAllLoanedMovies();
-            $selectedLoanData = array_filter($loanedMovies, function($loan) use ($selectedLoans) {
+            $loanedMedia = $this->loanModel->getAllLoanedMedia();
+            $selectedLoanData = array_filter($loanedMedia, function($loan) use ($selectedLoans) {
                 return in_array($loan['loan_id'], $selectedLoans);
             });
 
@@ -105,7 +106,7 @@ class Loans extends BaseController
                 $email->setFrom($emailConfig->fromEmail, $emailConfig->fromName);
                 $email->setReplyTo($emailConfig->fromEmail, $emailConfig->fromName);
                 $email->setTo($personData['person_email']);
-                $email->setSubject('Friendly Reminder: Movie Return Request');
+                $email->setSubject('Friendly Reminder: Media Return Request');
                 
                 // Build email message
                 $message = $this->buildReminderEmail($personData['person_name'], $personData['loans']);
@@ -149,8 +150,8 @@ class Loans extends BaseController
     private function buildReminderEmail($personName, $loans)
     {
         $emailConfig = config('Email');
-        $movieCount = count($loans);
-        $movieWord = $movieCount === 1 ? 'movie' : 'movies';
+        $mediaCount = count($loans);
+        $mediaWord = 'media';
         
         $message = "<!DOCTYPE html>
 <html lang='en'>
@@ -161,11 +162,11 @@ class Loans extends BaseController
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
         .header { background-color: #007bff; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
         .content { background-color: #f8f9fa; padding: 20px; border-radius: 0 0 5px 5px; }
-        .movie-list { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #007bff; }
-        .movie-item { margin: 10px 0; padding: 10px; border-bottom: 1px solid #e0e0e0; }
-        .movie-item:last-child { border-bottom: none; }
-        .movie-title { font-weight: bold; color: #007bff; }
-        .movie-details { font-size: 0.9em; color: #666; }
+        .media-list { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+        .media-item { margin: 10px 0; padding: 10px; border-bottom: 1px solid #e0e0e0; }
+        .media-item:last-child { border-bottom: none; }
+        .media-title { font-weight: bold; color: #007bff; }
+        .media-details { font-size: 0.9em; color: #666; }
         .footer { margin-top: 20px; padding-top: 15px; border-top: 2px solid #007bff; font-size: 0.9em; color: #666; }
         .days-out { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; }
         .days-recent { background-color: #d4edda; color: #155724; }
@@ -176,15 +177,15 @@ class Loans extends BaseController
 <body>
     <div class='container'>
         <div class='header'>
-            <h2>🎬 Movie Return Reminder</h2>
+            <h2>🎬 Media Return Reminder</h2>
         </div>
         <div class='content'>
             <p>Dear " . htmlspecialchars($personName) . ",</p>
             
-            <p>I hope this message finds you well! This is a friendly reminder that you currently have <strong>{$movieCount} {$movieWord}</strong> on loan from my collection.</p>
+            <p>I hope this message finds you well! This is a friendly reminder that you currently have <strong>{$mediaCount} {$mediaWord}</strong> on loan from my collection.</p>
             
-            <div class='movie-list'>
-                <h3>Loaned Movies:</h3>";
+            <div class='media-list'>
+                <h3>Loaned Media:</h3>";
 
         foreach ($loans as $loan) {
             $title = htmlspecialchars($loan['title'] ?: $loan['o_title'] ?: 'Untitled');
@@ -193,7 +194,7 @@ class Loans extends BaseController
             // Only include medium line if medium_name is not empty
             $mediumLine = '';
             if (!empty($loan['medium_name']) && trim($loan['medium_name']) !== '') {
-                $mediumLine = "<span class='movie-details'>Format: " . htmlspecialchars($loan['medium_name']) . "</span><br>";
+                $mediumLine = "<span class=\"media-details\">Format: " . htmlspecialchars($loan['medium_name']) . "</span><br>";
             }
             
             // Calculate days out
@@ -208,10 +209,8 @@ class Loans extends BaseController
             }
             $daysText = "<span class='days-out {$daysClass}'>{$daysOut} " . ($daysOut === 1 ? 'day' : 'days') . " out</span>";
             
-            $message .= "
-                <p>
-                <div class='movie-item'>
-                    <div class='movie-title'>{$title}{$year}</div>
+            $message .= ">
+                    <div class=\"media-title\">{$title}{$year}</div>
                     {$mediumLine}{$daysText}<br>
                 </div>
                 </p>";
@@ -220,9 +219,9 @@ class Loans extends BaseController
         $message .= "
             </div>
             
-            <p>When you have a moment, I would greatly appreciate it if you could return " . ($movieCount === 1 ? 'this movie' : 'these movies') . " at your earliest convenience.</p>
+            <p>When you have a moment, I would greatly appreciate it if you could return " . ($mediaCount === 1 ? 'this' : 'these') . " at your earliest convenience.</p>
             
-            <p>If you've already returned " . ($movieCount === 1 ? 'it' : 'them') . " or if there are any issues, please let me know and I'll update my records accordingly.</p>
+            <p>If you've already returned " . ($mediaCount === 1 ? 'it' : 'them') . " or if there are any issues, please let me know and I'll update my records accordingly.</p>
             
             <p>Thank you so much for your understanding!</p>
             

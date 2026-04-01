@@ -26,27 +26,27 @@ class TagModel extends Model
     ];
 
     /**
-     * Get all tags for a specific movie
+     * Get all tags for a specific media
      */
-    public function getTagsForMovie($movieId)
+    public function getTagsForMedia($mediaId)
     {
         return $this->db->table('movie_tag mt')
             ->select('t.tag_id, t.name')
             ->join('tags t', 't.tag_id = mt.tag_id')
-            ->where('mt.movie_id', $movieId)
+            ->where('mt.movie_id', $mediaId)
             ->orderBy('t.name', 'ASC')
             ->get()
             ->getResultArray();
     }
 
     /**
-     * Add a tag to a movie
+     * Add a tag to media
      */
-    public function addTagToMovie($movieId, $tagId)
+    public function addTagToMovie($mediaId, $tagId)
     {
         // Check if the relationship already exists
         $existing = $this->db->table('movie_tag')
-            ->where('movie_id', $movieId)
+            ->where('movie_id', $mediaId)
             ->where('tag_id', $tagId)
             ->get()
             ->getRowArray();
@@ -56,30 +56,30 @@ class TagModel extends Model
         }
 
         return $this->db->table('movie_tag')->insert([
-            'movie_id' => $movieId,
+            'movie_id' => $mediaId,
             'tag_id' => $tagId
         ]);
     }
 
     /**
-     * Remove a tag from a movie
+     * Remove a tag from media
      */
-    public function removeTagFromMovie($movieId, $tagId)
+    public function removeTagFromMovie($mediaId, $tagId)
     {
         return $this->db->table('movie_tag')
-            ->where('movie_id', $movieId)
+            ->where('movie_id', $mediaId)
             ->where('tag_id', $tagId)
             ->delete();
     }
 
     /**
-     * Set tags for a movie (replaces all existing tags)
+     * Set tags for media (replaces all existing tags)
      */
-    public function setTagsForMovie($movieId, array $tagIds)
+    public function setTagsForMedia($mediaId, array $tagIds)
     {
-        // Remove all existing tags for this movie
+        // Remove all existing tags for this media
         $this->db->table('movie_tag')
-            ->where('movie_id', $movieId)
+            ->where('movie_id', $mediaId)
             ->delete();
 
         // Add new tags
@@ -87,7 +87,7 @@ class TagModel extends Model
             $data = [];
             foreach ($tagIds as $tagId) {
                 $data[] = [
-                    'movie_id' => $movieId,
+                    'movie_id' => $mediaId,
                     'tag_id' => $tagId
                 ];
             }
@@ -98,9 +98,9 @@ class TagModel extends Model
     }
 
     /**
-     * Get count of movies using this tag
+     * Get count of media using this tag
      */
-    public function getMovieCountForTag($tagId)
+    public function getMediaCountForTag($tagId)
     {
         return $this->db->table('movie_tag')
             ->where('tag_id', $tagId)
@@ -112,7 +112,7 @@ class TagModel extends Model
      */
     public function canDelete($tagId)
     {
-        $count = $this->getMovieCountForTag($tagId);
+        $count = $this->getMediaCountForTag($tagId);
         return $count === 0;
     }
 }

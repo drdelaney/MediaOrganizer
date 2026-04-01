@@ -10,6 +10,7 @@ class Auth extends BaseController
     {
         $this->passwordFile = WRITEPATH . 'auth/password.json';
         $this->configModel = new \App\Models\ConfigurationModel();
+
         helper('cookie');
     }
 
@@ -37,7 +38,8 @@ class Auth extends BaseController
             // Set session
             session()->set([
                 'authenticated' => true,
-                'auth_time' => time()
+                'auth_time' => time(),
+                'recent_auth_time' => time() // Set initial reauth time upon login
             ]);
 
             // Handle remember-me
@@ -49,7 +51,11 @@ class Auth extends BaseController
                 delete_cookie('auth_token');
             }
 
-            return redirect()->to('/');
+            // Redirect to intended URL or home
+            $intendedUrl = session()->get('intended_url') ?: base_url();
+            session()->remove('intended_url');
+
+            return redirect()->to($intendedUrl);
         }
 
         return redirect()->back()->with('error', 'Invalid password');
@@ -176,7 +182,11 @@ class Auth extends BaseController
     {
         // If already recently authenticated, redirect back
         $recentAuthTime = session()->get('recent_auth_time');
-        if ($recentAuthTime && (time() - $recentAuthTime) < (15 * 60)) {
+
+        $deauthTimeMinutes = $this->configModel->getParam('deauth_time', 15);
+        $recentAuthRequired = $deauthTimeMinutes * 60;
+
+        if ($recentAuthTime && (time() - $recentAuthTime) < $recentAuthRequired) {
             $intendedUrl = session()->get('intended_url') ?: base_url();
             return redirect()->to($intendedUrl);
         }

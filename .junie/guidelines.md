@@ -16,3 +16,5 @@
 - Follow the project structure and coding standards defined in `ai_docs/`.
 - Ensure all new features are consistent with the existing UI (Bootstrap 5).
 - Always check for existing helpers or models before creating new ones.
+- There is a database table named 'movie_id'. This should NEVER be renamed in the code.
+- Never edit any files located in `_install`
