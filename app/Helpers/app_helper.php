@@ -297,7 +297,7 @@ if (!function_exists('titles_match')) {
 if (!function_exists('get_wishlist_tag')) {
     function get_wishlist_tag(): ?array
     {
-        $movieModel = new \App\Models\MovieModel();
-        return $movieModel->getTagByName('wishlist');
+        $mediaModel = new \App\Models\MediaModel();
+        return $mediaModel->getTagByName('wishlist');
     }
 }

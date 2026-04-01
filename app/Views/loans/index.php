@@ -2,22 +2,22 @@
 
 <?= $this->section('content') ?>
 <?php
-/** @var array $loanedMovies */
-$loanedMovies = $loanedMovies ?? [];
+/** @var array $loanedMedia */
+$loanedMedia = $loanedMedia ?? [];
 ?>
 
 <div class="row">
     <div class="col-12">
         <h1 class="mb-4">
-            <i class="bi bi-person-check-fill"></i> Currently Loaned Movies
-            <small class="text-muted fs-6">(<?= count($loanedMovies) ?> active loans)</small>
+            <i class="bi bi-person-check-fill"></i> Currently Loaned Media
+            <small class="text-muted fs-6">(<?= count($loanedMedia) ?> active loans)</small>
         </h1>
 
         <!-- Notification Area -->
         <div id="notificationArea"></div>
 
         <!-- Bulk Actions Bar -->
-        <?php if (!empty($loanedMovies)): ?>
+        <?php if (!empty($loanedMedia)): ?>
             <div class="card mb-3">
                 <div class="card-body">
                     <div class="row align-items-center">
@@ -40,14 +40,14 @@ $loanedMovies = $loanedMovies ?? [];
             </div>
         <?php endif; ?>
 
-        <!-- Loaned Movies Table -->
-        <?php if (empty($loanedMovies)): ?>
+        <!-- Loaned Media Table -->
+        <?php if (empty($loanedMedia)): ?>
             <div class="text-center py-5">
                 <i class="bi bi-check-circle display-1 text-success"></i>
-                <h3 class="mt-3 text-muted">No Movies Currently Loaned Out</h3>
-                <p class="text-muted">All movies are in your collection</p>
-                <a href="<?= base_url('movies') ?>" class="btn btn-primary">
-                    <i class="bi bi-collection-play"></i> View Movie Library
+                <h3 class="mt-3 text-muted">No Media Currently Loaned Out</h3>
+                <p class="text-muted">All media that are in your collection</p>
+                <a href="<?= base_url('media') ?>" class="btn btn-primary">
+                    <i class="bi bi-collection-play"></i> View Media Library
                 </a>
             </div>
         <?php else: ?>
@@ -60,7 +60,7 @@ $loanedMovies = $loanedMovies ?? [];
                                 <input type="checkbox" class="form-check-input" id="selectAllHeader" style="cursor: pointer;">
                             </th>
                             <th style="width: 60px;">Poster</th>
-                            <th>Movie Title</th>
+                            <th>Title</th>
                             <th>Loaned To</th>
                             <th>Contact</th>
                             <th>Loan Date</th>
@@ -70,22 +70,26 @@ $loanedMovies = $loanedMovies ?? [];
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($loanedMovies as $loan): ?>
-                            <tr class="loan-row" data-loan-id="<?= $loan['loan_id'] ?>">
+                        <?php foreach ($loanedMedia as $loan): ?>
+                            <tr class="loan-row <?= empty($loan['loan_id']) ? 'table-warning' : '' ?>" data-loan-id="<?= $loan['loan_id'] ?>">
                                 <!-- Checkbox -->
                                 <td>
-                                    <label for="loan-checkbox-<?= $loan['loan_id'] ?>" class="visually-hidden">Select loan for <?= esc($loan['title'] ?: $loan['o_title'] ?: 'this movie') ?></label>
-                                    <input type="checkbox" class="form-check-input loan-checkbox" 
-                                           id="loan-checkbox-<?= $loan['loan_id'] ?>"
-                                           data-loan-id="<?= $loan['loan_id'] ?>"
-                                           data-person-id="<?= $loan['person_id'] ?>"
-                                           data-person-email="<?= esc($loan['person_email'] ?? '') ?>"
-                                           style="cursor: pointer;">
+                                    <?php if (!empty($loan['loan_id'])): ?>
+                                        <label for="loan-checkbox-<?= $loan['loan_id'] ?>" class="visually-hidden">Select loan for <?= esc($loan['title'] ?: $loan['o_title'] ?: 'this media entry') ?></label>
+                                        <input type="checkbox" class="form-check-input loan-checkbox" 
+                                               id="loan-checkbox-<?= $loan['loan_id'] ?>"
+                                               data-loan-id="<?= $loan['loan_id'] ?>"
+                                               data-person-id="<?= $loan['person_id'] ?>"
+                                               data-person-email="<?= esc($loan['person_email'] ?? '') ?>"
+                                               style="cursor: pointer;">
+                                    <?php else: ?>
+                                        <i class="bi bi-exclamation-triangle-fill text-warning" title="Broken Loan Record"></i>
+                                    <?php endif; ?>
                                 </td>
                                 <!-- Poster -->
                                 <td>
                                     <?php if ($loan['poster_md5']): ?>
-                                        <img src="<?= base_url('movies/poster/' . $loan['movie_id']) ?>" 
+                                        <img src="<?= base_url('media/poster/' . $loan['movie_id']) ?>"
                                              class="poster-thumbnail" 
                                              alt="<?= esc($loan['title']) ?>"
                                              loading="lazy">
@@ -96,10 +100,10 @@ $loanedMovies = $loanedMovies ?? [];
                                     <?php endif; ?>
                                 </td>
 
-                                <!-- Movie Title -->
+                                <!-- Media Title -->
                                 <td>
                                     <div>
-                                        <a href="<?= base_url('movies/view/' . $loan['movie_id']) ?>" 
+                                        <a href="<?= base_url('media/view/' . $loan['movie_id']) ?>"
                                            class="text-decoration-none">
                                             <strong><?= esc($loan['title'] ?: $loan['o_title'] ?: 'Untitled') ?></strong>
                                         </a>
@@ -140,27 +144,33 @@ $loanedMovies = $loanedMovies ?? [];
 
                                 <!-- Loan Date -->
                                 <td>
-                                    <?php
-                                    $loanDate = new DateTime($loan['date']);
-                                    echo $loanDate->format('M d, Y');
-                                    ?>
+                                    <?php if ($loan['date']): ?>
+                                        <?= user_date($loan['date'], 'M d, Y') ?>
+                                    <?php else: ?>
+                                        <span class="text-muted">Unknown</span>
+                                    <?php endif; ?>
                                 </td>
 
                                 <!-- Days Out -->
                                 <td>
                                     <?php
-                                    $now = new DateTime();
-                                    $daysOut = $now->diff($loanDate)->days;
-                                    $badgeClass = 'bg-success';
-                                    if ($daysOut > 30) {
-                                        $badgeClass = 'bg-danger';
-                                    } elseif ($daysOut > 14) {
-                                        $badgeClass = 'bg-warning';
-                                    }
-                                    ?>
-                                    <span class="badge <?= $badgeClass ?>">
-                                        <?= $daysOut ?> <?= $daysOut === 1 ? 'day' : 'days' ?>
-                                    </span>
+                                    if ($loan['date']):
+                                        $loanDate = new DateTime($loan['date'], new DateTimeZone('UTC'));
+                                        $now = new DateTime('now', new DateTimeZone('UTC'));
+                                        $daysOut = $now->diff($loanDate)->days;
+                                        $badgeClass = 'bg-success';
+                                        if ($daysOut > 30) {
+                                            $badgeClass = 'bg-danger';
+                                        } elseif ($daysOut > 14) {
+                                            $badgeClass = 'bg-warning';
+                                        }
+                                        ?>
+                                        <span class="badge <?= $badgeClass ?>">
+                                            <?= $daysOut ?> <?= $daysOut === 1 ? 'day' : 'days' ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
                                 </td>
 
                                 <!-- Medium -->
@@ -171,16 +181,16 @@ $loanedMovies = $loanedMovies ?? [];
                                 <!-- Actions -->
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">
-                                        <a href="<?= base_url('movies/view/' . $loan['movie_id']) ?>" 
+                                        <a href="<?= base_url('media/view/' . $loan['movie_id']) ?>"
                                            class="btn btn-outline-primary" 
-                                           title="View Movie Details">
+                                           title="View Media Details">
                                             <i class="bi bi-eye"></i>
                                         </a>
                                         <button type="button" 
                                                 class="btn btn-outline-success return-loan-btn"
                                                 data-movie-id="<?= $loan['movie_id'] ?>"
-                                                data-movie-title="<?= esc($loan['title'] ?: $loan['o_title'] ?: 'this movie') ?>"
-                                                title="Return Movie">
+                                                data-movie-title="<?= esc($loan['title'] ?: $loan['o_title'] ?: 'this media') ?>"
+                                                title="Return Media">
                                             <i class="bi bi-arrow-return-left"></i> Return
                                         </button>
                                     </div>
@@ -197,7 +207,7 @@ $loanedMovies = $loanedMovies ?? [];
                     <div class="card text-center">
                         <div class="card-body">
                             <h5 class="card-title">Total Loaned</h5>
-                            <p class="card-text display-6"><?= count($loanedMovies) ?></p>
+                            <p class="card-text display-6"><?= count($loanedMedia) ?></p>
                         </div>
                     </div>
                 </div>
@@ -208,11 +218,13 @@ $loanedMovies = $loanedMovies ?? [];
                             <p class="card-text display-6">
                                 <?php
                                 $overdue = 0;
-                                $now = new DateTime();
-                                foreach ($loanedMovies as $loan) {
-                                    $loanDate = new DateTime($loan['date']);
-                                    if ($now->diff($loanDate)->days > 30) {
-                                        $overdue++;
+                                $now = new DateTime('now', new DateTimeZone('UTC'));
+                                foreach ($loanedMedia as $loan) {
+                                    if ($loan['date']) {
+                                        $loanDate = new DateTime($loan['date'], new DateTimeZone('UTC'));
+                                        if ($now->diff($loanDate)->days > 30) {
+                                            $overdue++;
+                                        }
                                     }
                                 }
                                 echo $overdue;
@@ -227,7 +239,7 @@ $loanedMovies = $loanedMovies ?? [];
                             <h5 class="card-title">Unique Borrowers</h5>
                             <p class="card-text display-6">
                                 <?php
-                                $uniquePeople = array_unique(array_column($loanedMovies, 'person_id'));
+                                $uniquePeople = array_unique(array_filter(array_column($loanedMedia, 'person_id')));
                                 echo count($uniquePeople);
                                 ?>
                             </p>
@@ -261,6 +273,7 @@ $loanedMovies = $loanedMovies ?? [];
         transition: background-color 0.3s ease;
     }
     
+    /*noinspection CssUnusedSymbol*/
     .loan-row.returning {
         opacity: 0.6;
     }

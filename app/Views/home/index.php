@@ -1,7 +1,7 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
-<?php $totalMovies = isset($totalMovies) ? (int)$totalMovies : 0; ?>
+<?php $totalMedia = isset($totalMedia) ? (int)$totalMedia : 0; ?>
 
 <div class="row">
     <div class="col-12">
@@ -9,12 +9,12 @@
         <div class="jumbotron bg-primary text-white rounded p-5 mb-4">
             <div class="container-fluid py-5">
                 <h1 class="display-4 fw-bold">Welcome to <?= esc(app_name()) ?></h1>
-                <p class="fs-4">Organize and manage your movie collection with ease.</p>
-                <a href="<?= base_url('movies') ?>" class="btn btn-light btn-lg me-2">
+                <p class="fs-4">Organize and manage your media collection with ease.</p>
+                <a href="<?= base_url('media') ?>" class="btn btn-light btn-lg me-2">
                     <i class="bi bi-collection-play"></i> My Library
                 </a>
-                <a href="<?= base_url('movies/add') ?>" class="btn btn-success btn-lg">
-                    <i class="bi bi-plus-circle"></i> Add Movie/TV
+                <a href="<?= base_url('media/add') ?>" class="btn btn-success btn-lg">
+                    <i class="bi bi-plus-circle"></i> Add Media
                 </a>
             </div>
         </div>
@@ -26,8 +26,8 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between">
                             <div>
-                                <h4><?= number_format($totalMovies) ?></h4>
-                                <p class="mb-0">Total Movies</p>
+                                <h4><?= number_format($totalMedia) ?></h4>
+                                <p class="mb-0">Total Media Entries</p>
                             </div>
                             <div class="align-self-center">
                                 <i class="bi bi-film display-4"></i>
@@ -46,7 +46,7 @@
                                 <p class="mb-0">Quick Actions</p>
                             </div>
                             <div class="align-self-center">
-                                <a href="<?= base_url('movies') ?>" class="btn btn-sm btn-outline-dark">
+                                <a href="<?= base_url('media') ?>" class="btn btn-sm btn-outline-dark">
                                     Manage
                                 </a>
                             </div>
@@ -66,14 +66,14 @@
                     <div class="card-body">
                         <p class="card-text">Get started with your media collection:</p>
                         <div class="d-grid gap-2">
-                            <a href="<?= base_url('movies') ?>" class="btn btn-primary">
-                                <i class="bi bi-list"></i> View All Movies
+                            <a href="<?= base_url('media') ?>" class="btn btn-primary">
+                                <i class="bi bi-list"></i> View All Media
                             </a>
-                            <a href="<?= base_url('movies') ?>" class="btn btn-outline-primary">
-                                <i class="bi bi-search"></i> Search Movies
+                            <a href="<?= base_url('media') ?>" class="btn btn-outline-primary">
+                                <i class="bi bi-search"></i> Search Media
                             </a>
-                            <a href="<?= base_url('movies/add') ?>" class="btn btn-success">
-                                <i class="bi bi-plus-circle"></i> Add Movie/TV
+                            <a href="<?= base_url('media/add') ?>" class="btn btn-success">
+                                <i class="bi bi-plus-circle"></i> Add Media
                             </a>
                             <?php if (session()->get('authenticated')): ?>
                                 <a href="<?= base_url('database-maintenance/manage-lookups') ?>" class="btn btn-outline-secondary">
@@ -92,35 +92,35 @@
                     </div>
                     <div class="card-body">
                         <p class="card-text">
-                            <?= esc(app_name()) ?> helps you catalog and manage your movie collection. 
+                            <?= esc(app_name()) ?> helps you catalog and manage your media collection.
                             Features include:
                         </p>
                         <ul class="list-unstyled">
-                            <li><i class="bi bi-check text-success"></i> Movie catalog management</li>
+                            <li><i class="bi bi-check text-success"></i> Media catalog management</li>
                             <li><i class="bi bi-check text-success"></i> Search and filtering</li>
                             <li><i class="bi bi-check text-success"></i> Rating and status tracking</li>
                             <li><i class="bi bi-check text-success"></i> Loan management</li>
                             <li><i class="bi bi-check text-success"></i> Wishlist support if the wishlist tag exists</li>
                             <li><i class="bi bi-check text-success"></i> Dark/Light theme support</li>
                             <li><i class="bi bi-check text-success"></i> Public view for sharing lists</li>
-                            <li><i class="bi bi-check text-success"></i> Sadly vibe coded as an experiment</li>
+                            <li><i class="bi bi-check text-success"></i> Sadly mostly vibe coded as an experiment</li>
                         </ul>
                     </div>
                 </div>
             </div>
         </div>
 
-        <?php if ($totalMovies === 0): ?>
+        <?php if ($totalMedia === 0): ?>
         <!-- Empty State -->
         <div class="row mt-4">
             <div class="col-12">
                 <div class="card border-2 border-dashed">
                     <div class="card-body text-center py-5">
                         <i class="bi bi-film display-1 text-muted"></i>
-                        <h3 class="mt-3">No Movies Yet</h3>
-                        <p class="text-muted">Your movie collection is empty. Start by adding your first movie!</p>
-                        <a href="<?= base_url('movies/add') ?>" class="btn btn-success">
-                            <i class="bi bi-plus-circle"></i> Add Your First Movie
+                        <h3 class="mt-3">No Media Yet</h3>
+                        <p class="text-muted">Your media collection is empty. Start by adding your first media entry!</p>
+                        <a href="<?= base_url('media/add') ?>" class="btn btn-success">
+                            <i class="bi bi-plus-circle"></i> Add Your First Media Entry
                         </a>
                     </div>
                 </div>

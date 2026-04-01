@@ -2,7 +2,7 @@
 
 namespace App\Controllers;
 
-use App\Models\MediaModel;
+use App\Models\MediumModel;
 use App\Models\CollectionModel;
 use App\Models\VolumeModel;
 use App\Models\VCodecModel;
@@ -29,15 +29,16 @@ class DatabaseMaintenance extends BaseController
     protected $ratioModel;
     protected $subformatModel;
     protected $allowedTables = [
-        'achannels', 'acodecs', 'collections', 'languages', 'media',
-        'movie_lang', 'movie_tag', 'movies', 'people', 'posters',
+        'achannels', 'acodecs', 'collections', 'configuration', 'filters', 'languages', 'loans', 'media',
+        'migrations', 'movie_lang', 'movie_tag', 'movies', 'people', 'posters',
         'ratios', 'subformats', 'tags', 'vcodecs', 'volumes'
     ];
 
     public function __construct()
     {
+        helper(['form', 'url', 'timezone']);
         $this->db = \Config\Database::connect();
-        $this->mediaModel = new MediaModel();
+        $this->mediaModel = new MediumModel();
         $this->collectionModel = new CollectionModel();
         $this->volumeModel = new VolumeModel();
         $this->vcodecModel = new VCodecModel();
@@ -392,8 +393,17 @@ class DatabaseMaintenance extends BaseController
 
         // Get movie count for each tag
         foreach ($tags as &$tag) {
-            $tag['movie_count'] = $tagModel->getMovieCountForTag($tag['tag_id']);
+            $tag['movie_count'] = $tagModel->getMediaCountForTag($tag['tag_id']);
         }
+
+        $configModel = new \App\Models\ConfigurationModel();
+        
+        // Ensure default settings exist in the database for the form
+        $configModel->ensureParam('timezone', 'UTC');
+        $configModel->ensureParam('deauth_time', '15');
+
+        $currentTimezone = $configModel->getParam('timezone', 'UTC');
+        $deauthTime = $configModel->getParam('deauth_time', 15);
 
         $data = [
             'title' => 'Manage Lookup Tables',
@@ -408,10 +418,53 @@ class DatabaseMaintenance extends BaseController
             'languages' => $this->languageModel->orderBy('name')->findAll(),
             'ratios' => $this->ratioModel->orderBy('name')->findAll(),
             'subformats' => $this->subformatModel->orderBy('name')->findAll(),
-            'poster_count' => $this->posterModel->countAllResults()
+            'poster_count' => $this->posterModel->countAllResults(),
+            'currentTimezone' => $currentTimezone,
+            'deauthTime' => $deauthTime,
+            'availableTimezones' => \DateTimeZone::listIdentifiers()
         ];
 
         return view('database_maintenance/manage_lookups', $data);
+    }
+
+    /**
+     * Update configuration parameters
+     */
+    public function updateConfig()
+    {
+        if ($this->request->isAJAX()) {
+            $configModel = new \App\Models\ConfigurationModel();
+            $timezone = $this->request->getPost('timezone');
+            $deauthTime = $this->request->getPost('deauth_time');
+
+            $success = true;
+
+            if ($timezone) {
+                if (!$configModel->setParam('timezone', $timezone)) {
+                    $success = false;
+                }
+            }
+
+            if ($deauthTime !== null) {
+                if (!$configModel->setParam('deauth_time', (string)$deauthTime)) {
+                    $success = false;
+                }
+            }
+
+            if ($success) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Configuration updated successfully'
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Failed to update configuration'
+            ]);
+        }
+        
+        return $this->response->setStatusCode(404);
     }
 
     // MEDIUM MANAGEMENT
@@ -811,7 +864,7 @@ class DatabaseMaintenance extends BaseController
     /**
      * View all movies for a specific tag
      */
-    public function viewTagMovies($tagId)
+    public function viewTagMedia($tagId)
     {
         $tagModel = new \App\Models\TagModel();
         $tag = $tagModel->find($tagId);
@@ -820,8 +873,8 @@ class DatabaseMaintenance extends BaseController
             throw new \CodeIgniter\Exceptions\PageNotFoundException('Tag not found');
         }
 
-        // Get all movies with this tag
-        $movies = $this->db->table('movie_tag mt')
+        // Get all media with this tag
+        $media = $this->db->table('movie_tag mt')
             ->select('m.movie_id, m.title, m.o_title, m.year, m.runtime, m.rating, m.seen, m.loaned, m.poster_md5, med.name as medium_name')
             ->join('movies m', 'm.movie_id = mt.movie_id')
             ->join('media med', 'med.medium_id = m.medium_id', 'left')
@@ -831,13 +884,13 @@ class DatabaseMaintenance extends BaseController
             ->getResultArray();
 
         $data = [
-            'title' => 'Movies Tagged: ' . $tag['name'],
+            'title' => 'Media Tagged: ' . $tag['name'],
             'tag' => $tag,
-            'movies' => $movies,
-            'movieCount' => count($movies)
+            'media' => $media,
+            'mediaCount' => count($media)
         ];
 
-        return view('database_maintenance/tag_movies', $data);
+        return view('database_maintenance/tag_media', $data);
     }
 
     /**
@@ -905,12 +958,12 @@ class DatabaseMaintenance extends BaseController
             $tagModel = new \App\Models\TagModel();
 
             // Check if tag is in use
-            $movieCount = $tagModel->getMovieCountForTag($id);
+            $mediaCount = $tagModel->getMediaCountForTag($id);
 
-            if ($movieCount > 0) {
+            if ($mediaCount > 0) {
                 return $this->response->setJSON([
                     'status' => 'error',
-                    'message' => "Cannot delete: Tag is used by {$movieCount} movie(s). Please remove it from all movies first."
+                    'message' => "Cannot delete: Tag is used by {$mediaCount} movie(s). Please remove it from all movies first."
                 ]);
             }
 

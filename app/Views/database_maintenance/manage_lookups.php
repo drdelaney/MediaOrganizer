@@ -14,6 +14,9 @@ $languages = isset($languages) && is_array($languages) ? $languages : [];
 $ratios = isset($ratios) && is_array($ratios) ? $ratios : [];
 $subformats = isset($subformats) && is_array($subformats) ? $subformats : [];
 $poster_count = isset($poster_count) ? $poster_count : 0;
+$currentTimezone = isset($currentTimezone) ? $currentTimezone : 'UTC';
+$deauthTime = isset($deauthTime) ? $deauthTime : 15;
+$availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC'];
 ?>
 
     <div class="row">
@@ -33,7 +36,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
             <!-- Tabs -->
             <ul class="nav nav-tabs mb-4" id="lookupTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="mediums-tab" data-bs-toggle="tab" data-bs-target="#mediums" type="button">
+                    <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button">
+                        <i class="bi bi-gear"></i> Settings
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="mediums-tab" data-bs-toggle="tab" data-bs-target="#mediums" type="button">
                         <i class="bi bi-disc"></i> Mediums
                     </button>
                 </li>
@@ -97,7 +105,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
             <!-- Tab Content -->
             <div class="tab-content" id="lookupTabsContent">
                 <!-- MEDIUMS TAB -->
-                <div class="tab-pane fade show active" id="mediums" role="tabpanel">
+                <div class="tab-pane fade" id="mediums" role="tabpanel">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0"><i class="bi bi-disc"></i> Mediums</h5>
@@ -285,7 +293,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 <tr>
                                     <th>ID</th>
                                     <th>Name</th>
-                                    <th>Movies</th>
+                                    <th>Media Matches</th>
                                     <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
@@ -294,7 +302,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                     <tr data-id="<?= $tag['tag_id'] ?>">
                                         <td><?= $tag['tag_id'] ?></td>
                                         <td>
-                                            <a href="<?= base_url('movies?tag=' . $tag['tag_id']) ?>" class="text-decoration-none">
+                                            <a href="<?= base_url('media?tag=' . $tag['tag_id']) ?>" class="text-decoration-none">
                                                 <?= esc($tag['name']) ?>
                                             </a>
                                         </td>
@@ -578,12 +586,48 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         <div class="card-body">
                             <p>Total posters in database: <strong><?= $poster_count ?></strong></p>
                             <p class="text-muted small">
-                                Posters are stored in the database and linked to movies by MD5 hash. 
-                                Purging will remove all posters that are not currently associated with any movie.
+                                Posters are stored in the database and linked to media by MD5 hash.
+                                Purging will remove all posters that are not currently associated with any media.
                             </p>
                             <div id="purge-result" class="mt-3" style="display: none;">
                                 <div class="alert alert-success"></div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SETTINGS TAB -->
+                <div class="tab-pane fade show active" id="settings" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-gear"></i> Application Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="settingsForm">
+                                <?= csrf_field() ?>
+                                <div class="mb-3">
+                                    <label for="config_timezone" class="form-label">System Timezone</label>
+                                    <select class="form-select" id="config_timezone" name="timezone">
+                                        <?php foreach ($availableTimezones as $tz): ?>
+                                            <option value="<?= $tz ?>" <?= $tz === $currentTimezone ? 'selected' : '' ?>><?= $tz ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text">
+                                        This timezone will be used for all date/time displays on the frontend.
+                                        Database storage is always in UTC.
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="config_deauth_time" class="form-label">Deauthentication Timeout (minutes)</label>
+                                    <input type="number" class="form-control" id="config_deauth_time" name="deauth_time" value="<?= $deauthTime ?>" min="1" max="1440">
+                                    <div class="form-text">
+                                        The number of minutes before a user is required to re-authenticate when accessing database maintenance areas.
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-primary" id="saveSettings">
+                                    <i class="bi bi-save"></i> Save Settings
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -1195,12 +1239,23 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
 <?= $this->endsection() ?>
 
 <?= $this->section('scripts') ?>
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Tom Select for timezone
+            new TomSelect('#config_timezone', {
+                create: false,
+                sortField: {
+                    field: 'text',
+                    direction: 'asc'
+                }
+            });
+
             // Helper function to get active tab ID
             function getActiveTabId() {
                 const activeTab = document.querySelector('#lookupTabs .nav-link.active');
-                return activeTab ? activeTab.getAttribute('data-bs-target') : '#mediums';
+                return activeTab ? activeTab.getAttribute('data-bs-target') : '#settings';
             }
             
             // Helper function to save current tab to URL hash
@@ -1211,7 +1266,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
             // Restore active tab from URL hash on page load
             function restoreActiveTab() {
                 const hash = window.location.hash;
-                if (hash && hash !== '#mediums') {
+                if (hash && hash !== '#settings') {
                     const tabButton = document.querySelector(`[data-bs-target="${hash}"]`);
                     if (tabButton) {
                         const tab = new bootstrap.Tab(tabButton);
@@ -1281,6 +1336,38 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                 }, 5000);
             }
 
+            // SETTINGS OPERATIONS
+            document.getElementById('saveSettings').addEventListener('click', function() {
+                const form = document.getElementById('settingsForm');
+                const formData = new FormData(form);
+
+                fetch('<?= base_url('database-maintenance/config/update') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
+                    },
+                    body: formData
+                })
+                .then(response => {
+                    if (response.status === 401) return; // Handled by global interceptor
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    if (data.status === 'success') {
+                        showAlert(data.message, 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        showAlert(data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating config:', error);
+                    showAlert('Failed to update configuration', 'danger');
+                });
+            });
+
             // MEDIUM OPERATIONS
             document.getElementById('saveMedium').addEventListener('click', function() {
                 const name = document.getElementById('medium_name').value;
@@ -1293,8 +1380,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addMediumModal')).hide();
@@ -1330,8 +1421,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editMediumModal')).hide();
@@ -1355,8 +1450,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 'X-Requested-With': 'XMLHttpRequest'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
+                                if (!data) return;
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
                                     location.reload();
@@ -1381,8 +1480,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&loaned=' + loaned
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addCollectionModal')).hide();
@@ -1421,8 +1524,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&loaned=' + loaned
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editCollectionModal')).hide();
@@ -1447,8 +1554,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
+                                if (!data) return;
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
                                     location.reload();
@@ -1474,8 +1585,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&loaned=' + loaned
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addVolumeModal')).hide();
@@ -1514,8 +1629,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&loaned=' + loaned
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editVolumeModal')).hide();
@@ -1540,7 +1659,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
@@ -1565,8 +1687,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addCodecModal')).hide();
@@ -1602,8 +1728,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editCodecModal')).hide();
@@ -1628,7 +1758,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
@@ -1653,8 +1786,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addTagModal')).hide();
@@ -1690,8 +1827,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editTagModal')).hide();
@@ -1711,7 +1852,7 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
 
                     let confirmMessage = `Are you sure you want to delete "${name}"?`;
                     if (count > 0) {
-                        confirmMessage = `Tag "${name}" is used by ${count} movie(s). Are you sure you want to delete it?`;
+                        confirmMessage = `Tag "${name}" is used by ${count} media entries. Are you sure you want to delete it?`;
                     }
 
                     if (confirm(confirmMessage)) {
@@ -1722,7 +1863,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
@@ -1749,8 +1893,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('addPersonModal')).hide();
@@ -1792,8 +1940,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     },
                     body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
                 })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         if (data.status === 'success') {
                             showAlert(data.message, 'success');
                             bootstrap.Modal.getInstance(document.getElementById('editPersonModal')).hide();
@@ -1818,7 +1970,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                                 '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
                             }
                         })
-                            .then(response => response.json())
+                            .then(response => {
+                                if (response.status === 401) return;
+                                return response.json();
+                            })
                             .then(data => {
                                 if (data.status === 'success') {
                                     showAlert(data.message, 'success');
@@ -1839,7 +1994,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -1863,7 +2021,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -1881,8 +2042,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                             method: 'POST',
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 401) return;
+                            return response.json();
+                        })
                         .then(data => {
+                            if (!data) return;
                             if (data.status === 'success') {
                                 showAlert(data.message, 'success');
                                 location.reload();
@@ -1900,7 +2065,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -1924,7 +2092,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -1942,8 +2113,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                             method: 'POST',
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 401) return;
+                            return response.json();
+                        })
                         .then(data => {
+                            if (!data) return;
                             if (data.status === 'success') {
                                 showAlert(data.message, 'success');
                                 location.reload();
@@ -1961,7 +2136,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -1985,7 +2163,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -2003,8 +2184,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                             method: 'POST',
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 401) return;
+                            return response.json();
+                        })
                         .then(data => {
+                            if (!data) return;
                             if (data.status === 'success') {
                                 showAlert(data.message, 'success');
                                 location.reload();
@@ -2022,7 +2207,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -2046,7 +2234,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -2064,8 +2255,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                             method: 'POST',
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 401) return;
+                            return response.json();
+                        })
                         .then(data => {
+                            if (!data) return;
                             if (data.status === 'success') {
                                 showAlert(data.message, 'success');
                                 location.reload();
@@ -2083,7 +2278,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -2107,7 +2305,10 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                     headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest'},
                     body: 'name=' + encodeURIComponent(name)
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (response.status === 401) return;
+                    return response.json();
+                })
                 .then(data => {
                     if (data.status === 'success') {
                         showAlert(data.message, 'success');
@@ -2125,8 +2326,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                             method: 'POST',
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 401) return;
+                            return response.json();
+                        })
                         .then(data => {
+                            if (!data) return;
                             if (data.status === 'success') {
                                 showAlert(data.message, 'success');
                                 location.reload();
@@ -2147,8 +2352,12 @@ $poster_count = isset($poster_count) ? $poster_count : 0;
                         method: 'POST',
                         headers: {'X-Requested-With': 'XMLHttpRequest'}
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (response.status === 401) return;
+                        return response.json();
+                    })
                     .then(data => {
+                        if (!data) return;
                         btn.disabled = false;
                         btn.innerHTML = '<i class="bi bi-trash"></i> Purge Unused Posters';
                         

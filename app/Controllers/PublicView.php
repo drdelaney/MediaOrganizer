@@ -2,13 +2,14 @@
 
 namespace App\Controllers;
 
-use App\Models\MovieModel;
+use App\Models\MediaModel;
 
 class PublicView extends BaseController
 {
     public function index()
     {
-        $model = new MovieModel();
+        helper('timezone');
+        $model = new MediaModel();
         
         $search = $this->request->getVar('search');
         $mediumId = $this->request->getVar('medium_id');
@@ -23,16 +24,16 @@ class PublicView extends BaseController
             $sortBy = ['type' => 'DESC', 'movie_id' => 'DESC'];
         }
         
-        $movies = $model->getMoviesWithDetails($search, 'title', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
+        $media = $model->getMediaWithDetails($search, 'title', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
         
         // If searching and no results found with 'title', try 'all' fields
-        if ($search && empty($movies)) {
-            $movies = $model->getMoviesWithDetails($search, 'all', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
+        if ($search && empty($media)) {
+            $media = $model->getMediaWithDetails($search, 'all', 0, 0, null, !$wishlist, $sortBy, 'DESC', $wishlist, $mediumId);
         }
 
         $data = [
             'title' => 'Public Media List',
-            'movies' => $movies,
+            'movies' => $media,
             'mediaTypes' => $model->getMediaTypes(),
             'search' => $search,
             'selectedMedium' => $mediumId,
