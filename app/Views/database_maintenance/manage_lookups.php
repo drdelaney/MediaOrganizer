@@ -16,6 +16,11 @@ $subformats = isset($subformats) && is_array($subformats) ? $subformats : [];
 $poster_count = isset($poster_count) ? $poster_count : 0;
 $currentTimezone = isset($currentTimezone) ? $currentTimezone : 'UTC';
 $deauthTime = isset($deauthTime) ? $deauthTime : 15;
+$userAgent = isset($userAgent) ? $userAgent : 'MediaOrganizer/1.0';
+$appName = isset($appName) ? $appName : 'Media Organizer';
+$appBaseURL = isset($appBaseURL) ? $appBaseURL : 'http://localhost:8080/';
+$lookupSettings = isset($lookupSettings) ? $lookupSettings : [];
+$emailSettings = isset($emailSettings) ? $emailSettings : [];
 $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC'];
 ?>
 
@@ -603,10 +608,28 @@ $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC']
                             <h5 class="mb-0"><i class="bi bi-gear"></i> Application Settings</h5>
                         </div>
                         <div class="card-body">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>Note:</strong> Values defined in the <code>.env</code> file will override these settings.
+                            </div>
                             <form id="settingsForm">
                                 <?= csrf_field() ?>
                                 <div class="mb-3">
-                                    <label for="config_timezone" class="form-label">System Timezone</label>
+                                    <label for="config_app_name" class="form-label" data-bs-toggle="tooltip" title="app.name">Application Name <i class="bi bi-info-circle small text-muted"></i></label>
+                                    <input type="text" class="form-control" id="config_app_name" name="app_name" value="<?= esc($appName) ?>">
+                                    <div class="form-text">
+                                        This name will be displayed in page titles, headers, and throughout the application.
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="config_app_baseURL" class="form-label" data-bs-toggle="tooltip" title="app.baseURL">Base URL <i class="bi bi-info-circle small text-muted"></i></label>
+                                    <input type="url" class="form-control" id="config_app_baseURL" name="app_baseURL" value="<?= esc($appBaseURL) ?>">
+                                    <div class="form-text">
+                                        The base URL of your application (including trailing slash).
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="config_timezone" class="form-label" data-bs-toggle="tooltip" title="timezone">System Timezone <i class="bi bi-info-circle small text-muted"></i></label>
                                     <select class="form-select" id="config_timezone" name="timezone">
                                         <?php foreach ($availableTimezones as $tz): ?>
                                             <option value="<?= $tz ?>" <?= $tz === $currentTimezone ? 'selected' : '' ?>><?= $tz ?></option>
@@ -618,12 +641,168 @@ $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC']
                                     </div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="config_deauth_time" class="form-label">Deauthentication Timeout (minutes)</label>
+                                    <label for="config_deauth_time" class="form-label" data-bs-toggle="tooltip" title="deauth_time">Deauthentication Timeout (minutes) <i class="bi bi-info-circle small text-muted"></i></label>
                                     <input type="number" class="form-control" id="config_deauth_time" name="deauth_time" value="<?= $deauthTime ?>" min="1" max="1440">
                                     <div class="form-text">
                                         The number of minutes before a user is required to re-authenticate when accessing database maintenance areas.
                                     </div>
                                 </div>
+                                <div class="mb-3">
+                                    <label for="config_musicbrainz_ua" class="form-label" data-bs-toggle="tooltip" title="user_agent">API User Agent <i class="bi bi-info-circle small text-muted"></i></label>
+                                    <input type="text" class="form-control" id="config_musicbrainz_ua" name="user_agent" value="<?= esc($userAgent) ?>">
+                                    <div class="form-text">
+                                        The base User Agent string used for MusicBrainz API requests.
+                                    </div>
+                                </div>
+
+                                <hr class="my-4">
+                                <h5 class="mb-3"><i class="bi bi-envelope"></i> Email Settings</h5>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_protocol" class="form-label" data-bs-toggle="tooltip" title="email.protocol">Protocol <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <select class="form-select" id="email_protocol" name="email_protocol">
+                                            <option value="mail" <?= $emailSettings['protocol'] === 'mail' ? 'selected' : '' ?>>Mail (PHP mail())</option>
+                                            <option value="smtp" <?= $emailSettings['protocol'] === 'smtp' ? 'selected' : '' ?>>SMTP</option>
+                                            <option value="sendmail" <?= $emailSettings['protocol'] === 'sendmail' ? 'selected' : '' ?>>Sendmail</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_fromEmail" class="form-label" data-bs-toggle="tooltip" title="email.fromEmail">From Email Address <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="email" class="form-control" id="email_fromEmail" name="email_fromEmail" value="<?= esc($emailSettings['fromEmail']) ?>">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_fromName" class="form-label" data-bs-toggle="tooltip" title="email.fromName">From Name <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="text" class="form-control" id="email_fromName" name="email_fromName" value="<?= esc($emailSettings['fromName']) ?>">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_SMTPHost" class="form-label" data-bs-toggle="tooltip" title="email.SMTPHost">SMTP Host <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="text" class="form-control" id="email_SMTPHost" name="email_SMTPHost" value="<?= esc($emailSettings['SMTPHost']) ?>">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_SMTPUser" class="form-label" data-bs-toggle="tooltip" title="email.SMTPUser">SMTP Username <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="text" class="form-control" id="email_SMTPUser" name="email_SMTPUser" value="<?= esc($emailSettings['SMTPUser']) ?>">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email_SMTPPass" class="form-label" data-bs-toggle="tooltip" title="email.SMTPPass">SMTP Password <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="password" class="form-control" id="email_SMTPPass" name="email_SMTPPass" value="<?= esc($emailSettings['SMTPPass']) ?>">
+                                        <div class="form-text text-warning">
+                                            <i class="bi bi-exclamation-triangle"></i> Note: This password is NOT stored in the database as an encrypted string.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="email_SMTPPort" class="form-label" data-bs-toggle="tooltip" title="email.SMTPPort">SMTP Port <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="number" class="form-control" id="email_SMTPPort" name="email_SMTPPort" value="<?= esc($emailSettings['SMTPPort']) ?>">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="email_SMTPCrypto" class="form-label" data-bs-toggle="tooltip" title="email.SMTPCrypto">SMTP Crypto <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <select class="form-select" id="email_SMTPCrypto" name="email_SMTPCrypto">
+                                            <option value="" <?= $emailSettings['SMTPCrypto'] === '' ? 'selected' : '' ?>>None</option>
+                                            <option value="tls" <?= $emailSettings['SMTPCrypto'] === 'tls' ? 'selected' : '' ?>>TLS</option>
+                                            <option value="ssl" <?= $emailSettings['SMTPCrypto'] === 'ssl' ? 'selected' : '' ?>>SSL</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 mb-3 d-flex align-items-end">
+                                        <div class="form-check mb-2">
+                                            <input type="hidden" name="email_SMTPVerifyPeer" value="false">
+                                            <input class="form-check-input" type="checkbox" id="email_SMTPVerifyPeer" name="email_SMTPVerifyPeer" value="true" <?= $emailSettings['SMTPVerifyPeer'] == 'true' || $emailSettings['SMTPVerifyPeer'] === true ? 'checked' : '' ?> data-bs-toggle="tooltip" title="email.SMTPVerifyPeer">
+                                            <label class="form-check-label" for="email_SMTPVerifyPeer">
+                                                Verify SSL Peer <i class="bi bi-info-circle small text-muted"></i>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <div class="form-check">
+                                            <input type="hidden" name="email_SMTPVerifyPeerName" value="false">
+                                            <input class="form-check-input" type="checkbox" id="email_SMTPVerifyPeerName" name="email_SMTPVerifyPeerName" value="true" <?= $emailSettings['SMTPVerifyPeerName'] == 'true' || $emailSettings['SMTPVerifyPeerName'] === true ? 'checked' : '' ?> data-bs-toggle="tooltip" title="email.SMTPVerifyPeerName">
+                                            <label class="form-check-label" for="email_SMTPVerifyPeerName">
+                                                Verify SSL Peer Name <i class="bi bi-info-circle small text-muted"></i>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr class="my-4">
+                                <h5 class="mb-3"><i class="bi bi-search"></i> Media Lookups</h5>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="config_tmdb_key" class="form-label" data-bs-toggle="tooltip" title="TMDB_API_KEY">TMDB API Key <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="password" class="form-control" id="config_tmdb_key" name="TMDB_API_KEY" value="<?= esc($lookupSettings['TMDB_API_KEY']) ?>">
+                                        <div class="form-text">
+                                            Get your API key from <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="config_musicbrainz_email" class="form-label" data-bs-toggle="tooltip" title="MUSICBRAINZ_EMAIL">MusicBrainz Email <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="email" class="form-control" id="config_musicbrainz_email" name="MUSICBRAINZ_EMAIL" value="<?= esc($lookupSettings['MUSICBRAINZ_EMAIL']) ?>">
+                                        <div class="form-text">
+                                            Used for API compliance.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="config_igdb_id" class="form-label" data-bs-toggle="tooltip" title="IGDB_CLIENT_ID">IGDB Client ID <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="text" class="form-control" id="config_igdb_id" name="IGDB_CLIENT_ID" value="<?= esc($lookupSettings['IGDB_CLIENT_ID']) ?>">
+                                        <div class="form-text">
+                                            Get from <a href="https://api-docs.igdb.com/" target="_blank">api-docs.igdb.com</a>.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="config_igdb_secret" class="form-label" data-bs-toggle="tooltip" title="IGDB_CLIENT_SECRET">IGDB Client Secret <i class="bi bi-info-circle small text-muted"></i></label>
+                                        <input type="password" class="form-control" id="config_igdb_secret" name="IGDB_CLIENT_SECRET" value="<?= esc($lookupSettings['IGDB_CLIENT_SECRET']) ?>">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label" data-bs-toggle="tooltip" title="ENABLED_LOOKUPS">Enabled Lookups <i class="bi bi-info-circle small text-muted"></i></label>
+                                    <div class="d-flex flex-wrap gap-3">
+                                        <?php
+                                        $currentLookups = array_map('trim', explode(',', $lookupSettings['ENABLED_LOOKUPS'] ?? ''));
+                                        $availableLookups = [
+                                            'IMDB' => 'IMDB',
+                                            'TVDB' => 'TVDB',
+                                            'TMDB' => 'TMDB',
+                                            'IGDB' => 'IGDB',
+                                            'MusicBrainz' => 'MusicBrainz'
+                                        ];
+                                        foreach ($availableLookups as $val => $label):
+                                            $checked = in_array($val, $currentLookups) ? 'checked' : '';
+                                            $disabled = '';
+                                            $tooltip = '';
+                                            
+                                            if ($val === 'TMDB' && empty($lookupSettings['TMDB_API_KEY'])) {
+                                                $disabled = 'disabled';
+                                                $tooltip = 'data-bs-toggle="tooltip" title="Requires TMDB API Key"';
+                                            } elseif ($val === 'IGDB' && (empty($lookupSettings['IGDB_CLIENT_ID']) || empty($lookupSettings['IGDB_CLIENT_SECRET']))) {
+                                                $disabled = 'disabled';
+                                                $tooltip = 'data-bs-toggle="tooltip" title="Requires IGDB Client ID and Secret"';
+                                            } elseif ($val === 'MusicBrainz' && empty($lookupSettings['MUSICBRAINZ_EMAIL'])) {
+                                                $disabled = 'disabled';
+                                                $tooltip = 'data-bs-toggle="tooltip" title="Requires MusicBrainz Email"';
+                                            }
+                                        ?>
+                                        <div class="form-check" <?= $tooltip ?>>
+                                            <input class="form-check-input" type="checkbox" name="ENABLED_LOOKUPS[]" value="<?= $val ?>" id="lookup_<?= $val ?>" <?= $checked ?> <?= $disabled ?>>
+                                            <label class="form-check-label" for="lookup_<?= $val ?>">
+                                                <?= $label ?>
+                                            </label>
+                                        </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <div class="form-text">
+                                        Select the media lookup services you want to enable. Note: TMDB, IGDB, and MusicBrainz require their respective fields above to be populated to be usable.
+                                    </div>
+                                </div>
+
+                                <div id="settings-alert-container"></div>
+
                                 <button type="button" class="btn btn-primary" id="saveSettings">
                                     <i class="bi bi-save"></i> Save Settings
                                 </button>
@@ -1317,21 +1496,24 @@ $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC']
             });
             
             // Helper function to show alerts
-            function showAlert(message, type) {
-                document.getElementById('alert-container').innerHTML = `
-            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
+            function showAlert(message, type, containerId = 'alert-container') {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                container.innerHTML = `
+                    <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                        ${message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
                 
                 // Scroll to top of page to show the alert, especially for errors
-                if (type === 'danger') {
+                if (type === 'danger' && containerId === 'alert-container') {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
                 
                 setTimeout(() => {
-                    const alert = document.querySelector('.alert');
+                    const alert = container.querySelector('.alert');
                     if (alert) alert.remove();
                 }, 5000);
             }
@@ -1356,16 +1538,47 @@ $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC']
                 .then(data => {
                     if (!data) return;
                     if (data.status === 'success') {
-                        showAlert(data.message, 'success');
+                        showAlert(data.message, 'success', 'settings-alert-container');
                         setTimeout(() => location.reload(), 1000);
                     } else {
-                        showAlert(data.message, 'danger');
+                        showAlert(data.message, 'danger', 'settings-alert-container');
                     }
                 })
                 .catch(error => {
                     console.error('Error updating config:', error);
-                    showAlert('Failed to update configuration', 'danger');
+                    showAlert('Failed to update configuration', 'danger', 'settings-alert-container');
                 });
+            });
+
+            // Dynamic lookup checkbox toggling
+            const tmdbKeyInput = document.getElementById('config_tmdb_key');
+            const mbEmailInput = document.getElementById('config_musicbrainz_email');
+            const igdbIdInput = document.getElementById('config_igdb_id');
+            const igdbSecretInput = document.getElementById('config_igdb_secret');
+
+            const tmdbCheckbox = document.getElementById('lookup_TMDB');
+            const mbCheckbox = document.getElementById('lookup_MusicBrainz');
+            const igdbCheckbox = document.getElementById('lookup_IGDB');
+
+            function updateLookupCheckboxes() {
+                if (tmdbKeyInput && tmdbCheckbox) {
+                    tmdbCheckbox.disabled = !tmdbKeyInput.value.trim();
+                    if (tmdbCheckbox.disabled) tmdbCheckbox.checked = false;
+                }
+                if (mbEmailInput && mbCheckbox) {
+                    mbCheckbox.disabled = !mbEmailInput.value.trim();
+                    if (mbCheckbox.disabled) mbCheckbox.checked = false;
+                }
+                if (igdbIdInput && igdbSecretInput && igdbCheckbox) {
+                    igdbCheckbox.disabled = !igdbIdInput.value.trim() || !igdbSecretInput.value.trim();
+                    if (igdbCheckbox.disabled) igdbCheckbox.checked = false;
+                }
+            }
+
+            [tmdbKeyInput, mbEmailInput, igdbIdInput, igdbSecretInput].forEach(input => {
+                if (input) {
+                    input.addEventListener('input', updateLookupCheckboxes);
+                }
             });
 
             // MEDIUM OPERATIONS
@@ -2370,6 +2583,12 @@ $availableTimezones = isset($availableTimezones) ? $availableTimezones : ['UTC']
                         }
                     });
                 }
+            });
+
+            // INITIALIZE TOOLTIPS
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
             });
         });
     </script>

@@ -23,6 +23,18 @@ class LoanModel extends Model
     }
 
     /**
+     * Get loan history for media
+     */
+    public function getLoanHistoryForMedia($mediaId)
+    {
+        return $this->select('loans.*, people.name as person_name, people.email, people.phone')
+            ->join('people', 'people.person_id = loans.person_id')
+            ->where('loans.movie_id', $mediaId)
+            ->orderBy('loans.date', 'DESC')
+            ->findAll();
+    }
+
+    /**
      * Get all active loans for a person
      */
     public function getActiveLoansForPerson($personId)

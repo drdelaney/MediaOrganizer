@@ -6,18 +6,24 @@
 /** @var string|null $search */
 /** @var string $searchField */
 /** @var string|null $tagId */
+/** @var string|null $mediumId */
 /** @var array $tags */
 /** @var array $mediaTypes */
 /** @var int $currentPage */
 /** @var int $perPage */
+/** @var bool $sortByModified */
+/** @var bool $excludeSeen */
 $total = $total ?? 0;
 $search = $search ?? '';
 $searchField = $searchField ?? 'title';
 $tagId = $tagId ?? '';
+$mediumId = $mediumId ?? '';
 $tags = $tags ?? [];
 $mediaTypes = $mediaTypes ?? [];
 $currentPage = $currentPage ?? 1;
 $perPage = $perPage ?? 20;
+$sortByModified = $sortByModified ?? false;
+$excludeSeen = $excludeSeen ?? false;
 ?>
 
 <div class="row">
@@ -46,13 +52,13 @@ $perPage = $perPage ?? 20;
         <div class="search-form mb-4">
             <form method="get" action="<?= base_url('media') ?>">
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-2">
                         <label for="search" class="visually-hidden">Search</label>
                         <input type="text" class="form-control" name="search" id="search"
                                value="<?= esc($search) ?>" 
                                placeholder="Search media...">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label for="searchField" class="visually-hidden">Search Field</label>
                         <select class="form-select" name="searchField" id="searchField">
                             <option value="title" <?= $searchField === 'title' ? 'selected' : '' ?>>Title</option>
@@ -62,16 +68,35 @@ $perPage = $perPage ?? 20;
                             <option value="country" <?= $searchField === 'country' ? 'selected' : '' ?>>Country</option>
                             <option value="studio" <?= $searchField === 'studio' ? 'selected' : '' ?>>Studio</option>
                             <option value="movie_id" <?= $searchField === 'movie_id' ? 'selected' : '' ?>>Media ID</option>
+                            <option value="imdb_id" <?= $searchField === 'imdb_id' ? 'selected' : '' ?>>IMDB ID</option>
+                            <option value="tmdb_id" <?= $searchField === 'tmdb_id' ? 'selected' : '' ?>>TMDB ID</option>
+                            <option value="tvdb_id" <?= $searchField === 'tvdb_id' ? 'selected' : '' ?>>TVDB ID</option>
+                            <option value="igdb_id" <?= $searchField === 'igdb_id' ? 'selected' : '' ?>>IGDB ID</option>
+                            <option value="mbid" <?= $searchField === 'mbid' ? 'selected' : '' ?>>MusicBrainz ID</option>
                             <option value="all" <?= $searchField === 'all' ? 'selected' : '' ?>>All Fields</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="medium" class="visually-hidden">Medium</label>
+                        <select class="form-select" name="medium" id="medium">
+                            <option value="">All Medium</option>
+                            <?php foreach ($mediaTypes as $type): ?>
+                                <option value="<?= $type['medium_id'] ?>" <?= (string)$mediumId === (string)$type['medium_id'] ? 'selected' : '' ?>>
+                                    <?= esc($type['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2">
                         <label for="tag" class="visually-hidden">Tag</label>
                         <select class="form-select" name="tag" id="tag">
                             <option value="">All Tags</option>
+                            <?php if (!empty($wishlistTag)): ?>
+                                <option value="all_with_wishlist" <?= $tagId === 'all_with_wishlist' ? 'selected' : '' ?>>All Tags (Wishlist)</option>
+                            <?php endif; ?>
                             <?php 
                             foreach ($tags as $tag): 
-                                $isSelected = $tagId == $tag['tag_id'];
+                                $isSelected = (string)$tagId === (string)$tag['tag_id'];
                             ?>
                                 <option value="<?= $tag['tag_id'] ?>" <?= $isSelected ? 'selected' : '' ?>>
                                     <?= esc($tag['name']) ?>
@@ -79,22 +104,42 @@ $perPage = $perPage ?? 20;
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary" title="Search">
-                                <i class="bi bi-search"></i>
-                            </button>
-                            <?php if ($search || $tagId): ?>
-                                <a href="<?= base_url('media') ?>" class="btn btn-outline-secondary" title="Clear Filters">
-                                    <i class="bi bi-x-circle"></i> Clear
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center h-100 gap-3">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary" title="Search">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                                <?php if ($search || $tagId || $mediumId || $sortByModified || $excludeSeen): ?>
+                                    <a href="<?= base_url('media') ?>" class="btn btn-outline-secondary" title="Clear Filters">
+                                        <i class="bi bi-x-circle"></i> Clear
+                                    </a>
+                                <?php endif; ?>
+                                <a href="<?= base_url('media?serendipitous=1') ?>" class="btn btn-warning" title="Feeling Serendipitous!">
+                                    <i class="bi bi-dice-5"></i>
                                 </a>
-                            <?php endif; ?>
-                            <a href="<?= base_url('media?serendipitous=1') ?>" class="btn btn-warning" title="Feeling Serendipitous!">
-                                <i class="bi bi-dice-5"></i>
-                            </a>
-                            <a href="<?= base_url('media/add') ?>" class="btn btn-success" title="Add Media">
-                                <i class="bi bi-plus-circle"></i> Add
-                            </a>
+                                <a href="<?= base_url('media/add') ?>" class="btn btn-success" title="Add Media">
+                                    <i class="bi bi-plus-circle"></i> Add
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sort_modified" id="sort_modified" value="1" <?= $sortByModified ? 'checked' : '' ?>>
+                                <label class="form-check-label text-nowrap" for="sort_modified">
+                                    Recently Updated
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="exclude_seen" id="exclude_seen" value="1" <?= $excludeSeen ? 'checked' : '' ?>>
+                                <label class="form-check-label text-nowrap" for="exclude_seen">
+                                    Exclude Seen
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -132,6 +177,17 @@ $perPage = $perPage ?? 20;
                     </thead>
                     <tbody>
                         <?php foreach ($media as $movie): ?>
+                            <?php 
+                            $isWishlist = false;
+                            if (isset($movie['tags']) && is_array($movie['tags'])) {
+                                foreach ($movie['tags'] as $tag) {
+                                    if (strtolower($tag['name']) === 'wishlist') {
+                                        $isWishlist = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            ?>
                             <tr class="media-row">
                                 <!-- Poster -->
                                 <td>
@@ -150,6 +206,9 @@ $perPage = $perPage ?? 20;
                                 <!-- Title -->
                                 <td>
                                     <div>
+                                        <?php if ($isWishlist): ?>
+                                            <i class="bi bi-heart-fill text-info me-1" title="Wishlist"></i>
+                                        <?php endif; ?>
                                         <strong><?= esc($movie['title'] ?: $movie['o_title'] ?: 'Untitled') ?></strong>
                                         <?php if ($movie['title'] && $movie['o_title'] && $movie['title'] !== $movie['o_title']): ?>
                                             <br><small class="text-muted"><?= esc($movie['o_title']) ?></small>
@@ -170,12 +229,12 @@ $perPage = $perPage ?? 20;
                                 <td>
                                     <?php 
                                     // Get all medium formats from notes
-                                    $mediumIds = get_medium_ids_from_notes($movie['notes'] ?? null);
+                                    $movieMediumIds = get_medium_ids_from_notes($movie['notes'] ?? null);
                                     $mediumNames = [];
-                                    if (!empty($mediumIds)) {
-                                        foreach ($mediumIds as $mediumId) {
+                                    if (!empty($movieMediumIds)) {
+                                        foreach ($movieMediumIds as $mId) {
                                             foreach ($mediaTypes as $media) {
-                                                if ($media['medium_id'] == $mediumId) {
+                                                if ($media['medium_id'] == $mId) {
                                                     $mediumNames[] = $media['name'];
                                                     break;
                                                 }
@@ -216,18 +275,6 @@ $perPage = $perPage ?? 20;
                                             <span class="badge bg-warning"><i class="bi bi-eye-slash"></i> Unseen</span>
                                         <?php endif; ?>
 
-                                        <?php 
-                                        $isWishlist = false;
-                                        if (isset($movie['tags']) && is_array($movie['tags'])) {
-                                            foreach ($movie['tags'] as $tag) {
-                                                if (strtolower($tag['name']) === 'wishlist') {
-                                                    $isWishlist = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        ?>
-                                        
                                         <?php if ($movie['loaned']): ?>
                                             <br><span class="badge bg-danger mt-1"><i class="bi bi-person-check"></i> Loaned</span>
                                         <?php elseif ($isWishlist): ?>
@@ -299,6 +346,9 @@ $perPage = $perPage ?? 20;
                                 if ($tagId) {
                                     $prevQuery['tag'] = $tagId;
                                 }
+                                if ($mediumId !== '' && $mediumId !== null) {
+                                    $prevQuery['medium'] = $mediumId;
+                                }
                                 ?>
                                 <a href="<?= base_url('media?' . http_build_query($prevQuery)) ?>" class="page-link">
                                     <i class="bi bi-chevron-left"></i> Previous
@@ -317,6 +367,9 @@ $perPage = $perPage ?? 20;
                                 }
                                 if ($tagId) {
                                     $pageQuery['tag'] = $tagId;
+                                }
+                                if ($mediumId !== '' && $mediumId !== null) {
+                                    $pageQuery['medium'] = $mediumId;
                                 }
                                 ?>
                                 <a href="<?= base_url('media?' . http_build_query($pageQuery)) ?>" class="page-link">
@@ -337,36 +390,43 @@ $perPage = $perPage ?? 20;
                                 if ($tagId) {
                                     $nextQuery['tag'] = $tagId;
                                 }
+                                if ($mediumId !== '' && $mediumId !== null) {
+                                    $nextQuery['medium'] = $mediumId;
+                                }
                                 ?>
                                 <a href="<?= base_url('media?' . http_build_query($nextQuery)) ?>" class="page-link">
                                     Next <i class="bi bi-chevron-right"></i>
                                 </a>
                             </li>
                         <?php endif; ?>
+
+                        <!-- Page Jump Dropdown -->
+                        <li class="page-item ms-2">
+                            <form class="d-flex align-items-center h-100" method="get" action="<?= base_url('media') ?>">
+                                <?php if ($search): ?>
+                                    <input type="hidden" name="search" value="<?= esc($search) ?>">
+                                    <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
+                                <?php endif; ?>
+                                <?php if ($tagId): ?>
+                                    <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
+                                <?php endif; ?>
+                                <?php if ($mediumId !== '' && $mediumId !== null): ?>
+                                    <input type="hidden" name="medium" value="<?= esc($mediumId) ?>">
+                                <?php endif; ?>
+                                <div class="page-link p-0 overflow-hidden">
+                                    <select id="pageSelect" name="page" class="form-select form-select-sm border-0 shadow-none" style="width: auto; background-color: transparent;" onchange="this.form.submit()" aria-label="Go to page">
+                                        <?php for ($p = 1; $p <= $totalPages; $p++): ?>
+                                            <option value="<?= $p ?>" <?= $p === $currentPage ? 'selected' : '' ?>><?= $p ?> / <?= $totalPages ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <noscript>
+                                    <button type="submit" class="btn btn-sm btn-outline-primary ms-1">Go</button>
+                                </noscript>
+                            </form>
+                        </li>
                     </ul>
                 </nav>
-
-                <!-- Page Jump Dropdown -->
-                <div class="d-flex justify-content-center align-items-center mb-2">
-                    <form class="d-flex align-items-center gap-2" method="get" action="<?= base_url('media') ?>">
-                        <?php if ($search): ?>
-                            <input type="hidden" name="search" value="<?= esc($search) ?>">
-                            <input type="hidden" name="searchField" value="<?= esc($searchField) ?>">
-                        <?php endif; ?>
-                        <?php if ($tagId): ?>
-                            <input type="hidden" name="tag" value="<?= esc($tagId) ?>">
-                        <?php endif; ?>
-                        <label for="pageSelect" class="me-2 mb-0">Page:</label>
-                        <select id="pageSelect" name="page" class="form-select" style="width: auto;" onchange="this.form.submit()">
-                            <?php for ($p = 1; $p <= $totalPages; $p++): ?>
-                                <option value="<?= $p ?>" <?= $p === $currentPage ? 'selected' : '' ?>><?= $p ?> / <?= $totalPages ?></option>
-                            <?php endfor; ?>
-                        </select>
-                        <noscript>
-                            <button type="submit" class="btn btn-outline-primary">Go</button>
-                        </noscript>
-                    </form>
-                </div>
 
                 <!-- Pagination Info -->
                 <div class="text-center text-muted">
@@ -412,6 +472,21 @@ $perPage = $perPage ?? 20;
 <script>
     // Auto-focus search input and existing functionality
     document.addEventListener('DOMContentLoaded', function() {
+        // Auto-submit form when sort checkbox changes
+        const sortModifiedCheckbox = document.getElementById('sort_modified');
+        if (sortModifiedCheckbox) {
+            sortModifiedCheckbox.addEventListener('change', function() {
+                this.closest('form').submit();
+            });
+        }
+
+        const excludeSeenCheckbox = document.getElementById('exclude_seen');
+        if (excludeSeenCheckbox) {
+            excludeSeenCheckbox.addEventListener('change', function() {
+                this.closest('form').submit();
+            });
+        }
+
         const searchInput = document.querySelector('input[name="search"]');
         if (searchInput && !searchInput.value) {
             searchInput.focus();

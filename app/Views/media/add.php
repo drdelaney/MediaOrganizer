@@ -3,7 +3,7 @@
 <?= $this->section('content') ?>
 <?php
 $media = isset($media) && is_array($media) ? $media : [];
-$apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false;
+$lookupOptions = isset($lookupOptions) ? $lookupOptions : [];
 $mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : [];
 $collections = isset($collections) && is_array($collections) ? $collections : [];
 $volumes = isset($volumes) && is_array($volumes) ? $volumes : [];
@@ -25,6 +25,17 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         </div>
 
         <!-- Success/Error Messages -->
+        <div id="duplicateWarning" class="alert alert-warning alert-dismissible fade show" style="display:none;">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
+                <div>
+                    <strong>Potential duplicate detected!</strong> It looks like this media may already exist in your library.
+                    <div id="duplicateLinks" class="mt-1"></div>
+                </div>
+            </div>
+            <button type="button" class="btn-close" onclick="this.parentElement.style.display='none'"></button>
+        </div>
+
         <?php if (session()->getFlashdata('success')): ?>
             <div class="alert alert-success alert-dismissible fade show">
                 <?= session()->getFlashdata('success') ?>
@@ -54,50 +65,46 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         <form action="<?= base_url('media/store') ?>" method="post" id="addMediaForm" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <input type="hidden" id="selected_poster_url" name="selected_poster_url" value="">
-            <input type="hidden" id="tmdb_id_for_posters" name="tmdb_id_for_posters" value="">
+            <input type="hidden" id="lookup_id_for_posters" name="lookup_id_for_posters" value="">
             <input type="hidden" id="media_type_for_posters" name="media_type_for_posters" value="">
             <!-- Lookup Section (Title / External IDs) -->
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5><i class="bi bi-search"></i> Find by Title, IMDb ID, TVDB ID, or Barcode</h5>
+                    <h5><i class="bi bi-search"></i> Media Lookup</h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 align-items-end">
                         <div class="col-md-2">
                             <label for="lookup_type" class="form-label">Type</label>
                             <select class="form-select" id="lookup_type" name="lookup_type">
-                                <option value="movie" <?= old('lookup_type', 'movie') === 'movie' ? 'selected' : '' ?>>Movie</option>
-                                <option value="tv" <?= old('lookup_type') === 'tv' ? 'selected' : '' ?>>TV</option>
+                                <?php foreach ($lookupOptions as $key => $option): ?>
+                                    <option value="<?= $key ?>" <?= old('lookup_type', array_key_first($lookupOptions)) === $key ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label for="lookup_title" class="form-label">Title</label>
-                            <input type="text" class="form-control" id="lookup_title" name="lookup_title" placeholder="Enter title to search (optional)" value="<?= esc(old('lookup_title')) ?>">
+                            <input type="text" class="form-control" id="lookup_title" name="lookup_title" placeholder="Enter title to search" value="<?= esc(old('lookup_title')) ?>">
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-md-1">
                             <label for="lookup_year" class="form-label">Year</label>
-                            <input type="number" class="form-control" id="lookup_year" name="lookup_year" min="1800" max="2099" value="<?= esc(old('lookup_year')) ?>">
+                            <input type="number" class="form-control" id="lookup_year" name="lookup_year" min="1800" max="2099" placeholder="YYYY" value="<?= esc(old('lookup_year')) ?>">
                         </div>
                         <div class="col-md-2">
-                            <label for="imdb_id" class="form-label">IMDb ID</label>
-                            <input type="text" class="form-control" id="imdb_id" name="imdb_id" placeholder="e.g. tt0133093" value="<?= esc(old('imdb_id')) ?>">
+                            <label for="lookup_id" class="form-label" id="lookup_id_label">ID</label>
+                            <input type="text" class="form-control" id="lookup_id" name="lookup_id" placeholder="Select type first" value="">
+                            <input type="hidden" id="imdb_id" name="imdb_id" value="<?= esc(old('imdb_id')) ?>">
+                            <input type="hidden" id="tvdb_id" name="tvdb_id" value="<?= esc(old('tvdb_id')) ?>">
+                            <input type="hidden" id="igdb_id" name="igdb_id" value="<?= esc(old('igdb_id')) ?>">
+                            <input type="hidden" id="mbid" name="mbid" value="<?= esc(old('mbid')) ?>">
                         </div>
                         <div class="col-md-2">
-                            <label for="tvdb_id" class="form-label">TVDB ID</label>
-                            <input type="text" class="form-control" id="tvdb_id" name="tvdb_id" placeholder="e.g. 8118" value="<?= esc(old('tvdb_id')) ?>">
-                        </div>
-                        <div class="col-md-3">
                             <label for="lookup_barcode" class="form-label">Barcode (UPC/EAN)</label>
                             <input type="text" class="form-control" id="lookup_barcode" name="lookup_barcode" placeholder="e.g. 883929401120" value="<?= esc(old('lookup_barcode')) ?>">
                         </div>
                     </div>
-                    <small class="text-muted d-block mt-2">
-                        - <strong>Optional:</strong> Search by IMDb ID (starts with tt), TVDB numeric ID, Title (with optional year), or Barcode (UPC/EAN) to auto-fill details.<br>
-                        - Barcode search will first check your local library and then attempt an online UPC lookup to map to a movie/TV entry (via TMDB when available).<br>
-                        - <strong>Required fields:</strong> Original Title and at least one Media Format must be provided to create an entry.
-                        <?php if (!$apiAvailable): ?>
-                        <br>- TMDB API key not configured; title/ID mapping will be skipped, but basic barcode-to-title lookup will still be attempted.
-                        <?php endif; ?>
+                    <small class="text-muted d-block mt-2" id="lookup_help_text">
+                        Search by Title, ID, or Barcode to auto-fill details.
                     </small>
                     <div class="mt-3 d-flex gap-2">
                         <button type="button" id="lookupPreviewBtn" class="btn btn-info">
@@ -422,6 +429,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     <div class="mb-3">
                         <label for="notes" class="form-label">Notes</label>
                         <textarea class="form-control" id="notes" name="notes" rows="4"><?= esc(old('notes')) ?></textarea>
+                        <div class="form-text">
+                            Use <code>&lt;!skipduplicate&gt;</code> to exempt this entry from duplicate lookups.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -455,7 +465,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 <ul class="nav nav-tabs mb-3" id="addPosterTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="add-tmdb-tab" data-bs-toggle="tab" data-bs-target="#add-tmdb-posters" type="button" role="tab">
-                            <i class="bi bi-cloud-download"></i> TMDB Posters
+                            <i class="bi bi-cloud-download"></i> Online Posters
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -466,8 +476,37 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 </ul>
 
                 <div class="tab-content" id="addPosterTabContent">
-                    <!-- TMDB Posters Tab -->
+                    <!-- Online Posters Tab -->
                     <div class="tab-pane fade show active" id="add-tmdb-posters" role="tabpanel">
+                        <div class="row g-2 mb-3 align-items-end">
+                            <div class="col-md-4">
+                                <label for="addPosterSource" class="form-label small">Search Location</label>
+                                <select class="form-select" id="addPosterSource">
+                                    <option value="">Auto-detect</option>
+                                    <?php if (isset($enabledLookups) && in_array('TMDB', $enabledLookups)): ?>
+                                        <option value="TMDB">TMDB (Movies/TV)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('TVDB', $enabledLookups)): ?>
+                                        <option value="TVDB">TVDB (TV Shows)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('IGDB', $enabledLookups)): ?>
+                                        <option value="IGDB">IGDB (Games)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('MusicBrainz', $enabledLookups)): ?>
+                                        <option value="MusicBrainz">MusicBrainz (Music)</option>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="addPosterSearchTerm" class="form-label small">Search Term (optional)</label>
+                                <input type="text" class="form-control" id="addPosterSearchTerm" placeholder="Enter title to search...">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-primary w-100" id="addFetchPostersBtn">
+                                    <i class="bi bi-search"></i> Fetch
+                                </button>
+                            </div>
+                        </div>
                         <div id="addPosterLoadingSpinner" style="display: none;" class="text-center mb-3">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
@@ -547,6 +586,40 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             });
         }
 
+        // Lookup type change logic
+        const lookupTypeSelect = document.getElementById('lookup_type');
+        const lookupIdInput = document.getElementById('lookup_id');
+        const lookupIdLabel = document.getElementById('lookup_id_label');
+        const lookupOptions = <?= json_encode($lookupOptions) ?>;
+
+        function updateLookupFields() {
+            const type = lookupTypeSelect.value;
+            const opt = lookupOptions[type];
+            if (opt) {
+                lookupIdLabel.textContent = opt.id_label;
+                lookupIdInput.placeholder = 'e.g. ' + opt.id_placeholder;
+                lookupIdInput.dataset.field = opt.id_field;
+                
+                // Clear and sync values
+                const hiddenId = document.getElementById(opt.id_field);
+                lookupIdInput.value = hiddenId ? hiddenId.value : '';
+            }
+        }
+
+        if (lookupTypeSelect) {
+            lookupTypeSelect.addEventListener('change', updateLookupFields);
+            updateLookupFields(); // Initial call
+        }
+
+        lookupIdInput.addEventListener('input', function() {
+            const type = lookupTypeSelect.value;
+            const opt = lookupOptions[type];
+            if (opt) {
+                const hiddenId = document.getElementById(opt.id_field);
+                if (hiddenId) hiddenId.value = this.value;
+            }
+        });
+
         const btn = document.getElementById('lookupPreviewBtn');
         const applyBtn = document.getElementById('applyPreviewBtn');
         const previewCard = document.getElementById('previewCard');
@@ -558,7 +631,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         const form = document.getElementById('addMediaForm');
         
         // Handle Enter key in search fields - trigger search instead of form submit
-        const searchFields = ['lookup_type', 'lookup_title', 'lookup_year', 'imdb_id', 'tvdb_id', 'lookup_barcode'];
+        const searchFields = ['lookup_type', 'lookup_title', 'lookup_year', 'lookup_id', 'lookup_barcode'];
         searchFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
             if (field) {
@@ -618,6 +691,14 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     
                     return false;
                 }
+
+                // Check for duplicates before submitting as a last resort warning
+                const title = document.getElementById('title')?.value || '';
+                const oTitle = document.getElementById('o_title')?.value || '';
+                const year = document.getElementById('year')?.value || '';
+                const barcode = document.getElementById('barcode')?.value || '';
+                
+                checkDuplicates(title, oTitle, year, barcode);
             });
         }
         
@@ -640,8 +721,75 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             });
         });
 
+        // Trigger duplicate check when title or barcode changes manually
+        ['title', 'o_title', 'barcode'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('blur', function() {
+                    const title = document.getElementById('title')?.value || '';
+                    const oTitle = document.getElementById('o_title')?.value || '';
+                    const year = document.getElementById('year')?.value || '';
+                    const barcode = document.getElementById('barcode')?.value || '';
+                    if (title || oTitle || barcode) {
+                        checkDuplicates(title, oTitle, year, barcode);
+                    }
+                });
+            }
+        });
+
         function setPreviewVisible(visible) {
             if (previewCard) previewCard.style.display = visible ? '' : 'none';
+        }
+
+        function checkDuplicates(title, oTitle, year, barcode) {
+            const warningDiv = document.getElementById('duplicateWarning');
+            const linksDiv = document.getElementById('duplicateLinks');
+            
+            if (!warningDiv || !linksDiv) return;
+            
+            // Clear previous results and hide
+            warningDiv.style.display = 'none';
+            linksDiv.innerHTML = '';
+
+            const payload = {
+                title: title,
+                o_title: oTitle,
+                year: year,
+                barcode: barcode
+            };
+
+            // Set small delay to ensure UI updates first
+            setTimeout(() => {
+                fetch('<?= base_url('media/checkDuplicate') ?>', {
+                    method: 'POST',
+                    headers: { 
+                        'X-Requested-With': 'XMLHttpRequest', 
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success && res.duplicates && res.duplicates.length > 0) {
+                        warningDiv.style.display = 'block';
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        
+                        linksDiv.innerHTML = res.duplicates.map(d => {
+                            return `<div class="mb-1">
+                                <span class="badge bg-secondary">#${d.movie_id}</span> 
+                                <strong>${d.title}</strong> (${d.year || 'N/A'})
+                                <a href="${d.url}" class="btn btn-sm btn-outline-primary ms-2" target="_blank">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                                <a href="${d.edit_url}" class="btn btn-sm btn-primary ms-1" target="_blank">
+                                    <i class="bi bi-pencil"></i> Edit Existing
+                                </a>
+                            </div>`;
+                        }).join('');
+                    }
+                })
+                .catch(err => console.error('Error checking duplicates:', err));
+            }, 100);
         }
 
         function showToast(message, type) {
@@ -654,6 +802,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         }
 
         function displayPreview(d, lookupType) {
+            // Check for duplicates
+            checkDuplicates(d.title, d.o_title, d.year, (document.getElementById('lookup_barcode')?.value || '').trim());
+
             // Title/subtitle
             previewTitle.textContent = d.title || d.o_title || 'Untitled';
             const bits = [];
@@ -679,9 +830,16 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 document.getElementById('selected_poster_url').value = '';
             }
 
-            // Store TMDB ID and type for fetching more posters
-            if (d.tmdb_id) {
-                document.getElementById('tmdb_id_for_posters').value = d.tmdb_id;
+            const idField = lookupOptions[lookupType]?.id_field || 'tmdb_id';
+            const fetchBody = { type: lookupType };
+            fetchBody[idField] = d.tmdb_id || d.tvdb_id || d.igdb_id || d.mbid || d.imdb_id;
+            // Also include imdb_id and tmdb_id if available as fallbacks
+            if (d.imdb_id) fetchBody['imdb_id'] = d.imdb_id;
+            if (d.tmdb_id) fetchBody['tmdb_id'] = d.tmdb_id;
+
+            // Store ID and type for fetching more posters
+            if (fetchBody[idField]) {
+                document.getElementById('lookup_id_for_posters').value = fetchBody[idField];
                 document.getElementById('media_type_for_posters').value = lookupType;
                 document.getElementById('choosePosterBtn').style.display = '';
             }
@@ -712,86 +870,193 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             }
         }
 
-        function showMultipleResults(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}) {
-            // Create modal HTML for selection
-            const modalHtml = `
-                <div class="modal fade" id="selectMediaModal" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">Select a Match (${totalResults} results found)</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        let searchFilterTimeout;
+        function showMultipleResults(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}, message = '') {
+            const title = message || `Select a Match (${totalResults} results found)`;
+            const existingModalEl = document.getElementById('selectMediaModal');
+            let modal;
+
+            if (existingModalEl) {
+                // Update existing modal
+                modal = bootstrap.Modal.getInstance(existingModalEl) || new bootstrap.Modal(existingModalEl);
+                existingModalEl.querySelector('.modal-title').textContent = title;
+                
+                // Update results list
+                const listContainer = existingModalEl.querySelector('#mediaResultsList');
+                listContainer.innerHTML = results.map((result, index) => `
+                    <a href="#" class="list-group-item list-group-item-action media-result-item" data-index="${index}">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                ${result.poster_url ?
+                                    `<img src="${result.poster_url}" alt="Poster" style="width: 60px; height: 90px; object-fit: cover;" class="rounded">` :
+                                    `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 60px; height: 90px;"><small class="text-muted">No poster</small></div>`
+                                }
                             </div>
-                            <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
-                                <div class="list-group" id="mediaResultsList">
-                                    ${results.map((result, index) => `
-                                        <a href="#" class="list-group-item list-group-item-action media-result-item" data-index="${index}">
-                                            <div class="row align-items-center">
-                                                <div class="col-auto">
-                                                    ${result.poster_url ?
-                `<img src="${result.poster_url}" alt="Poster" style="width: 60px; height: 90px; object-fit: cover;" class="rounded">` :
-                `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 60px; height: 90px;"><small class="text-muted">No poster</small></div>`
-            }
-                                                </div>
-                                                <div class="col">
-                                                    <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
-                                                    ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
-                                                    ${result.year ? `<small class="text-muted">Year: ${result.year}</small>` : ''}
-                                                    ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
-                                                </div>
-                                            </div>
-                                        </a>
-                                    `).join('')}
+                            <div class="col">
+                                <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
+                                ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
+                                ${result.year || result.platforms || result.artist ? `
+                                    <div class="mt-1">
+                                        ${result.artist ? `<span class="badge bg-primary me-1 clickable-tag" data-tag="artist" data-value="${result.artist}">Artist: ${result.artist}</span>` : ''}
+                                        ${result.year ? `<span class="badge bg-secondary me-1 clickable-tag" data-tag="year" data-value="${result.year}">Year: ${result.year}</span>` : ''}
+                                        ${result.platforms ? `<span class="badge bg-info text-dark clickable-tag" data-tag="system" data-value="${result.platforms}">System: ${result.platforms}</span>` : ''}
+                                    </div>
+                                ` : ''}
+                                ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
+                            </div>
+                        </div>
+                    </a>
+                `).join('');
+
+                // Update footer/pagination
+                let footer = existingModalEl.querySelector('.modal-footer');
+                if (totalPages > 1) {
+                    if (!footer) {
+                        footer = document.createElement('div');
+                        footer.className = 'modal-footer';
+                        existingModalEl.querySelector('.modal-content').appendChild(footer);
+                    }
+                    footer.innerHTML = `
+                        <div class="d-flex justify-content-between w-100 align-items-center">
+                            <button type="button" class="btn btn-secondary" id="prevPageBtn" ${page <= 1 ? 'disabled' : ''}>
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </button>
+                            <span>Page ${page} of ${totalPages}</span>
+                            <button type="button" class="btn btn-secondary" id="nextPageBtn" ${page >= totalPages ? 'disabled' : ''}>
+                                Next <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    `;
+                } else if (footer) {
+                    footer.remove();
+                }
+                
+                // Scroll to top of results
+                existingModalEl.querySelector('.modal-body').scrollTop = 0;
+
+                // Handle badge clicks
+                existingModalEl.querySelectorAll('.clickable-tag').forEach(tag => {
+                    tag.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const filterInput = document.getElementById('modalResultsFilter');
+                        if (filterInput) {
+                            const tagName = this.dataset.tag;
+                            const tagValue = this.dataset.value;
+                            // Check if it's multiple platforms, just take the first one for better search
+                            const cleanValue = tagValue.includes(',') ? tagValue.split(',')[0].trim() : tagValue;
+                            filterInput.value = `${tagName}:"${cleanValue}"`;
+                            filterInput.dispatchEvent(new Event('input'));
+                        }
+                    });
+                });
+
+                // Ensure modal is shown
+                modal.show();
+            } else {
+                // Create modal HTML for selection
+                const modalHtml = `
+                    <div class="modal fade" id="selectMediaModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">${title}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
-                            </div>
-                            ${totalPages > 1 ? `
-                            <div class="modal-footer">
-                                <div class="d-flex justify-content-between w-100 align-items-center">
-                                    <button type="button" class="btn btn-secondary" id="prevPageBtn" ${page <= 1 ? 'disabled' : ''}>
-                                        <i class="bi bi-chevron-left"></i> Previous
-                                    </button>
-                                    <span>Page ${page} of ${totalPages}</span>
-                                    <button type="button" class="btn btn-secondary" id="nextPageBtn" ${page >= totalPages ? 'disabled' : ''}>
-                                        Next <i class="bi bi-chevron-right"></i>
-                                    </button>
+                                <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                                    <div class="mb-3">
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-filter"></i></span>
+                                            <input type="text" id="modalResultsFilter" class="form-control" placeholder="Search within all results...">
+                                        </div>
+                                    </div>
+                                    <div class="list-group" id="mediaResultsList">
+                                        ${results.map((result, index) => `
+                                            <a href="#" class="list-group-item list-group-item-action media-result-item" data-index="${index}">
+                                                <div class="row align-items-center">
+                                                    <div class="col-auto">
+                                                        ${result.poster_url ?
+                    `<img src="${result.poster_url}" alt="Poster" style="width: 60px; height: 90px; object-fit: cover;" class="rounded">` :
+                    `<div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 60px; height: 90px;"><small class="text-muted">No poster</small></div>`
+                }
+                                                    </div>
+                                                    <div class="col">
+                                                        <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
+                                                        ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
+                                                        ${result.year || result.platforms || result.artist ? `
+                                                            <div class="mt-1">
+                                                                ${result.artist ? `<span class="badge bg-primary me-1 clickable-tag" data-tag="artist" data-value="${result.artist}">Artist: ${result.artist}</span>` : ''}
+                                                                ${result.year ? `<span class="badge bg-secondary me-1 clickable-tag" data-tag="year" data-value="${result.year}">Year: ${result.year}</span>` : ''}
+                                                                ${result.platforms ? `<span class="badge bg-info text-dark clickable-tag" data-tag="system" data-value="${result.platforms}">System: ${result.platforms}</span>` : ''}
+                                                            </div>
+                                                        ` : ''}
+                                                        ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        `).join('')}
+                                    </div>
                                 </div>
+                                ${totalPages > 1 ? `
+                                <div class="modal-footer">
+                                    <div class="d-flex justify-content-between w-100 align-items-center">
+                                        <button type="button" class="btn btn-secondary" id="prevPageBtn" ${page <= 1 ? 'disabled' : ''}>
+                                            <i class="bi bi-chevron-left"></i> Previous
+                                        </button>
+                                        <span>Page ${page} of ${totalPages}</span>
+                                        <button type="button" class="btn btn-secondary" id="nextPageBtn" ${page >= totalPages ? 'disabled' : ''}>
+                                            Next <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                ` : ''}
                             </div>
-                            ` : ''}
                         </div>
                     </div>
-                </div>
-            `;
+                `;
 
-            // Remove existing modal if any
-            const existingModal = document.getElementById('selectMediaModal');
-            if (existingModal) existingModal.remove();
+                // Add modal to page
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-            // Add modal to page
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
+                // Show modal
+                modal = new bootstrap.Modal(document.getElementById('selectMediaModal'));
+                modal.show();
+            }
 
-            // Show modal
-            const modal = new bootstrap.Modal(document.getElementById('selectMediaModal'));
-            modal.show();
+            // Re-bind event listeners (they are lost when innerHTML is updated or it's a new modal)
 
             // Handle pagination
-            if (totalPages > 1) {
-                const prevBtn = document.getElementById('prevPageBtn');
-                const nextBtn = document.getElementById('nextPageBtn');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+            const filterInput = document.getElementById('modalResultsFilter');
 
-                if (prevBtn) {
-                    prevBtn.addEventListener('click', function() {
-                        modal.hide();
-                        loadPage(page - 1, searchParams, lookupType);
-                    });
-                }
-
-                if (nextBtn) {
-                    nextBtn.addEventListener('click', function() {
-                        modal.hide();
-                        loadPage(page + 1, searchParams, lookupType);
-                    });
-                }
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    loadPage(page - 1, searchParams, lookupType, filterInput?.value || '');
+                });
             }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    loadPage(page + 1, searchParams, lookupType, filterInput?.value || '');
+                });
+            }
+
+            // Handle badge clicks for new modal
+            document.querySelectorAll('.clickable-tag').forEach(tag => {
+                tag.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const filterInput = document.getElementById('modalResultsFilter');
+                    if (filterInput) {
+                        const tagName = this.dataset.tag;
+                        const tagValue = this.dataset.value;
+                        const cleanValue = tagValue.includes(',') ? tagValue.split(',')[0].trim() : tagValue;
+                        filterInput.value = `${tagName}:"${cleanValue}"`;
+                        filterInput.dispatchEvent(new Event('input'));
+                    }
+                });
+            });
 
             // Handle selection
             document.querySelectorAll('.media-result-item').forEach(item => {
@@ -807,13 +1072,23 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     const oldHtml = btn.innerHTML;
                     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
 
+                    const idField = lookupOptions[selected.type || lookupType]?.id_field || 'tmdb_id';
+                    const fetchBody = { type: selected.type || lookupType };
+                    fetchBody[idField] = selected.tmdb_id || selected.tvdb_id || selected.igdb_id || selected.mbid || selected.imdb_id;
+                    // For TVDB, the backend expects tmdb_id if using the TMDB API
+                    if ((selected.type === 'TVDB' || lookupType === 'TVDB') && !fetchBody['tmdb_id']) {
+                        fetchBody['tmdb_id'] = selected.tmdb_id || selected.tvdb_id;
+                    }
+                    if (selected.imdb_id) fetchBody['imdb_id'] = selected.imdb_id;
+                    if (selected.tmdb_id) fetchBody['tmdb_id'] = selected.tmdb_id;
+
                     fetch('<?= base_url('media/fetchDetails') ?>', {
                         method: 'POST',
                         headers: { 
                             'X-Requested-With': 'XMLHttpRequest', 
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
+                        body: JSON.stringify(fetchBody)
                     })
                     .then(r => {
                         if (!r.ok && r.status === 403) {
@@ -838,14 +1113,40 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     });
                 });
             });
+
+            // Handle filtering
+            if (filterInput) {
+                filterInput.addEventListener('input', function() {
+                    const filterText = this.value.trim();
+                    
+                    clearTimeout(searchFilterTimeout);
+                    searchFilterTimeout = setTimeout(() => {
+                        loadPage(1, searchParams, lookupType, filterText);
+                    }, 500); // 500ms debounce
+                });
+                
+                // Focus the filter input after modal is shown
+                if (!existingModalEl) {
+                    const modalEl = document.getElementById('selectMediaModal');
+                    modalEl.addEventListener('shown.bs.modal', function () {
+                        filterInput.focus();
+                    });
+                }
+            }
         }
 
-        function loadPage(page, searchParams, lookupType) {
+        function loadPage(page, searchParams, lookupType, filterText = '') {
             btn.disabled = true;
             const oldHtml = btn.innerHTML;
             btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
 
-            const payload = { ...searchParams, page: page };
+            // Refine the search if filterText is present
+            let refinedTitle = searchParams.title || '';
+            if (filterText) {
+                refinedTitle += ' ' + filterText;
+            }
+
+            const payload = { ...searchParams, title: refinedTitle, page: page };
 
             fetch('<?= base_url('media/lookup') ?>', {
                 method: 'POST',
@@ -862,8 +1163,16 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             return r.json();
         })
         .then(res => {
-                if (res.success && res.multiple && res.results) {
-                    showMultipleResults(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);
+                if (res.success && res.results) {
+                    showMultipleResults(
+                        res.results, 
+                        lookupType, 
+                        res.page || 1, 
+                        res.total_pages || 1, 
+                        res.total_results || res.results.length, 
+                        searchParams,
+                        res.message
+                    );
                 } else {
                     showToast(res.message || 'No more results', 'error');
                 }
@@ -880,17 +1189,22 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         if (btn) {
             btn.addEventListener('click', function() {
                 const payload = {
-                    lookup_type: (document.getElementById('lookup_type')?.value || 'movie'),
+                    lookup_type: (document.getElementById('lookup_type')?.value || 'IMDB'),
                     title: (document.getElementById('lookup_title')?.value || '').trim(),
                     year: (document.getElementById('lookup_year')?.value || '').trim(),
-                    imdb_id: (document.getElementById('imdb_id')?.value || '').trim(),
-                    tvdb_id: (document.getElementById('tvdb_id')?.value || '').trim(),
                     barcode: (document.getElementById('lookup_barcode')?.value || '').trim(),
                 };
+                
+                // Add the specific ID based on type
+                const opt = lookupOptions[payload.lookup_type];
+                if (opt) {
+                    const idVal = (document.getElementById('lookup_id')?.value || '').trim();
+                    if (idVal) payload[opt.id_field] = idVal;
+                }
 
                 // basic guard
-                if (!payload.title && !payload.imdb_id && !payload.tvdb_id && !payload.barcode) {
-                    showToast('Enter a Title, IMDb ID, TVDB ID, or Barcode to search.', 'error');
+                if (!payload.title && !payload.barcode && !payload[opt?.id_field]) {
+                    showToast('Enter a Title, ID, or Barcode to search.', 'error');
                     return;
                 }
 
@@ -921,7 +1235,8 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                   res.page || 1,
                                   res.total_pages || 1,
                                   res.total_results || res.results.length,
-                                  payload
+                                  payload,
+                                  res.message
                               );
                               showToast(res.message, 'success');
                           } else {
@@ -949,39 +1264,80 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
         // Choose poster button click
         const choosePosterBtn = document.getElementById('choosePosterBtn');
-        if (choosePosterBtn) {
-            choosePosterBtn.addEventListener('click', function() {
-                const tmdbId = document.getElementById('tmdb_id_for_posters').value;
-                const mediaType = document.getElementById('media_type_for_posters').value || 'movie';
+        const addFetchPostersBtn = document.getElementById('addFetchPostersBtn');
+        if (addFetchPostersBtn) {
+            addFetchPostersBtn.addEventListener('click', function() {
+                const lookupId = document.getElementById('lookup_id_for_posters').value;
+                const mediaType = document.getElementById('media_type_for_posters').value || 'TMDB';
 
-                if (!tmdbId) {
-                    showToast('No TMDB ID available. Please search first.', 'error');
+                if (!lookupId) {
+                    showToast('No ID available. Please search first.', 'error');
                     return;
                 }
 
-                // Fetch posters
-                fetchPostersForSelection(tmdbId, mediaType);
+                fetchPostersForSelection(lookupId, mediaType);
+            });
+        }
+
+        if (choosePosterBtn) {
+            choosePosterBtn.addEventListener('click', function() {
+                const lookupId = document.getElementById('lookup_id_for_posters').value;
+                const mediaType = document.getElementById('media_type_for_posters').value || 'TMDB';
+
+                if (!lookupId) {
+                    showToast('No ID available. Please search first.', 'error');
+                    return;
+                }
+
+                // Pre-populate search term with the media title
+                const titleInput = document.getElementById('title');
+                const oTitleInput = document.getElementById('o_title');
+                const posterSearchTermInput = document.getElementById('addPosterSearchTerm');
+                if (posterSearchTermInput) {
+                    posterSearchTermInput.value = titleInput.value || oTitleInput.value || '';
+                }
 
                 // Show modal
                 const modal = new bootstrap.Modal(document.getElementById('posterSelectionModal'));
                 modal.show();
+
+                // Fetch posters automatically the first time
+                fetchPostersForSelection(lookupId, mediaType);
             });
         }
 
-        function fetchPostersForSelection(tmdbId, mediaType) {
+        function fetchPostersForSelection(lookupId, mediaType) {
+            const btn = document.getElementById('addFetchPostersBtn');
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
+            }
+
             document.getElementById('addPosterLoadingSpinner').style.display = 'block';
             document.getElementById('addPosterMessage').style.display = 'none';
             document.getElementById('addPosterGallery').innerHTML = '';
 
-            // We need to create a temporary movie ID or use a special endpoint
-            // For now, we'll call the API service directly via a new endpoint
+            const sourceSelect = document.getElementById('addPosterSource');
+            const selectedSource = sourceSelect ? sourceSelect.value : '';
+            const searchTermInput = document.getElementById('addPosterSearchTerm');
+            const searchTerm = searchTermInput ? searchTermInput.value : '';
+
+            const idField = lookupOptions[mediaType]?.id_field || 'tmdb_id';
+            const fetchBody = { type: mediaType, source: selectedSource, searchTerm: searchTerm };
+            fetchBody[idField] = lookupId;
+            // Ensure we also send tmdb_id if it's the same as tvdb_id for backend compatibility
+            if (idField === 'tvdb_id' && !fetchBody['tmdb_id']) {
+                fetchBody['tmdb_id'] = lookupId;
+            }
+
             fetch('<?= base_url('media/fetchPostersForNew') ?>', {
                 method: 'POST',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ tmdb_id: tmdbId, type: mediaType })
+                body: JSON.stringify(fetchBody)
             })
             .then(r => {
                 if (!r.ok && r.status === 403) {
@@ -993,6 +1349,13 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 document.getElementById('addPosterLoadingSpinner').style.display = 'none';
 
                 if (data.success && data.posters && data.posters.length > 0) {
+                    // Update tab label if source is returned
+                    if (data.source) {
+                        const tab = document.getElementById('add-tmdb-tab');
+                        if (tab) {
+                            tab.innerHTML = `<i class="bi bi-cloud-download"></i> ${data.source} Posters`;
+                        }
+                    }
                     availablePosters = data.posters;
                     displayAddPosterGallery(data.posters);
                     showAddPosterMessage(data.message, 'success');
@@ -1003,6 +1366,12 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             .catch(error => {
                 document.getElementById('addPosterLoadingSpinner').style.display = 'none';
                 showAddPosterMessage('Error fetching posters: ' + error.message, 'danger');
+            })
+            .finally(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
             });
         }
 
@@ -1018,7 +1387,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                         <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
                         <div class="card-body p-2 text-center">
                             <small class="text-muted">
-                                ${poster.width} x ${poster.height}
+                                ${poster.width && poster.height ? poster.width + ' x ' + poster.height : 'invalid image'}
                                 ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}
                             </small>
                         </div>

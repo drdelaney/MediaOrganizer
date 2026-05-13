@@ -7,28 +7,23 @@ use CodeIgniter\HTTP\CURLRequest;
 class MovieApiService
 {
     private $tmdbApiKey;
+    private $userAgent;
     private $client;
 
     public function __construct()
     {
-        // First, let's check what we can see
-        $envValue = $_ENV['TMDB_API_KEY'] ?? null;
-        $serverValue = $_SERVER['TMDB_API_KEY'] ?? null;
-        $getenvValue = getenv('TMDB_API_KEY');
+        $configModel = new \App\Models\ConfigurationModel();
         
-        // Log what we found
-        error_log('TMDB API Key Debug - $_ENV: ' . ($envValue ? 'SET (length: ' . strlen($envValue) . ')' : 'NOT SET'));
-        error_log('TMDB API Key Debug - $_SERVER: ' . ($serverValue ? 'SET (length: ' . strlen($serverValue) . ')' : 'NOT SET'));
-        error_log('TMDB API Key Debug - getenv: ' . ($getenvValue ? 'SET (length: ' . strlen($getenvValue) . ')' : 'NOT SET'));
-        
-        $this->tmdbApiKey = env('TMDB_API_KEY');
-        
-        // Log the final result
-        error_log('TMDB API Key Final: ' . ($this->tmdbApiKey ? 'SET (length: ' . strlen($this->tmdbApiKey) . ')' : 'NOT SET'));
-        
+        $this->tmdbApiKey = $configModel->getParam('TMDB_API_KEY');
+        $this->userAgent = $configModel->getParam('user_agent', 'MediaOrganizer/1.0');
+
         $this->client = \Config\Services::curlrequest([
             'baseURI' => 'https://api.themoviedb.org/3/',
-            'timeout' => 30
+            'timeout' => 30,
+            'headers' => [
+                'User-Agent' => $this->userAgent,
+                'Accept'     => 'application/json',
+            ],
         ]);
     }
 
@@ -99,10 +94,21 @@ class MovieApiService
      * @param int $page Page number for pagination (default 1)
      * @return array Array with 'results', 'total_results', 'total_pages', 'page'
      */
-    public function searchMovieMultiple($title, $year = null, $limit = 10, $page = 1)
+    public function searchMovieMultiple($title, $year = null, $limit = 20, $page = 1)
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');
+        }
+
+        // Parse year tag if present (handle year:YYYY or year:"YYYY")
+        if (preg_match('/year:\s*"?(\d{4})"?/i', $title, $matches)) {
+            $year = (int)$matches[1];
+            $title = str_replace($matches[0], '', $title);
+        }
+        $title = trim($title);
+
+        if (empty($title) && $year) {
+            $title = (string)$year;
         }
 
         $params = [
@@ -150,7 +156,7 @@ class MovieApiService
                     'year' => $movie['release_date'] ? date('Y', strtotime($movie['release_date'])) : null,
                     'poster_url' => $movie['poster_path'] ? 'https://image.tmdb.org/t/p/w185' . $movie['poster_path'] : null,
                     'overview' => $movie['overview'] ?? null,
-                    'type' => 'movie'
+                    'type' => LookupRegistry::isEnabled('TMDB') ? 'TMDB' : 'IMDB'
                 ];
                 $count++;
             }
@@ -198,7 +204,7 @@ class MovieApiService
             log_message('info', 'TMDB API: Movie details received for: ' . ($movieData['title'] ?? 'Unknown'));
 
             // Get external IDs (IMDB, etc.)
-            $externalIds = $this->getExternalIds($tmdbId, 'movie');
+            $externalIds = $this->getExternalIds($tmdbId, 'IMDB');
 
             // Format the data for our application
             return [
@@ -220,6 +226,7 @@ class MovieApiService
                 'cast' => $this->getCast($tmdbId),
                 'tmdb_id' => (string)$tmdbId,
                 'imdb_id' => $externalIds['imdb_id'] ?? null,
+                'tvdb_id' => $externalIds['tvdb_id'] ?? null,
             ];
 
         } catch (\Exception $e) {
@@ -274,10 +281,21 @@ class MovieApiService
      * @param int $page Page number for pagination (default 1)
      * @return array Array with 'results', 'total_results', 'total_pages', 'page'
      */
-    public function searchTvMultiple($title, $year = null, $limit = 10, $page = 1)
+    public function searchTvMultiple($title, $year = null, $limit = 20, $page = 1)
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');
+        }
+
+        // Parse year tag if present (handle year:YYYY or year:"YYYY")
+        if (preg_match('/year:\s*"?(\d{4})"?/i', $title, $matches)) {
+            $year = (int)$matches[1];
+            $title = str_replace($matches[0], '', $title);
+        }
+        $title = trim($title);
+
+        if (empty($title) && $year) {
+            $title = (string)$year;
         }
 
         $params = [
@@ -325,7 +343,7 @@ class MovieApiService
                     'year' => $tv['first_air_date'] ? date('Y', strtotime($tv['first_air_date'])) : null,
                     'poster_url' => $tv['poster_path'] ? 'https://image.tmdb.org/t/p/w185' . $tv['poster_path'] : null,
                     'overview' => $tv['overview'] ?? null,
-                    'type' => 'tv'
+                    'type' => 'TVDB'
                 ];
                 $count++;
             }
@@ -418,6 +436,7 @@ class MovieApiService
                 'cast' => $this->getTvCast($tmdbId),
                 'tmdb_id' => (string)$tmdbId,
                 'imdb_id' => $externalIds['imdb_id'] ?? null,
+                'tvdb_id' => $externalIds['tvdb_id'] ?? null,
             ];
         } catch (\Exception $e) {
             log_message('error', 'TMDB API Error getting TV details: ' . $e->getMessage());
@@ -592,7 +611,7 @@ class MovieApiService
      * @param string $type 'movie' or 'tv'
      * @return array Array with 'imdb_id' and other external IDs
      */
-    private function getExternalIds($tmdbId, $type = 'movie')
+    private function getExternalIds($tmdbId, $type = 'IMDB')
     {
         try {
             $params = [
@@ -764,7 +783,7 @@ class MovieApiService
      * Find a movie/TV entry by external ID (IMDb ID like tt1234567 or TVDB numeric ID)
      * $type: 'movie' or 'tv' preferred media type when both are possible
      */
-    public function findByExternalId($externalId, $type = 'movie')
+    public function findByExternalId($externalId, $type = 'IMDB')
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');
@@ -805,7 +824,7 @@ class MovieApiService
                 $tmdbId = $tvResults[0]['id'];
                 return $this->getTvDetails($tmdbId);
             }
-            if ($type === 'movie' && !empty($movieResults)) {
+            if ($type === 'IMDB' && !empty($movieResults)) {
                 $tmdbId = $movieResults[0]['id'];
                 return $this->getMediaDetails($tmdbId);
             }
@@ -829,7 +848,7 @@ class MovieApiService
      * This uses UPCItemDB public trial endpoint (rate-limited). If TMDB is available, we search there.
      * Returns normalized data like searchMovie/searchTv or minimal title-only data when TMDB unavailable.
      */
-    public function findByBarcode(string $barcode, string $type = 'movie')
+    public function findByBarcode(string $barcode, string $type = 'IMDB')
     {
         $barcode = preg_replace('/[^0-9]/', '', (string)$barcode);
         if ($barcode === '') {
@@ -912,7 +931,7 @@ class MovieApiService
      * @param int $limit Maximum number of posters to return
      * @return array Array of poster URLs
      */
-    public function getPosters($tmdbId, $type = 'movie', $limit = 5)
+    public function getPosters($tmdbId, $type = 'IMDB', $limit = 5)
     {
         if (!$this->isApiAvailable()) {
             throw new \Exception('TMDB API key not configured');

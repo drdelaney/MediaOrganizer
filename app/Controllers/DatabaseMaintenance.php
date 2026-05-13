@@ -112,6 +112,49 @@ class DatabaseMaintenance extends BaseController
     }
 
     /**
+     * Fix configuration table schema
+     */
+    public function fixConfigSchema()
+    {
+        try {
+            // Check if column lengths are already sufficient
+            $fields = $this->db->getFieldData('configuration');
+            $paramLength = 0;
+            $valueLength = 0;
+
+            foreach ($fields as $field) {
+                if ($field->name === 'param') {
+                    $paramLength = $field->max_length;
+                } elseif ($field->name === 'value') {
+                    $valueLength = $field->max_length;
+                }
+            }
+
+            if ($paramLength < 64) {
+                $this->db->query("ALTER TABLE `configuration` MODIFY `param` VARCHAR(64) NOT NULL");
+            }
+            if ($valueLength < 255) {
+                $this->db->query("ALTER TABLE `configuration` MODIFY `value` VARCHAR(255) NOT NULL");
+            }
+
+            // Always update version to 7 if we got here
+            $configModel = new \App\Models\ConfigurationModel();
+            $configModel->setParam('version', '7');
+
+            return $this->response->setJSON([
+                'status' => 'success',
+                'message' => 'Configuration schema updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Error fixing schema: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * Convert tables to InnoDB engine
      */
     public function convertToInnoDB()
@@ -303,10 +346,19 @@ class DatabaseMaintenance extends BaseController
      */
     public function index()
     {
+        $configModel = new \App\Models\ConfigurationModel();
+        
+        // Ensure default version exists if not present
+        $configModel->ensureParam('version', '0');
+        
+        $configVersion = (int)$configModel->getParam('version', 0);
+        $needsFix = $configVersion < 7;
+
         $data = [
             'title' => 'Database Maintenance',
             'tables' => $this->getTableInfo(),
-            'environment' => $this->checkEnvironment()
+            'environment' => $this->checkEnvironment(),
+            'needsFix' => $needsFix
         ];
 
         return view('database_maintenance/index', $data);
@@ -401,9 +453,38 @@ class DatabaseMaintenance extends BaseController
         // Ensure default settings exist in the database for the form
         $configModel->ensureParam('timezone', 'UTC');
         $configModel->ensureParam('deauth_time', '15');
+        $configModel->ensureParam('user_agent', 'MediaOrganizer/1.0');
+        $configModel->ensureParam('app.name', 'Media Organizer');
+        $configModel->ensureParam('app.baseURL', 'http://localhost:8080/');
+        $configModel->ensureParam('ENABLED_LOOKUPS', 'IMDB,TVDB');
 
         $currentTimezone = $configModel->getParam('timezone', 'UTC');
         $deauthTime = $configModel->getParam('deauth_time', 15);
+        $userAgent = $configModel->getParam('user_agent', 'MediaOrganizer/1.0');
+        $appName = $configModel->getParam('app.name', 'Media Organizer');
+        $appBaseURL = $configModel->getParam('app.baseURL', 'http://localhost:8080/');
+        $enabledLookups = $configModel->getParam('ENABLED_LOOKUPS', 'IMDB,TVDB');
+
+        $lookupSettings = [
+            'TMDB_API_KEY' => $configModel->getParam('TMDB_API_KEY', ''),
+            'IGDB_CLIENT_ID' => $configModel->getParam('IGDB_CLIENT_ID', ''),
+            'IGDB_CLIENT_SECRET' => $configModel->getParam('IGDB_CLIENT_SECRET', ''),
+            'MUSICBRAINZ_EMAIL' => $configModel->getParam('MUSICBRAINZ_EMAIL', ''),
+            'ENABLED_LOOKUPS' => $enabledLookups,
+        ];
+
+        $emailSettings = [
+            'protocol' => $configModel->getParam('email.protocol', 'mail'),
+            'SMTPHost' => $configModel->getParam('email.SMTPHost', ''),
+            'SMTPUser' => $configModel->getParam('email.SMTPUser', ''),
+            'SMTPPass' => $configModel->getParam('email.SMTPPass', ''),
+            'SMTPPort' => $configModel->getParam('email.SMTPPort', 25),
+            'SMTPCrypto' => $configModel->getParam('email.SMTPCrypto', 'tls'),
+            'fromEmail' => $configModel->getParam('email.fromEmail', ''),
+            'fromName' => $configModel->getParam('email.fromName', 'Media Organizer'),
+            'SMTPVerifyPeer' => $configModel->getParam('email.SMTPVerifyPeer', 'true'),
+            'SMTPVerifyPeerName' => $configModel->getParam('email.SMTPVerifyPeerName', 'true'),
+        ];
 
         $data = [
             'title' => 'Manage Lookup Tables',
@@ -421,6 +502,11 @@ class DatabaseMaintenance extends BaseController
             'poster_count' => $this->posterModel->countAllResults(),
             'currentTimezone' => $currentTimezone,
             'deauthTime' => $deauthTime,
+            'userAgent' => $userAgent,
+            'appName' => $appName,
+            'appBaseURL' => $appBaseURL,
+            'lookupSettings' => $lookupSettings,
+            'emailSettings' => $emailSettings,
             'availableTimezones' => \DateTimeZone::listIdentifiers()
         ];
 
@@ -436,18 +522,110 @@ class DatabaseMaintenance extends BaseController
             $configModel = new \App\Models\ConfigurationModel();
             $timezone = $this->request->getPost('timezone');
             $deauthTime = $this->request->getPost('deauth_time');
+            $userAgent = $this->request->getPost('user_agent');
+            $appName = $this->request->getPost('app_name');
+            $appBaseURL = $this->request->getPost('app_baseURL');
 
             $success = true;
+
+            $errors = [];
 
             if ($timezone) {
                 if (!$configModel->setParam('timezone', $timezone)) {
                     $success = false;
+                    $errors[] = "Failed to save timezone";
                 }
             }
 
             if ($deauthTime !== null) {
                 if (!$configModel->setParam('deauth_time', (string)$deauthTime)) {
                     $success = false;
+                    $errors[] = "Failed to save deauth_time";
+                }
+            }
+
+            if ($userAgent !== null) {
+                if (!$configModel->setParam('user_agent', (string)$userAgent)) {
+                    $success = false;
+                    $errors[] = "Failed to save user_agent";
+                }
+            }
+
+            if ($appName !== null) {
+                if (!$configModel->setParam('app.name', (string)$appName)) {
+                    $success = false;
+                    $errors[] = "Failed to save app.name";
+                }
+            }
+
+            if ($appBaseURL !== null) {
+                if (!$configModel->setParam('app.baseURL', (string)$appBaseURL)) {
+                    $success = false;
+                    $errors[] = "Failed to save app.baseURL";
+                }
+            }
+
+            // Email Settings
+            $emailParams = [
+                'email.protocol', 'email.SMTPHost', 'email.SMTPUser', 'email.SMTPPass',
+                'email.SMTPPort', 'email.SMTPCrypto', 'email.fromEmail', 'email.fromName',
+                'email.SMTPVerifyPeer', 'email.SMTPVerifyPeerName'
+            ];
+
+            foreach ($emailParams as $param) {
+                $value = $this->request->getPost(str_replace('email.', 'email_', $param));
+                if ($value !== null) {
+                    if (!$configModel->setParam($param, (string)$value)) {
+                        $success = false;
+                        $errors[] = "Failed to save $param";
+                    }
+                }
+            }
+
+            // Media Lookup Settings
+            $tmdbKey = $this->request->getPost('TMDB_API_KEY');
+            $mbEmail = $this->request->getPost('MUSICBRAINZ_EMAIL');
+            $igdbId = $this->request->getPost('IGDB_CLIENT_ID');
+            $igdbSecret = $this->request->getPost('IGDB_CLIENT_SECRET');
+
+            $lookupParams = [
+                'TMDB_API_KEY' => $tmdbKey,
+                'IGDB_CLIENT_ID' => $igdbId,
+                'IGDB_CLIENT_SECRET' => $igdbSecret,
+                'MUSICBRAINZ_EMAIL' => $mbEmail,
+            ];
+
+            foreach ($lookupParams as $param => $value) {
+                if ($value !== null) {
+                    if (!$configModel->setParam($param, (string)$value)) {
+                        $success = false;
+                        $errors[] = "Failed to save $param";
+                    }
+                }
+            }
+
+            // Handle ENABLED_LOOKUPS checkboxes
+            $enabledLookups = $this->request->getPost('ENABLED_LOOKUPS');
+            if (is_array($enabledLookups)) {
+                // Filter out lookups that don't have required API keys/settings
+                $filteredLookups = [];
+                foreach ($enabledLookups as $lookup) {
+                    if ($lookup === 'TMDB' && empty($tmdbKey)) continue;
+                    if ($lookup === 'IGDB' && (empty($igdbId) || empty($igdbSecret))) continue;
+                    if ($lookup === 'MusicBrainz' && empty($mbEmail)) continue;
+                    $filteredLookups[] = $lookup;
+                }
+
+                $enabledLookupsStr = implode(',', $filteredLookups);
+                if (!$configModel->setParam('ENABLED_LOOKUPS', $enabledLookupsStr)) {
+                    $success = false;
+                    $errors[] = "Failed to save ENABLED_LOOKUPS";
+                }
+            } else {
+                // If none checked, it might be empty or null
+                if (!$configModel->setParam('ENABLED_LOOKUPS', '')) {
+                    $success = false;
+                    $errors[] = "Failed to save ENABLED_LOOKUPS";
                 }
             }
 
@@ -460,7 +638,7 @@ class DatabaseMaintenance extends BaseController
 
             return $this->response->setJSON([
                 'status' => 'error',
-                'message' => 'Failed to update configuration'
+                'message' => 'Failed to update configuration: ' . implode(', ', $errors)
             ]);
         }
         
@@ -1214,5 +1392,116 @@ class DatabaseMaintenance extends BaseController
             ]);
         }
         return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Duplicate Detector page
+     */
+    public function duplicateDetector()
+    {
+        // 1. Get all media
+        $allMedia = $this->mediaModel->db->table('movies m')
+            ->select('m.movie_id, m.title, m.o_title, m.year, m.barcode, m.notes')
+            ->where("m.notes NOT LIKE '%<!skipduplicate>%'")
+            ->get()
+            ->getResultArray();
+
+        $duplicates = [];
+        $processedIds = [];
+
+        // 2. Identify potential duplicates
+        foreach ($allMedia as $i => $media1) {
+            if (in_array($media1['movie_id'], $processedIds)) continue;
+
+            $group = [$media1];
+            $norm1 = normalize_title_for_search($media1['title']);
+            $normO1 = normalize_title_for_search($media1['o_title']);
+            $title1 = trim((string)$media1['title']);
+            $oTitle1 = trim((string)$media1['o_title']);
+            $barcode1 = trim((string)$media1['barcode']);
+            $imdb1 = get_imdb_id_from_notes($media1['notes']);
+            $tmdb1 = get_tmdb_id_from_notes($media1['notes']);
+            $tvdb1 = get_tvdb_id_from_notes($media1['notes']);
+            $igdb1 = get_igdb_id_from_notes($media1['notes']);
+            $mbid1 = get_mbid_from_notes($media1['notes']);
+
+            foreach ($allMedia as $j => $media2) {
+                if ($i === $j) continue;
+                if (in_array($media2['movie_id'], $processedIds)) continue;
+
+                $isMatch = false;
+
+                // Match by Barcode (High confidence)
+                $barcode2 = trim((string)$media2['barcode']);
+                if ($barcode1 !== '' && $barcode1 === $barcode2) {
+                    $isMatch = true;
+                }
+
+                // Match by External IDs
+                if (!$isMatch) {
+                    $imdb2 = get_imdb_id_from_notes($media2['notes']);
+                    if ($imdb1 && $imdb2 && $imdb1 === $imdb2) $isMatch = true;
+                    
+                    if (!$isMatch) {
+                        $tmdb2 = get_tmdb_id_from_notes($media2['notes']);
+                        if ($tmdb1 && $tmdb2 && $tmdb1 === $tmdb2) $isMatch = true;
+                    }
+                    
+                    if (!$isMatch) {
+                        $tvdb2 = get_tvdb_id_from_notes($media2['notes']);
+                        if ($tvdb1 && $tvdb2 && $tvdb1 === $tvdb2) $isMatch = true;
+                    }
+                    
+                    if (!$isMatch) {
+                        $igdb2 = get_igdb_id_from_notes($media2['notes']);
+                        if ($igdb1 && $igdb2 && $igdb1 === $igdb2) $isMatch = true;
+                    }
+                    
+                    if (!$isMatch) {
+                        $mbid2 = get_mbid_from_notes($media2['notes']);
+                        if ($mbid1 && $mbid2 && $mbid1 === $mbid2) $isMatch = true;
+                    }
+                }
+
+                // Match by Exact Title or Original Title
+                if (!$isMatch) {
+                    $title2 = trim((string)$media2['title']);
+                    $oTitle2 = trim((string)$media2['o_title']);
+                    
+                    if (($title1 !== '' && ($title1 === $title2 || $title1 === $oTitle2)) ||
+                        ($oTitle1 !== '' && ($oTitle1 === $title2 || $oTitle1 === $oTitle2))) {
+                        $isMatch = true;
+                    }
+                }
+
+                // Match by Normalized Title + Year
+                if (!$isMatch) {
+                    $norm2 = normalize_title_for_search($media2['title']);
+                    $normO2 = normalize_title_for_search($media2['o_title']);
+                    
+                    $titleMatch = ($norm1 !== '' && ($norm1 === $norm2 || $norm1 === $normO2)) ||
+                                 ($normO1 !== '' && ($normO1 === $norm2 || $normO1 === $normO2));
+                    
+                    if ($titleMatch && $media1['year'] == $media2['year']) {
+                        $isMatch = true;
+                    }
+                }
+
+                if ($isMatch) {
+                    $group[] = $media2;
+                    $processedIds[] = $media2['movie_id'];
+                }
+            }
+
+            if (count($group) > 1) {
+                $duplicates[] = $group;
+                $processedIds[] = $media1['movie_id'];
+            }
+        }
+
+        return view('database_maintenance/duplicate_detector', [
+            'duplicates' => $duplicates,
+            'title' => 'Duplicate Detector'
+        ]);
     }
 }

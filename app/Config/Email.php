@@ -10,6 +10,25 @@ class Email extends BaseConfig
     public string $fromName   = '';
     public string $recipients = '';
 
+    public function __construct()
+    {
+        parent::__construct();
+
+        // Load from database if not set by environment
+        $configModel = new \App\Models\ConfigurationModel();
+        
+        $this->protocol = $configModel->getParam('email.protocol', $this->protocol);
+        $this->SMTPHost = $configModel->getParam('email.SMTPHost', $this->SMTPHost);
+        $this->SMTPUser = $configModel->getParam('email.SMTPUser', $this->SMTPUser);
+        $this->SMTPPass = $configModel->getParam('email.SMTPPass', $this->SMTPPass);
+        $this->SMTPPort = (int)$configModel->getParam('email.SMTPPort', $this->SMTPPort);
+        $this->SMTPCrypto = $configModel->getParam('email.SMTPCrypto', $this->SMTPCrypto);
+        $this->fromEmail = $configModel->getParam('email.fromEmail', $this->fromEmail);
+        $this->fromName = $configModel->getParam('email.fromName', $this->fromName);
+        $this->SMTPVerifyPeer = (bool)$configModel->getParam('email.SMTPVerifyPeer', $this->SMTPVerifyPeer);
+        $this->SMTPVerifyPeerName = (bool)$configModel->getParam('email.SMTPVerifyPeerName', $this->SMTPVerifyPeerName);
+    }
+
     /**
      * The "user agent"
      */

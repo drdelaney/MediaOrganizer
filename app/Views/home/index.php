@@ -97,6 +97,7 @@
                         </p>
                         <ul class="list-unstyled">
                             <li><i class="bi bi-check text-success"></i> Media catalog management</li>
+                            <li><i class="bi bi-check text-success"></i> Supports lookups from TMDB, IMDB, TVDB, IGDB, and MusicBrainz</li>
                             <li><i class="bi bi-check text-success"></i> Search and filtering</li>
                             <li><i class="bi bi-check text-success"></i> Rating and status tracking</li>
                             <li><i class="bi bi-check text-success"></i> Loan management</li>

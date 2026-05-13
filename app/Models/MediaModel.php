@@ -18,6 +18,35 @@ class MediaModel extends Model
         'classification', 'cast', 'plot', 'notes', 'image', 'created', 'updated'
     ];
 
+    protected $beforeDelete = ['beforeDeleteCleanup'];
+
+    /**
+     * Delete related records before deleting the media itself.
+     * Since we're using a foreign key constraint without ON DELETE CASCADE,
+     * we need to manually clean up related tables.
+     */
+    protected function beforeDeleteCleanup(array $data)
+    {
+        if (empty($data['id'])) {
+            return $data;
+        }
+
+        $mediaIds = (array) $data['id'];
+
+        foreach ($mediaIds as $mediaId) {
+            // Delete tags
+            $this->db->table('movie_tag')->where('movie_id', $mediaId)->delete();
+            
+            // Delete languages/audio/subs
+            $this->db->table('movie_lang')->where('movie_id', $mediaId)->delete();
+            
+            // Delete loans
+            $this->db->table('loans')->where('movie_id', $mediaId)->delete();
+        }
+
+        return $data;
+    }
+
     /**
      * Get the next available unique number for movies.number
      */
@@ -99,7 +128,7 @@ class MediaModel extends Model
      * Get media with related data
      * Uses fuzzy matching for title/o_title fields
      */
-    public function getMediaWithDetails($search = null, $searchField = 'title', $limit = 50, $offset = 0, $tagId = null, $excludeWishlist = false, $sortBy = 'created', $sortOrder = 'DESC', $wishlistOnly = false, $mediumId = null)
+    public function getMediaWithDetails($search = null, $searchField = 'title', $limit = 50, $offset = 0, $tagId = null, $excludeWishlist = false, $sortBy = 'created', $sortOrder = 'DESC', $wishlistOnly = false, $mediumId = null, $excludeSeen = false)
     {
         $builder = $this->db->table('movies m')
             ->select('m.*, 
@@ -112,12 +141,21 @@ class MediaModel extends Model
             ->join('vcodecs vc', 'm.vcodec_id = vc.vcodec_id', 'left')
             ->join('media med', 'm.medium_id = med.medium_id', 'left');
 
-        // Apply medium_id filter if provided
-        if ($mediumId !== null && $mediumId !== '') {
-            $builder->where('m.medium_id', $mediumId);
+        // Apply excludeSeen filter if requested
+        if ($excludeSeen) {
+            $builder->where('m.seen', 0);
         }
 
-        // Log the query if needed for debugging
+        // Apply medium_id filter if provided
+        if ($mediumId !== null && $mediumId !== '') {
+            $builder->groupStart()
+                ->where('m.medium_id', $mediumId)
+                ->orLike('m.notes', '<!medium_id>' . $mediumId . ',')
+                ->orLike('m.notes', ',' . $mediumId . ',')
+                ->orLike('m.notes', ',' . $mediumId . "\n")
+                ->orLike('m.notes', '<!medium_id>' . $mediumId . "\n")
+                ->groupEnd();
+        }
         // log_message('debug', 'Sorting by: ' . print_r($sortBy, true));
 
         if ($tagId) {
@@ -174,13 +212,27 @@ class MediaModel extends Model
                     ->orLike('m.country', $search)
                     ->orLike('m.studio', $search)
                     ->orLike('m.barcode', $search)
+                    ->orLike('m.notes', $search)
+                    ->orLike('med.name', $search)
                     ->groupEnd();
             } else {
                 // Non-title fields use regular LIKE
                 $allowedFields = ['director', 'genre', 'country', 'studio', 'barcode', 'notes', 'year', 'movie_id'];
-                if (in_array($searchField, $allowedFields)) {
+                
+                if (in_array($searchField, $allowedFields) || in_array($searchField, ['tmdb_id', 'imdb_id', 'tvdb_id', 'igdb_id', 'mbid'])) {
                     if ($searchField === 'movie_id') {
                         $builder->where('m.movie_id', $search);
+                    } elseif (in_array($searchField, ['tmdb_id', 'imdb_id', 'tvdb_id', 'igdb_id', 'mbid'])) {
+                        // Search for the ID tag in the notes field
+                        $tag = '';
+                        switch($searchField) {
+                            case 'tmdb_id': $tag = '<!tmdb>'; break;
+                            case 'imdb_id': $tag = '<!imdb>'; break;
+                            case 'tvdb_id': $tag = '<!tvdb>'; break;
+                            case 'igdb_id': $tag = '<!igdb>'; break;
+                            case 'mbid':    $tag = '<!mbid>'; break;
+                        }
+                        $builder->like('m.notes', $tag . $search);
                     } else {
                         $builder->like('m.' . $searchField, $search);
                     }
@@ -256,6 +308,26 @@ class MediaModel extends Model
             }
         }
 
+        // Fetch tags for each result
+        if (!empty($results)) {
+            $movieIds = array_column($results, 'movie_id');
+            $tags = $this->db->table('movie_tag mt')
+                ->select('mt.movie_id, t.*')
+                ->join('tags t', 'mt.tag_id = t.tag_id')
+                ->whereIn('mt.movie_id', $movieIds)
+                ->get()
+                ->getResultArray();
+
+            $movieTags = [];
+            foreach ($tags as $tag) {
+                $movieTags[$tag['movie_id']][] = $tag;
+            }
+
+            foreach ($results as &$media) {
+                $media['tags'] = $movieTags[$media['movie_id']] ?? [];
+            }
+        }
+
         return $results;
     }
 
@@ -263,7 +335,7 @@ class MediaModel extends Model
      * Count total media (with search filter)
      * Uses fuzzy matching for title/o_title fields
      */
-    public function countMedia($search = null, $searchField = 'title', $tagId = null, $excludeWishlist = false)
+    public function countMedia($search = null, $searchField = 'title', $tagId = null, $excludeWishlist = false, $mediumId = null, $excludeSeen = false)
     {
         if ($search && ($searchField === 'title' || $searchField === 'o_title')) {
             // For title searches, we need to get all candidates and filter in PHP
@@ -279,6 +351,22 @@ class MediaModel extends Model
             
             $builder = $this->db->table('movies m')
                 ->select('m.title, m.o_title, m.movie_id');
+            
+            // Apply excludeSeen filter if requested
+            if ($excludeSeen) {
+                $builder->where('m.seen', 0);
+            }
+            
+            // Apply medium_id filter if provided
+            if ($mediumId !== null && $mediumId !== '') {
+                $builder->groupStart()
+                    ->where('m.medium_id', $mediumId)
+                    ->orLike('m.notes', '<!medium_id>' . $mediumId . ',')
+                    ->orLike('m.notes', ',' . $mediumId . ',')
+                    ->orLike('m.notes', ',' . $mediumId . "\n")
+                    ->orLike('m.notes', '<!medium_id>' . $mediumId . "\n")
+                    ->groupEnd();
+            }
             
             if ($tagId) {
                 $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
@@ -323,7 +411,24 @@ class MediaModel extends Model
         }
         
         // Non-title searches use regular LIKE
-        $builder = $this->db->table('movies m');
+        $builder = $this->db->table('movies m')
+            ->join('media med', 'm.medium_id = med.medium_id', 'left');
+
+        // Apply excludeSeen filter if requested
+        if ($excludeSeen) {
+            $builder->where('m.seen', 0);
+        }
+
+        // Apply medium_id filter if provided
+        if ($mediumId !== null && $mediumId !== '') {
+            $builder->groupStart()
+                ->where('m.medium_id', $mediumId)
+                ->orLike('m.notes', '<!medium_id>' . $mediumId . ',')
+                ->orLike('m.notes', ',' . $mediumId . ',')
+                ->orLike('m.notes', ',' . $mediumId . "\n")
+                ->orLike('m.notes', '<!medium_id>' . $mediumId . "\n")
+                ->groupEnd();
+        }
 
         if ($tagId) {
             $builder->join('movie_tag mt', 'm.movie_id = mt.movie_id')
@@ -352,12 +457,27 @@ class MediaModel extends Model
                     ->orLike('m.genre', $search)
                     ->orLike('m.country', $search)
                     ->orLike('m.studio', $search)
+                    ->orLike('m.barcode', $search)
+                    ->orLike('m.notes', $search)
+                    ->orLike('med.name', $search)
                     ->groupEnd();
             } else {
                 $allowedFields = ['director', 'genre', 'country', 'studio', 'barcode', 'notes', 'year', 'movie_id'];
-                if (in_array($searchField, $allowedFields)) {
+                
+                if (in_array($searchField, $allowedFields) || in_array($searchField, ['tmdb_id', 'imdb_id', 'tvdb_id', 'igdb_id', 'mbid'])) {
                     if ($searchField === 'movie_id') {
                         $builder->where('m.movie_id', $search);
+                    } elseif (in_array($searchField, ['tmdb_id', 'imdb_id', 'tvdb_id', 'igdb_id', 'mbid'])) {
+                        // Search for the ID tag in the notes field
+                        $tag = '';
+                        switch($searchField) {
+                            case 'tmdb_id': $tag = '<!tmdb>'; break;
+                            case 'imdb_id': $tag = '<!imdb>'; break;
+                            case 'tvdb_id': $tag = '<!tvdb>'; break;
+                            case 'igdb_id': $tag = '<!igdb>'; break;
+                            case 'mbid':    $tag = '<!mbid>'; break;
+                        }
+                        $builder->like('m.notes', $tag . $search);
                     } else {
                         $builder->like('m.' . $searchField, $search);
                     }
@@ -479,7 +599,13 @@ class MediaModel extends Model
         $imdbId = $apiData['imdb_id'] ?? null;
         
         // Update notes with external IDs using helper function
-        $updatedNotes = add_external_ids_to_notes($existingNotes, $tmdbId, $imdbId);
+        $updatedNotes = add_external_ids_to_notes($existingNotes, [
+            'tmdb' => $tmdbId,
+            'imdb' => $imdbId,
+            'tvdb' => $apiData['tvdb_id'] ?? null,
+            'igdb' => $apiData['igdb_id'] ?? null,
+            'mbid' => $apiData['mbid'] ?? null,
+        ]);
         
         $updateData = [
             'title' => $apiData['title'] ?: null,

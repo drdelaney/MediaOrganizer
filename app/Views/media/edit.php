@@ -1,7 +1,7 @@
 <?= $this->extend('layout/main') ?>
 
 <?= $this->section('content') ?>
-<?php $movie = isset($movie) && is_array($movie) ? $movie : []; $apiAvailable = isset($apiAvailable) ? (bool)$apiAvailable : false; $mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : []; $collections = isset($collections) && is_array($collections) ? $collections : []; $volumes = isset($volumes) && is_array($volumes) ? $volumes : []; $videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : []; $ratios = isset($ratios) && is_array($ratios) ? $ratios : []; $movieTags = isset($movieTags) && is_array($movieTags) ? $movieTags : []; $allTags = isset($allTags) && is_array($allTags) ? $allTags : []; ?>
+<?php $movie = isset($movie) && is_array($movie) ? $movie : []; $lookupOptions = isset($lookupOptions) ? $lookupOptions : []; $lookupSource = isset($lookupSource) ? $lookupSource : null; $mediaTypes = isset($mediaTypes) && is_array($mediaTypes) ? $mediaTypes : []; $collections = isset($collections) && is_array($collections) ? $collections : []; $volumes = isset($volumes) && is_array($volumes) ? $volumes : []; $videoCodecs = isset($videoCodecs) && is_array($videoCodecs) ? $videoCodecs : []; $ratios = isset($ratios) && is_array($ratios) ? $ratios : []; $movieTags = isset($movieTags) && is_array($movieTags) ? $movieTags : []; $allTags = isset($allTags) && is_array($allTags) ? $allTags : []; ?>
 
     <div class="row">
         <div class="col-12">
@@ -89,11 +89,11 @@
                                         </p>
                                     <?php endif; ?>
                                     
-                                    <?php if (isset($apiAvailable) && $apiAvailable): ?>
+                                    <?php if (!empty($lookupOptions)): ?>
                                         <div class="alert alert-info py-2">
                                             <small>
                                                 <i class="bi bi-info-circle"></i>
-                                                Use the "Fetch Media Data from TMDB" button below to automatically download a poster for this media.
+                                                Use the auto-fill section below to fetch data and posters from online databases.
                                             </small>
                                         </div>
                                     <?php endif; ?>
@@ -137,7 +137,7 @@
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="radio" name="poster_choice" id="poster_choice_fetched" value="fetched">
                                     <label class="form-check-label" for="poster_choice_fetched">
-                                        Use new poster from TMDB
+                                        Use new poster from Online Database
                                     </label>
                                 </div>
                                 <div class="text-center">
@@ -517,8 +517,8 @@
                 <!-- Submit Buttons -->
                 <div class="card">
                     <div class="card-body">
-                        <!-- API Fetch Section - Only show if API is available -->
-                        <?php if (isset($apiAvailable) && $apiAvailable): ?>
+                        <!-- API Fetch Section -->
+                        <?php if (!empty($lookupOptions)): ?>
                             <div class="row mb-4">
                                 <div class="col-12">
                                     <div class="card bg-light">
@@ -527,27 +527,36 @@
                                         </div>
                                         <div class="card-body">
                                             <p class="text-muted mb-3">
-                                                Automatically fetch media information from The Movie Database (TMDB).
-                                                This will fill in fields like plot, cast, runtime, and prepare a poster preview.
+                                                Automatically fetch media information from online databases.
+                                                This will fill in fields like plot, cast, and prepare a poster preview.
                                                 Changes are not saved until you click "Update Media".
                                             </p>
                                             <div class="input-group">
-                                                <label for="apiSearch" class="visually-hidden">Search TMDB</label>
-                                                <select class="form-select flex-shrink-0" style="max-width: 140px" id="apiType" aria-label="TMDB Search Type">
-                                                    <option value="movie" selected>Movies</option>
-                                                    <option value="tv">TV</option>
+                                                <label for="apiSearch" class="visually-hidden">Search</label>
+                                                <select class="form-select flex-shrink-0" style="max-width: 140px" id="apiType" name="lookup_type" aria-label="Search Type">
+                                                    <?php foreach ($lookupOptions as $key => $option): ?>
+                                                        <?php 
+                                                            $selected = false;
+                                                            if ($lookupSource && $key === $lookupSource) {
+                                                                $selected = true;
+                                                            } elseif (!$lookupSource && $key === array_key_first($lookupOptions)) {
+                                                                $selected = true;
+                                                            }
+                                                        ?>
+                                                        <option value="<?= $key ?>" <?= $selected ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                                    <?php endforeach; ?>
                                                 </select>
-                                                <input type="text" class="form-control" id="apiSearch" placeholder="Search TMDB by title or paste TMDB ID" value="<?= esc($movie['title'] ?: $movie['o_title'] ?: '') ?>">
+                                                <input type="text" class="form-control" id="apiSearch" placeholder="Search by title or paste ID" value="<?= esc($movie['title'] ?: $movie['o_title'] ?: '') ?>">
                                                 <button type="button" id="fetchFromApi" class="btn btn-info">
-                                                    <i class="bi bi-cloud-download"></i> Fetch from TMDB
+                                                    <i class="bi bi-cloud-download"></i> Fetch Data
                                                 </button>
                                             </div>
-                                            <small class="text-muted">Tip: Choose Movies or TV, enter a different title to search, or paste a TMDB numeric ID directly (IDs overlap between Movies and TV).</small>
+                                            <small class="text-muted">Tip: Choose the media type, enter a title to search, or paste a specific ID directly.</small>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        <?php elseif (isset($apiAvailable) && !$apiAvailable): ?>
+                        <?php else: ?>
                             <div class="row mb-4">
                                 <div class="col-12">
                                     <div class="card bg-light border-warning">
@@ -556,15 +565,9 @@
                                         </div>
                                         <div class="card-body">
                                             <p class="text-muted mb-2">
-                                                To enable automatic movie data fetching from The Movie Database (TMDB),
-                                                please add your API key to the environment configuration.
+                                                No lookup services are currently enabled.
+                                                Please configure <code>ENABLED_LOOKUPS</code> and required API keys in the application settings.
                                             </p>
-                                            <small class="text-muted">
-                                                <strong>Steps:</strong><br>
-                                                1. Get a free API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" class="text-decoration-none">themoviedb.org <i class="bi bi-box-arrow-up-right"></i></a><br>
-                                                2. Add <code>TMDB_API_KEY=your_api_key_here</code> to your .env file<br>
-                                                3. Restart your web server
-                                            </small>
                                         </div>
                                     </div>
                                 </div>
@@ -760,13 +763,15 @@
             }
 
             // Function to show multiple results modal
-            function showMultipleResultsEdit(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}) {
+            const lookupOptions = <?= json_encode($lookupOptions) ?>;
+            function showMultipleResultsEdit(results, lookupType, page = 1, totalPages = 1, totalResults = 0, searchParams = {}, message = '') {
+                const title = message || `Select a Match (${totalResults} results found)`;
                 const modalHtml = `
                     <div class="modal fade" id="selectMediaModalEdit" tabindex="-1">
                         <div class="modal-dialog modal-lg">
                             <div class="modal-content">
                                 <div class="modal-header">
-                                    <h5 class="modal-title">Select a Match (${totalResults} results found)</h5>
+                                    <h5 class="modal-title">${title}</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
                                 <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
@@ -783,7 +788,13 @@
                                                     <div class="col">
                                                         <h6 class="mb-1">${result.title || result.original_title || 'Untitled'}</h6>
                                                         ${result.original_title && result.original_title !== result.title ? `<small class="text-muted d-block">Original: ${result.original_title}</small>` : ''}
-                                                        ${result.year ? `<small class="text-muted">Year: ${result.year}</small>` : ''}
+                                                        ${result.year || result.platforms || result.artist ? `
+                                                            <div class="mt-1">
+                                                                ${result.artist ? `<span class="badge bg-primary me-1">Artist: ${result.artist}</span>` : ''}
+                                                                ${result.year ? `<span class="badge bg-secondary me-1">Year: ${result.year}</span>` : ''}
+                                                                ${result.platforms ? `<span class="badge bg-info text-dark">System: ${result.platforms}</span>` : ''}
+                                                            </div>
+                                                        ` : ''}
                                                         ${result.overview ? `<p class="mb-0 mt-1 small text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${result.overview}</p>` : ''}
                                                     </div>
                                                 </div>
@@ -850,13 +861,23 @@
                         const oldHtml = fetchBtn.innerHTML;
                         fetchBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
 
+                        const idField = lookupOptions[selected.type || lookupType]?.id_field || 'tmdb_id';
+                        const fetchBody = { type: selected.type || lookupType };
+                        fetchBody[idField] = selected.tmdb_id || selected.tvdb_id || selected.igdb_id || selected.mbid || selected.imdb_id;
+                        // For TVDB, the backend expects tmdb_id if using the TMDB API
+                        if ((selected.type === 'TVDB' || lookupType === 'TVDB') && !fetchBody['tmdb_id']) {
+                            fetchBody['tmdb_id'] = selected.tmdb_id || selected.tvdb_id;
+                        }
+                        if (selected.imdb_id) fetchBody['imdb_id'] = selected.imdb_id;
+                        if (selected.tmdb_id) fetchBody['tmdb_id'] = selected.tmdb_id;
+
                         fetch('<?= base_url('media/fetchDetails') ?>', {
                             method: 'POST',
                             headers: { 
                                 'X-Requested-With': 'XMLHttpRequest', 
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ tmdb_id: selected.tmdb_id, type: selected.type })
+                            body: JSON.stringify(fetchBody)
                         })
                         .then(r => {
                             if (!r.ok && r.status === 403) {
@@ -908,7 +929,15 @@
                 })
                 .then(res => {
                     if (res.success && res.multiple && res.results) {
-                        showMultipleResultsEdit(res.results, lookupType, res.page, res.total_pages, res.total_results, searchParams);
+                        showMultipleResultsEdit(
+                            res.results, 
+                            lookupType, 
+                            res.page || 1, 
+                            res.total_pages || 1, 
+                            res.total_results || res.results.length, 
+                            searchParams,
+                            res.message
+                        );
                     } else {
                         showMessage(res.message || 'No more results', 'error');
                     }
@@ -937,7 +966,7 @@
                     const yearInput = document.getElementById('year');
                     const query = (searchInput && searchInput.value.trim()) ? searchInput.value.trim() : (document.getElementById('title')?.value || '');
                     const yearVal = (yearInput && yearInput.value) ? parseInt(yearInput.value, 10) : null;
-                    const lookupType = document.getElementById('apiType')?.value || 'movie';
+                    const lookupType = document.getElementById('apiType')?.value || 'IMDB';
 
                     const searchParams = { query: query, year: yearVal, type: lookupType };
 
@@ -960,7 +989,8 @@
                                         data.page || 1,
                                         data.total_pages || 1,
                                         data.total_results || data.results.length,
-                                        searchParams
+                                        searchParams,
+                                        data.message
                                     );
                                     showMessage(data.message, 'success');
                                 } else {
