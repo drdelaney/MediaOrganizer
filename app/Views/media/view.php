@@ -14,9 +14,17 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             <h1 class="mb-0">
                 <i class="bi bi-film"></i> Media Details
             </h1>
-            <a href="<?= base_url('media') ?>" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Back to Library
-            </a>
+            <div class="d-flex gap-2">
+                <a href="<?= base_url('media') ?>" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Library
+                </a>
+                <button type="button" class="btn btn-info me-2 text-white" data-bs-toggle="modal" data-bs-target="#loanHistoryModal">
+                    <i class="bi bi-clock-history"></i> Loan History
+                </button>
+                <a href="<?= base_url('media/add') ?>" class="btn btn-success" title="Add Media">
+                    <i class="bi bi-plus-circle"></i> Add
+                </a>
+            </div>
         </div>
 
         <div class="row">
@@ -49,7 +57,21 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             <div class="col-md-9">
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="mb-0"><?= esc($movie['title'] ?: $movie['o_title'] ?: 'Untitled') ?></h3>
+                        <?php 
+                        $isWishlist = false;
+                        foreach ($mediaTags as $tag) {
+                            if (strtolower($tag['name']) === 'wishlist') {
+                                $isWishlist = true;
+                                break;
+                            }
+                        }
+                        ?>
+                        <h3 class="mb-0">
+                            <?php if ($isWishlist): ?>
+                                <i class="bi bi-heart-fill text-info me-1" title="Wishlist"></i>
+                            <?php endif; ?>
+                            <?= esc($movie['title'] ?: $movie['o_title'] ?: 'Untitled') ?>
+                        </h3>
                         <?php if ($movie['title'] && $movie['o_title'] && $movie['title'] !== $movie['o_title']): ?>
                             <h6 class="text-muted">Original Title: <?= esc($movie['o_title']) ?></h6>
                         <?php endif; ?>
@@ -354,6 +376,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 <a href="<?= base_url('media/edit/' . $movie['movie_id']) ?>" class="btn btn-primary me-2">
                     <i class="bi bi-pencil"></i> Edit Media
                 </a>
+                <button type="button" class="btn btn-info me-2 text-white" data-bs-toggle="modal" data-bs-target="#loanHistoryModal">
+                    <i class="bi bi-clock-history"></i> Loan History
+                </button>
                 <button type="button" class="btn btn-danger" onclick="confirmDelete(<?= $movie['movie_id'] ?>, '<?= esc($movie['title'] ?: $movie['o_title'] ?: 'this media', 'js') ?>')">
                     <i class="bi bi-trash"></i> Delete Media
                 </button>
@@ -420,7 +445,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 <ul class="nav nav-tabs mb-3" id="posterTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="tmdb-tab" data-bs-toggle="tab" data-bs-target="#tmdb-posters" type="button" role="tab">
-                            <i class="bi bi-cloud-download"></i> TMDB Posters
+                            <i class="bi bi-cloud-download"></i> Online Posters
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -431,11 +456,37 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 </ul>
 
                 <div class="tab-content" id="posterTabContent">
-                    <!-- TMDB Posters Tab -->
+                    <!-- Online Posters Tab -->
                     <div class="tab-pane fade show active" id="tmdb-posters" role="tabpanel">
-                        <button type="button" class="btn btn-primary mb-3" id="fetchPostersBtn">
-                            <i class="bi bi-search"></i> Fetch Posters from TMDB
-                        </button>
+                        <div class="row g-2 mb-3 align-items-end">
+                            <div class="col-md-4">
+                                <label for="posterSource" class="form-label small">Search Location</label>
+                                <select class="form-select" id="posterSource">
+                                    <option value="">Auto-detect</option>
+                                    <?php if (isset($enabledLookups) && in_array('TMDB', $enabledLookups)): ?>
+                                        <option value="TMDB">TMDB (Movies/TV)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('TVDB', $enabledLookups)): ?>
+                                        <option value="TVDB">TVDB (TV Shows)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('IGDB', $enabledLookups)): ?>
+                                        <option value="IGDB">IGDB (Games)</option>
+                                    <?php endif; ?>
+                                    <?php if (isset($enabledLookups) && in_array('MusicBrainz', $enabledLookups)): ?>
+                                        <option value="MusicBrainz">MusicBrainz (Music)</option>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="posterSearchTerm" class="form-label small">Search Term (optional)</label>
+                                <input type="text" class="form-control" id="posterSearchTerm" placeholder="Enter title to search..." value="<?= esc($movie['title'] ?: $movie['o_title'] ?: '') ?>">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-primary w-100" id="fetchPostersBtn">
+                                    <i class="bi bi-search"></i> Fetch
+                                </button>
+                            </div>
+                        </div>
                         <div id="posterLoadingSpinner" style="display: none;" class="text-center mb-3">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
@@ -452,9 +503,21 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                             <?= csrf_field() ?>
                             <div class="mb-3">
                                 <label for="posterFile" class="form-label">Choose Image File</label>
-                                <input type="file" class="form-control" id="posterFile" name="poster_file" accept="image/*" required>
+                                <input type="file" class="form-control" id="posterFile" name="poster_file" accept="image/*">
                                 <div class="form-text">Supported formats: JPG, PNG, GIF. Image will be converted to JPEG.</div>
                             </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <hr class="flex-grow-1">
+                                    <span class="mx-2 text-muted small">OR</span>
+                                    <hr class="flex-grow-1">
+                                </div>
+                                <label for="posterUrlInput" class="form-label">Provide Image URL</label>
+                                <input type="url" class="form-control" id="posterUrlInput" name="poster_url" placeholder="https://example.com/image.jpg">
+                                <div class="form-text">Direct link to an image file.</div>
+                            </div>
+
                             <div class="mb-3" id="uploadPreview" style="display: none;">
                                 <label class="form-label">Preview</label>
                                 <div class="text-center">
@@ -462,7 +525,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-success" id="uploadPosterBtn">
-                                <i class="bi bi-upload"></i> Upload and Save
+                                <i class="bi bi-save"></i> Save Poster
                             </button>
                         </form>
                     </div>
@@ -473,6 +536,53 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     <button type="button" class="btn btn-outline-danger" id="clearPosterBtn">
                         <i class="bi bi-x-circle"></i> Remove Current Poster
                     </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loan History Modal -->
+<div class="modal fade" id="loanHistoryModal" tabindex="-1" aria-labelledby="loanHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loanHistoryModalLabel">
+                    <i class="bi bi-clock-history"></i> Loan History: <?= esc($movie['title'] ?: $movie['o_title']) ?>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loanHistoryLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading loan history...</p>
+                </div>
+                <div id="loanHistoryContent" style="display: none;">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Person</th>
+                                    <th>Loaned Date</th>
+                                    <th>Returned Date</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="loanHistoryTableBody">
+                                <!-- Data will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="loanHistoryEmpty" class="text-center py-4" style="display: none;">
+                    <i class="bi bi-info-circle display-4 text-muted"></i>
+                    <p class="mt-2 text-muted">No Loaned History for the Media</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -570,6 +680,151 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+
+    // Loan History Modal handling
+    const loanHistoryModal = document.getElementById('loanHistoryModal');
+    if (loanHistoryModal) {
+        loanHistoryModal.addEventListener('show.bs.modal', function() {
+            loadLoanHistory();
+        });
+    }
+
+    function loadLoanHistory() {
+        const loading = document.getElementById('loanHistoryLoading');
+        const content = document.getElementById('loanHistoryContent');
+        const empty = document.getElementById('loanHistoryEmpty');
+        const tableBody = document.getElementById('loanHistoryTableBody');
+
+        loading.style.display = 'block';
+        content.style.display = 'none';
+        empty.style.display = 'none';
+        tableBody.innerHTML = '';
+
+        fetch('<?= base_url('media/loanHistory/' . $movie['movie_id']) ?>', {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            loading.style.display = 'none';
+            if (data && data.length > 0) {
+                data.forEach(loan => {
+                    const row = document.createElement('tr');
+                    
+                    const statusBadge = loan.return_date 
+                        ? '<span class="badge bg-success">Returned</span>' 
+                        : '<span class="badge bg-warning text-dark">Currently Loaned</span>';
+                    
+                    let actionButton = '';
+                    if (!loan.return_date) {
+                        actionButton = `
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-success" onclick="returnMediaFromHistory(${loan.movie_id})" title="Return">
+                                    <i class="bi bi-arrow-left-circle"></i> Return
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="sendReminder(${loan.loan_id})" title="Email Reminder">
+                                    <i class="bi bi-envelope"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                    
+                    row.innerHTML = `
+                        <td>
+                            <div><strong>${escapeHtml(loan.person_name)}</strong></div>
+                            <small class="text-muted">${escapeHtml(loan.email || '')}</small>
+                        </td>
+                        <td>${loan.date || 'N/A'}</td>
+                        <td>${loan.return_date || '---'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${actionButton}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                content.style.display = 'block';
+            } else {
+                empty.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            loading.style.display = 'none';
+            empty.style.display = 'block';
+            empty.innerHTML = '<i class="bi bi-exclamation-triangle display-4 text-danger"></i><p class="mt-2 text-danger">Error loading history</p>';
+            console.error('Error:', error);
+        });
+    }
+
+    window.returnMediaFromHistory = function(mediaId) {
+        if (!confirm('Are you sure you want to mark this media as returned?')) {
+            return;
+        }
+
+        fetch('<?= base_url('media/returnLoan/') ?>' + mediaId, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showMessage(data.message, 'success');
+                loadLoanHistory();
+                // Optionally refresh the page or update UI parts that show loan status
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showMessage(data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('An error occurred while returning the media.', 'danger');
+        });
+    }
+
+    window.sendReminder = function(loanId) {
+        if (!confirm('Send a reminder email to the borrower?')) {
+            return;
+        }
+
+        const originalBtn = event.currentTarget;
+        const originalHtml = originalBtn.innerHTML;
+        originalBtn.disabled = true;
+        originalBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+        fetch('<?= base_url('media/sendReminder/') ?>' + loanId, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showMessage(data.message, 'success');
+            } else {
+                showMessage(data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('An error occurred while sending the reminder.', 'danger');
+        })
+        .finally(() => {
+            originalBtn.disabled = false;
+            originalBtn.innerHTML = originalHtml;
+        });
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 });
 
 function showMessage(message, type) {
@@ -614,12 +869,18 @@ document.getElementById('fetchPostersBtn').addEventListener('click', function() 
     document.getElementById('posterMessage').style.display = 'none';
     document.getElementById('posterGallery').innerHTML = '';
 
+    const sourceSelect = document.getElementById('posterSource');
+    const source = sourceSelect ? sourceSelect.value : '';
+    const searchTermInput = document.getElementById('posterSearchTerm');
+    const searchTerm = searchTermInput ? searchTermInput.value : '';
+
     fetch('<?= base_url('media/fetchPosters/') ?>' + movieId, {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ source: source, searchTerm: searchTerm })
     })
     .then(response => {
         if (!response.ok && response.status === 403) {
@@ -631,6 +892,17 @@ document.getElementById('fetchPostersBtn').addEventListener('click', function() 
         document.getElementById('posterLoadingSpinner').style.display = 'none';
 
         if (data.success && data.posters && data.posters.length > 0) {
+            // Update tab label if source is returned
+            if (data.source) {
+                const tab = document.getElementById('tmdb-tab');
+                if (tab) {
+                    tab.innerHTML = `<i class="bi bi-cloud-download"></i> ${data.source} Posters`;
+                }
+                const btn = document.getElementById('fetchPostersBtn');
+                if (btn) {
+                    btn.innerHTML = `<i class="bi bi-search"></i> Fetch Posters from ${data.source}`;
+                }
+            }
             displayPosterGallery(data.posters);
             showPosterMessage(data.message, 'success');
         } else {
@@ -660,7 +932,7 @@ function displayPosterGallery(posters) {
                 <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
                 <div class="card-body p-2 text-center">
                     <small class="text-muted">
-                        ${poster.width} x ${poster.height}
+                        ${poster.width && poster.height ? poster.width + ' x ' + poster.height : 'invalid image'}
                         ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}
                     </small>
                 </div>
@@ -716,11 +988,19 @@ function savePoster(posterUrl) {
 document.getElementById('uploadPosterForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
+    const fileInput = document.getElementById('posterFile');
+    const urlInput = document.getElementById('posterUrlInput');
+
+    if (!fileInput.files[0] && !urlInput.value.trim()) {
+        showMessage('Please choose a file or provide a URL', 'error');
+        return;
+    }
+
     const formData = new FormData(this);
     const btn = document.getElementById('uploadPosterBtn');
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Uploading...';
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
 
     fetch('<?= base_url('media/updatePoster/') ?>' + movieId, {
         method: 'POST',
@@ -745,11 +1025,11 @@ document.getElementById('uploadPosterForm').addEventListener('submit', function(
                 bootstrap.Modal.getInstance(document.getElementById('updatePosterModal')).hide();
             }, 1000);
         } else {
-            showMessage(data.message || 'Failed to upload poster', 'error');
+            showMessage(data.message || 'Failed to update poster', 'error');
         }
     })
     .catch(error => {
-        showMessage('Error uploading poster: ' + error.message, 'error');
+        showMessage('Error updating poster: ' + error.message, 'error');
     })
     .finally(() => {
         btn.disabled = false;
@@ -761,12 +1041,25 @@ document.getElementById('uploadPosterForm').addEventListener('submit', function(
 document.getElementById('posterFile').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (file) {
+        document.getElementById('posterUrlInput').value = ''; // Clear URL if file chosen
         const reader = new FileReader();
         reader.onload = function(event) {
             document.getElementById('uploadPreviewImg').src = event.target.result;
             document.getElementById('uploadPreview').style.display = 'block';
         };
         reader.readAsDataURL(file);
+    }
+});
+
+// Preview URL image
+document.getElementById('posterUrlInput').addEventListener('input', function(e) {
+    const url = e.target.value.trim();
+    if (url) {
+        document.getElementById('posterFile').value = ''; // Clear file if URL provided
+        document.getElementById('uploadPreviewImg').src = url;
+        document.getElementById('uploadPreview').style.display = 'block';
+    } else if (!document.getElementById('posterFile').files[0]) {
+        document.getElementById('uploadPreview').style.display = 'none';
     }
 });
 

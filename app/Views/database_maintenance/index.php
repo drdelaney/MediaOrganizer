@@ -9,6 +9,14 @@
             <i class="bi bi-tools"></i> Database Maintenance
         </h1>
 
+        <?php if (isset($needsFix) && $needsFix): ?>
+        <div class="alert alert-danger">
+            <i class="bi bi-shield-exclamation"></i>
+            <strong>Action Required:</strong> The configuration table schema needs to be updated to version 7 to support longer parameter keys.
+            Please use the <strong>Fix Schema</strong> button below.
+        </div>
+        <?php endif; ?>
+
         <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle"></i>
             <strong>Warning:</strong> These operations can affect your database.
@@ -85,6 +93,32 @@
             <div class="col-md-4 mb-4">
                 <div class="card">
                     <div class="card-body text-center">
+                        <i class="bi bi-shield-check display-4 text-danger"></i>
+                        <h5 class="card-title mt-3">Fix Config Schema</h5>
+                        <p class="card-text">Increase configuration table column lengths to prevent truncation.</p>
+                        <button id="fix-schema-btn" class="btn btn-danger">
+                            <i class="bi bi-shield-check"></i> Fix Schema
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="bi bi-files display-4 text-primary"></i>
+                        <h5 class="card-title mt-3">Duplicate Detector</h5>
+                        <p class="card-text">Scan the database for potential duplicate media entries.</p>
+                        <a href="<?= base_url('database-maintenance/duplicate-detector') ?>" class="btn btn-primary">
+                            <i class="bi bi-search"></i> Scan for Duplicates
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body text-center">
                         <i class="bi bi-code-square display-4 text-info"></i>
                         <h5 class="card-title mt-3">PHP & Package Environment</h5>
                         <p class="card-text">Check PHP version, extensions, and dependencies.</p>
@@ -118,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const reindexBtn = document.getElementById('reindex-btn');
     const optimizeBtn = document.getElementById('optimize-btn');
     const convertBtn = document.getElementById('convert-btn');
+    const fixSchemaBtn = document.getElementById('fix-schema-btn');
     const checkEnvBtn = document.getElementById('check-env-btn');
     const resultsArea = document.getElementById('results-area');
     const resultsContent = document.getElementById('results-content');
@@ -254,6 +289,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     convertBtn.addEventListener('click', () => {
         performOperation('<?= base_url('database-maintenance/convertToInnoDB') ?>', convertBtn, 'Convert to InnoDB');
+    });
+
+    fixSchemaBtn.addEventListener('click', () => {
+        if (confirm('This will modify the configuration table schema to support longer parameter keys. Proceed?')) {
+            performOperation('<?= base_url('database-maintenance/fixConfigSchema') ?>', fixSchemaBtn, 'Fix Config Schema');
+        }
     });
 
     checkEnvBtn.addEventListener('click', () => {

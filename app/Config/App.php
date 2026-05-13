@@ -18,6 +18,33 @@ class App extends BaseConfig
      */
     public string $baseURL = 'http://localhost:8080/';
 
+    public function __construct()
+    {
+        parent::__construct();
+
+        // Check environment first (allow entries in .env to override)
+        $this->baseURL = env('app.baseURL', $this->baseURL);
+
+        try {
+            // Attempt to get from database if not specifically overridden in .env
+            // We check if it's NOT in .env because env() returns default if not found
+            if (env('app.baseURL') === null) {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('configuration')) {
+                    $row = $db->table('configuration')
+                              ->where('param', 'app.baseURL')
+                              ->get()
+                              ->getRow();
+                    if ($row) {
+                        $this->baseURL = $row->value;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Fallback to default/env if DB not ready
+        }
+    }
+
     /**
      * Allowed Hostnames in the Site URL other than the hostname in the baseURL.
      * If you want to accept multiple Hostnames, set this.

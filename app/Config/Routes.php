@@ -33,6 +33,7 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('media/poster/(:num)', 'Media::poster/$1');
     $routes->post('media/fetchPosters/(:num)', 'Media::fetchPosters/$1');
     $routes->post('media/updatePoster/(:num)', 'Media::updatePoster/$1');
+    $routes->get('media/loanHistory/(:num)', 'Media::loanHistory/$1');
 
     // Add/create routes
     $routes->get('media/add', 'Media::add');
@@ -40,10 +41,13 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->post('media/lookup', 'Media::lookup');
     $routes->post('media/fetchDetails', 'Media::fetchDetails');
     $routes->post('media/fetchPostersForNew', 'Media::fetchPostersForNew');
+    $routes->post('media/checkDuplicate', 'Media::checkDuplicate');
+    $routes->post('media/exempt/(:num)', 'Media::exempt/$1');
 
     // Loan management routes
     $routes->post('media/loan/(:num)', 'Media::loan/$1');
     $routes->post('media/returnLoan/(:num)', 'Media::returnLoan/$1');
+    $routes->post('media/sendReminder/(:num)', 'Media::sendReminder/$1');
     $routes->get('media/getPeople', 'Media::getPeople');
     $routes->post('media/addPerson', 'Media::addPerson');
     $routes->post('media/addCollection', 'Media::addCollection');
@@ -74,11 +78,13 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     $routes->post('reindexTables', 'DatabaseMaintenance::reindexTables');
     $routes->post('optimizeTables', 'DatabaseMaintenance::optimizeTables');
     $routes->post('convertToInnoDB', 'DatabaseMaintenance::convertToInnoDB');
+    $routes->post('fixConfigSchema', 'DatabaseMaintenance::fixConfigSchema');
     $routes->post('checkEnvironmentAjax', 'DatabaseMaintenance::checkEnvironmentAjax');
     $routes->get('backupDatabase', 'DatabaseMaintenance::backupDatabase');
 
     // Lookup tables management
     $routes->get('manage-lookups', 'DatabaseMaintenance::manageLookups');
+    $routes->get('duplicate-detector', 'DatabaseMaintenance::duplicateDetector');
 
     // Medium routes
     $routes->post('medium/add', 'DatabaseMaintenance::addMedium');

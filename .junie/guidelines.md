@@ -18,3 +18,8 @@
 - Always check for existing helpers or models before creating new ones.
 - There is a database table named 'movie_id'. This should NEVER be renamed in the code.
 - Never edit any files located in `_install`
+- Do not touch protected code igniter files and folders such as `system`.
+- Any setting defined in .env that is not related to the database or production settings should allow override from the .env file, but allow to be set via the database in configuration.
+- Do not remove values from .env or .env.example if defined in the database.
+- Any option defined in settings should provide a tooltip with the .env override variable name.
+- If any new API endpoints are added for Media search, make sure to add support for searching within the badges.

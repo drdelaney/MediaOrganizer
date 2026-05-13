@@ -76,7 +76,7 @@ $alpha = $alpha ?? false;
     <table class="table table-striped table-hover">
         <thead>
             <tr>
-                <th style="width: 120px;">Type</th>
+                <th style="width: 160px;">Type</th>
                 <th>Media Name</th>
             </tr>
         </thead>
@@ -87,31 +87,32 @@ $alpha = $alpha ?? false;
                 </tr>
             <?php else: ?>
                 <?php foreach ($movies as $movie): ?>
+                    <?php
+                        $mediumNames = [];
+                        if (!empty($movie['notes']) && strpos($movie['notes'], '<!medium_id>') !== false) {
+                            $mediumIds = get_medium_ids_from_notes($movie['notes']);
+                            if (!empty($mediumIds)) {
+                                foreach ($mediumIds as $mId) {
+                                    if (isset($typesMap[$mId])) {
+                                        $mediumNames[] = $typesMap[$mId];
+                                    }
+                                }
+                            }
+                        }
+                        if (empty($mediumNames) && !empty($movie['medium_name'])) {
+                            $mediumNames = [$movie['medium_name']];
+                        }
+                        $displayMedium = !empty($mediumNames) ? implode(', ', $mediumNames) : 'Unknown';
+                    ?>
                     <tr>
-                        <td><?= esc($movie['medium_name'] ?? 'Unknown') ?></td>
+                        <td><?= esc($displayMedium) ?></td>
                         <td>
                             <?php
                             $tooltipContent = 'Classification: ' . esc($movie['classification'] ?: 'N/A') . "\n" .
                                 'Runtime: ' . ($movie['runtime'] ? esc($movie['runtime']) . ' min' : 'N/A') . "\n" .
                                 'Rating: ' . ($movie['rating'] ? esc($movie['rating']) . '/5' : 'N/A') . "\n" .
-                                'Media Types: ';
-
-                            $mediumNames = [];
-                            if (!empty($movie['notes']) && strpos($movie['notes'], '<!medium_id>') !== false) {
-                                $mediumIds = get_medium_ids_from_notes($movie['notes']);
-                                if (!empty($mediumIds)) {
-                                    foreach ($mediumIds as $mId) {
-                                        if (isset($typesMap[$mId])) {
-                                            $mediumNames[] = $typesMap[$mId];
-                                        }
-                                    }
-                                }
-                            }
-                            if (empty($mediumNames) && !empty($movie['medium_name'])) {
-                                $mediumNames = [$movie['medium_name']];
-                            }
-                            $tooltipContent .= !empty($mediumNames) ? esc(implode(', ', $mediumNames)) : 'N/A';
-                            $tooltipContent .= "\n" . 'Status: ' . ($movie['loaned'] ? 'Loaned' : 'Available');
+                                'Media Types: ' . esc(implode(', ', $mediumNames)) . "\n" .
+                                'Status: ' . ($movie['loaned'] ? 'Loaned' : 'Available');
                             ?>
                             <span data-bs-toggle="tooltip" data-bs-html="true" data-bs-custom-class="public-tooltip" style="cursor: help;" title="<?= esc($tooltipContent, 'attr') ?>">
                                 <?= esc($movie['title'] ?: $movie['o_title']) ?>

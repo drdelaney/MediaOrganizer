@@ -8,6 +8,9 @@
 # By default, all of the settings are commented out. If you want
 # to override the setting, you must un-comment it by removing the '#'
 # at the beginning of the line.
+#
+# Make changes to .env instead of this file.
+#
 #--------------------------------------------------------------------
 
 #--------------------------------------------------------------------

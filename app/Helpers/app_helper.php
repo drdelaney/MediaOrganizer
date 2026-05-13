@@ -8,48 +8,57 @@
 if (!function_exists('app_name')) {
     function app_name(): string
     {
-        return env('app.name', 'Media Organizer');
+        $configModel = new \App\Models\ConfigurationModel();
+        return $configModel->getParam('app.name', 'Media Organizer');
     }
 }
 
 /**
- * Add TMDB and/or IMDB IDs to notes field using tag format
- * Tags: <!tmdb>xxxx and <!imdb>xxxx
+ * Add TMDB, IMDB, IGDB, and/or MusicBrainz IDs to notes field using tag format
+ * Tags: <!tmdb>xxxx, <!imdb>xxxx, <!tvdb>xxxx, <!igdb>xxxx, <!mbid>xxxx, <!source>xxxx
  * 
  * @param string|null $existingNotes The current notes content
- * @param string|null $tmdbId The TMDB ID to store
- * @param string|null $imdbId The IMDB ID to store
+ * @param array $externalIds Associative array of IDs (tmdb, imdb, tvdb, igdb, mbid, source)
  * @return string The updated notes with IDs embedded
  */
 if (!function_exists('add_external_ids_to_notes')) {
-    function add_external_ids_to_notes(?string $existingNotes, ?string $tmdbId, ?string $imdbId): string
+    function add_external_ids_to_notes(?string $existingNotes, array $externalIds = []): string
     {
         $notes = $existingNotes ?? '';
         
-        // Remove any existing TMDB/IMDB tags to avoid duplicates (match only tag and value on same line)
-        $notes = preg_replace('/<!tmdb>[^\n]*\n?/', '', $notes);
-        $notes = preg_replace('/<!imdb>[^\n]*\n?/', '', $notes);
+        // Remove any existing tags to avoid duplicates
+        $tagsToClear = ['tmdb', 'imdb', 'tvdb', 'igdb', 'mbid', 'source'];
+        foreach ($tagsToClear as $tag) {
+            $notes = preg_replace('/<!' . $tag . '>[^\n]*\n?/', '', $notes);
+        }
         
         // Trim the remaining notes
         $notes = trim($notes);
         
         // Add new tags at the beginning, each followed by a newline
-        $tags = '';
-        if ($tmdbId !== null && $tmdbId !== '') {
-            $tags .= '<!tmdb>' . $tmdbId . "\n";
-        }
-        if ($imdbId !== null && $imdbId !== '') {
-            $tags .= '<!imdb>' . $imdbId . "\n";
-        }
-        
-        // If we have tags and existing notes, add ONE newline separator before existing notes
-        if ($tags !== '' && $notes !== '') {
-            $result = $tags . $notes;
-        } else {
-            $result = $tags . $notes;
+        $tagsContent = '';
+        foreach ($externalIds as $tag => $id) {
+            if ($id !== null && $id !== '') {
+                $tagsContent .= '<!' . strtolower($tag) . '>' . $id . "\n";
+            }
         }
         
-        return $result;
+        return $tagsContent . $notes;
+    }
+}
+
+if (!function_exists('get_external_id_from_notes')) {
+    function get_external_id_from_notes(?string $notes, string $tag): ?string
+    {
+        if ($notes === null || $notes === '') {
+            return null;
+        }
+        
+        if (preg_match('/<!' . preg_quote($tag, '/') . '>(\S+)/', $notes, $matches)) {
+            return $matches[1];
+        }
+        
+        return null;
     }
 }
 
@@ -62,15 +71,7 @@ if (!function_exists('add_external_ids_to_notes')) {
 if (!function_exists('get_tmdb_id_from_notes')) {
     function get_tmdb_id_from_notes(?string $notes): ?string
     {
-        if ($notes === null || $notes === '') {
-            return null;
-        }
-        
-        if (preg_match('/<!tmdb>(\S+)/', $notes, $matches)) {
-            return $matches[1];
-        }
-        
-        return null;
+        return get_external_id_from_notes($notes, 'tmdb');
     }
 }
 
@@ -83,15 +84,47 @@ if (!function_exists('get_tmdb_id_from_notes')) {
 if (!function_exists('get_imdb_id_from_notes')) {
     function get_imdb_id_from_notes(?string $notes): ?string
     {
-        if ($notes === null || $notes === '') {
-            return null;
-        }
-        
-        if (preg_match('/<!imdb>(\S+)/', $notes, $matches)) {
-            return $matches[1];
-        }
-        
-        return null;
+        return get_external_id_from_notes($notes, 'imdb');
+    }
+}
+
+/**
+ * Extract TVDB ID from notes field
+ */
+if (!function_exists('get_tvdb_id_from_notes')) {
+    function get_tvdb_id_from_notes(?string $notes): ?string
+    {
+        return get_external_id_from_notes($notes, 'tvdb');
+    }
+}
+
+/**
+ * Extract IGDB ID from notes field
+ */
+if (!function_exists('get_igdb_id_from_notes')) {
+    function get_igdb_id_from_notes(?string $notes): ?string
+    {
+        return get_external_id_from_notes($notes, 'igdb');
+    }
+}
+
+/**
+ * Extract MusicBrainz ID from notes field
+ */
+if (!function_exists('get_mbid_from_notes')) {
+    function get_mbid_from_notes(?string $notes): ?string
+    {
+        return get_external_id_from_notes($notes, 'mbid');
+    }
+}
+
+/**
+ * Extract Lookup Source from notes field
+ */
+if (!function_exists('get_source_from_notes')) {
+    function get_source_from_notes(?string $notes): ?string
+    {
+        return get_external_id_from_notes($notes, 'source');
     }
 }
 
@@ -108,9 +141,12 @@ if (!function_exists('strip_external_ids_from_notes')) {
             return '';
         }
         
-        // Remove TMDB and IMDB tags
-        $clean = preg_replace('/<!tmdb>\S+\s*/', '', $notes);
-        $clean = preg_replace('/<!imdb>\S+\s*/', '', $clean);
+        // Remove all supported external ID tags
+        $tags = ['tmdb', 'imdb', 'tvdb', 'igdb', 'mbid', 'source'];
+        $clean = $notes;
+        foreach ($tags as $tag) {
+            $clean = preg_replace('/<!' . $tag . '>\S+\s*/', '', $clean);
+        }
         
         return trim($clean);
     }
@@ -223,6 +259,30 @@ if (!function_exists('get_highest_medium_id_from_notes')) {
  * @param string|null $title The title to normalize
  * @return string The normalized title for comparison
  */
+if (!function_exists('get_image_dimensions')) {
+    /**
+     * Get dimensions of an image from a URL
+     * 
+     * @param string $url The image URL
+     * @return array [width, height] or [null, null] on failure
+     */
+    function get_image_dimensions(string $url): array
+    {
+        try {
+            // Use getimagesize on the URL
+            // Note: This might be slow and depends on allow_url_fopen
+            $dimensions = @getimagesize($url);
+            if ($dimensions) {
+                return [(int)$dimensions[0], (int)$dimensions[1]];
+            }
+        } catch (\Throwable $e) {
+            log_message('debug', 'Could not get dimensions for: ' . $url . ' - ' . $e->getMessage());
+        }
+        
+        return [null, null];
+    }
+}
+
 if (!function_exists('normalize_title_for_search')) {
     function normalize_title_for_search(?string $title): string
     {
