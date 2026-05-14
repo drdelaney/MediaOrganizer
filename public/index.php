@@ -37,11 +37,6 @@ if (getcwd() . DIRECTORY_SEPARATOR !== FCPATH) {
     chdir(FCPATH);
 }
 
-// Ensure the current directory is pointing to the front controller's directory
-if (getcwd() . DIRECTORY_SEPARATOR !== FCPATH) {
-    chdir(FCPATH);
-}
-
 /*
  *---------------------------------------------------------------
  * BOOTSTRAP THE APPLICATION
