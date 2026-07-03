@@ -4,3 +4,6 @@
 
 /tests/
 /writable/
+
+# Junie stuff
+.junie/memory

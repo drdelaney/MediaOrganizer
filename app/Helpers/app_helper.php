@@ -8,8 +8,44 @@
 if (!function_exists('app_name')) {
     function app_name(): string
     {
-        $configModel = new \App\Models\ConfigurationModel();
-        return $configModel->getParam('app.name', 'Media Organizer');
+        // Using a static variable to cache the result for the duration of the request
+        static $cachedAppName = null;
+        if ($cachedAppName !== null) {
+            return $cachedAppName;
+        }
+
+        // Check if it's already set in Config\App (which now has its own caching)
+        try {
+            // Attempt to get from Config\App if it exists and has been initialized
+            // Note: In some contexts, config('App') might cause recursion if called from within App constructor,
+            // but we're usually calling this from views.
+            $appConfig = config('App');
+            // If the App config has a name property, use it. 
+            // Our refactored App constructor doesn't set a public $name property by default
+            // but we can check the dbSettings logic if we wanted to.
+            // For now, let's keep it simple and check DB if not in env.
+        } catch (\Throwable $e) {}
+
+        if (($envName = env('app.name')) !== null) {
+            $cachedAppName = $envName;
+            return $cachedAppName;
+        }
+
+        // During setup, the database might not be ready or tables might be missing.
+        // We check if the table exists before attempting to query it.
+        try {
+            $db = \Config\Database::connect();
+            if ($db->tableExists('configuration')) {
+                $configModel = new \App\Models\ConfigurationModel();
+                $cachedAppName = $configModel->getParam('app.name', 'Media Organizer');
+                return $cachedAppName;
+            }
+        } catch (\Throwable $e) {
+            // Fallback to default
+        }
+
+        $cachedAppName = 'Media Organizer';
+        return $cachedAppName;
     }
 }
 
@@ -357,7 +393,15 @@ if (!function_exists('titles_match')) {
 if (!function_exists('get_wishlist_tag')) {
     function get_wishlist_tag(): ?array
     {
-        $mediaModel = new \App\Models\MediaModel();
-        return $mediaModel->getTagByName('wishlist');
+        try {
+            $db = \Config\Database::connect();
+            if ($db->tableExists('tags')) {
+                $mediaModel = new \App\Models\MediaModel();
+                return $mediaModel->getTagByName('wishlist');
+            }
+        } catch (\Throwable $e) {
+            // Silently fail during setup or if database is not ready
+        }
+        return null;
     }
 }

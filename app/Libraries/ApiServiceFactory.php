@@ -17,8 +17,10 @@ class ApiServiceFactory
     {
         switch (strtoupper($type)) {
             case 'IMDB':
-            case 'TMDB':
+                return new ImdbApiService();
             case 'TVDB':
+                return new TvdbApiService();
+            case 'TMDB':
             case 'MOVIE':
             case 'TV':
                 return new MovieApiService();
@@ -47,7 +49,13 @@ class ApiServiceFactory
         if (!empty($ids['mbid'])) {
             return new MusicApiService();
         }
-        if (!empty($ids['tmdb_id']) || !empty($ids['imdb_id']) || !empty($ids['tvdb_id'])) {
+        if (!empty($ids['imdb_id'])) {
+            return new ImdbApiService();
+        }
+        if (!empty($ids['tvdb_id'])) {
+            return new TvdbApiService();
+        }
+        if (!empty($ids['tmdb_id'])) {
             return new MovieApiService();
         }
         return null;

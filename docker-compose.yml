@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: MediaOrganizer 
+    ports:
+      - "8080:80"
+    volumes:
+      # Bind mount the application source code
+      - .:/var/www/html
+      
+      # Persist and expose the writable directory to your host's explicit path
+      - /opt/docker/mediaorganizer/writable:/var/www/html/writable
+      
+      # Persist and expose the .env file to your host's explicit path
+      - /opt/docker/mediaorganizer/.env:/var/www/html/.env
+    environment:
+      - INITIAL_PASSWORD=p4ssw0rd
+      - SITE_URL=http://127.0.0.1:8080/
+    # Check if .env exists in the volume; if not, seed it from .env.example
+    # Then ensure permissions are correct for CodeIgniter to write logs/sqlite, and start Apache
+    command: >
+      sh -c "if [ ! -s /var/www/html/.env ]; then
+               cp /var/www/html/.env.example /var/www/html/.env;
+             fi &&
+             if [ ! -s /var/www/html/writable/.htaccess ]; then
+               echo 'Populating external writable directory...';
+               mkdir -p /var/www/html/writable;
+               cp -r /tmp/writable_backup/* /var/www/html/writable/ 2>/dev/null || true;
+             fi &&
+             
+             # 1. Start fresh by stripping the initialPassword out to a temporary space
+             grep -v 'auth.initialPassword' /var/www/html/.env > /tmp/.env.tmp &&
+             
+             # 2. Check if SITE_URL environment variable is provided
+             if [ ! -z \"$$SITE_URL\" ]; then
+               echo 'Setting explicit baseURL...';
+               grep -v 'app.baseURL' /tmp/.env.tmp > /tmp/.env.bak && mv /tmp/.env.bak /tmp/.env.tmp;
+               echo \"app.baseURL='$$SITE_URL'\" >> /tmp/.env.tmp;
+             else
+               # If SITE_URL is empty, check if the file currently contains the default localhost string
+               if grep -q 'app.baseURL.*localhost:8080' /tmp/.env.tmp; then
+                 echo 'Default localhost URL found. Stripping it for dynamic PHP detection...';
+                 grep -v 'app.baseURL' /tmp/.env.tmp > /tmp/.env.bak && mv /tmp/.env.bak /tmp/.env.tmp;
+               fi
+             fi &&
+             
+             # 3. Securely append the password to our working temp file
+             echo \"auth.initialPassword=$$INITIAL_PASSWORD\" >> /tmp/.env.tmp &&
+             
+             # 4. Overwrite the locked .env mount point using standard stream redirection (cat)
+             # This writes inside the file stream instead of trying to rename/replace the file itself
+             cat /tmp/.env.tmp > /var/www/html/.env &&
+             rm -f /tmp/.env.tmp /tmp/.env.bak &&
+      
+             # 5. Inject cron job
+             echo 'PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin' > /var/spool/cron/crontabs/root &&
+             echo '* * * * * php /var/www/html/spark cron:run > /dev/null 2>&1' >> /var/spool/cron/crontabs/root &&
+             echo '' >> /var/spool/cron/crontabs/root &&
+            
+             # Linux crontabs MUST belong to root:crontab and be exactly 600 permissions
+             chown root:crontab /var/spool/cron/crontabs/root &&
+             chmod 600 /var/spool/cron/crontabs/root &&
+             # Start the background cron daemon execution
+             cron &&
+       
+             chmod -R 777 /var/www/html/writable &&
+             apache2-foreground"

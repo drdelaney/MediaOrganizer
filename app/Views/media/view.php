@@ -433,6 +433,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
 <!-- Update Poster Modal -->
 <div class="modal fade" id="updatePosterModal" tabindex="-1" aria-labelledby="updatePosterModalLabel" aria-hidden="true">
+    <?php $lookupOptions = $lookupOptions ?? []; ?>
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -457,24 +458,18 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
 
                 <div class="tab-content" id="posterTabContent">
                     <!-- Online Posters Tab -->
+                    <?php if (!empty($enabledLookups)): ?>
                     <div class="tab-pane fade show active" id="tmdb-posters" role="tabpanel">
                         <div class="row g-2 mb-3 align-items-end">
                             <div class="col-md-4">
                                 <label for="posterSource" class="form-label small">Search Location</label>
                                 <select class="form-select" id="posterSource">
                                     <option value="">Auto-detect</option>
-                                    <?php if (isset($enabledLookups) && in_array('TMDB', $enabledLookups)): ?>
-                                        <option value="TMDB">TMDB (Movies/TV)</option>
-                                    <?php endif; ?>
-                                    <?php if (isset($enabledLookups) && in_array('TVDB', $enabledLookups)): ?>
-                                        <option value="TVDB">TVDB (TV Shows)</option>
-                                    <?php endif; ?>
-                                    <?php if (isset($enabledLookups) && in_array('IGDB', $enabledLookups)): ?>
-                                        <option value="IGDB">IGDB (Games)</option>
-                                    <?php endif; ?>
-                                    <?php if (isset($enabledLookups) && in_array('MusicBrainz', $enabledLookups)): ?>
-                                        <option value="MusicBrainz">MusicBrainz (Music)</option>
-                                    <?php endif; ?>
+                                    <?php foreach ($lookupOptions as $key => $option): ?>
+                                        <?php if (in_array($key, $enabledLookups ?? [])): ?>
+                                            <option value="<?= $key ?>"><?= esc($option['label']) ?></option>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                             <div class="col-md-6">
@@ -496,6 +491,17 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                         <div id="posterMessage" class="alert" style="display: none;"></div>
                         <div id="posterGallery" class="row g-3"></div>
                     </div>
+                    <?php else: ?>
+                    <div class="tab-pane fade show active" id="tmdb-posters" role="tabpanel">
+                        <div class="alert alert-info">
+                            Online poster lookups are currently disabled. Please enable them in settings to search for posters automatically.
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <script>
+                        const lookupOptions = <?= json_encode($lookupOptions ?? []) ?>;
+                    </script>
 
                     <!-- Upload Custom Poster Tab -->
                     <div class="tab-pane fade" id="upload-poster" role="tabpanel">
@@ -859,65 +865,73 @@ const movieId = <?= $movie['movie_id'] ?>;
 let selectedPosterUrl = null;
 
 // Fetch posters from TMDB
-document.getElementById('fetchPostersBtn').addEventListener('click', function() {
-    const btn = this;
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
+const fetchPostersBtn = document.getElementById('fetchPostersBtn');
+if (fetchPostersBtn) {
+    fetchPostersBtn.addEventListener('click', function() {
+        const btn = this;
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fetching...';
 
-    document.getElementById('posterLoadingSpinner').style.display = 'block';
-    document.getElementById('posterMessage').style.display = 'none';
-    document.getElementById('posterGallery').innerHTML = '';
+        document.getElementById('posterLoadingSpinner').style.display = 'block';
+        document.getElementById('posterMessage').style.display = 'none';
+        document.getElementById('posterGallery').innerHTML = '';
 
-    const sourceSelect = document.getElementById('posterSource');
-    const source = sourceSelect ? sourceSelect.value : '';
-    const searchTermInput = document.getElementById('posterSearchTerm');
-    const searchTerm = searchTermInput ? searchTermInput.value : '';
+        const sourceSelect = document.getElementById('posterSource');
+        const source = sourceSelect ? sourceSelect.value : '';
+        const searchTermInput = document.getElementById('posterSearchTerm');
+        const searchTerm = searchTermInput ? searchTermInput.value : '';
 
-    fetch('<?= base_url('media/fetchPosters/') ?>' + movieId, {
-        method: 'POST',
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ source: source, searchTerm: searchTerm })
-    })
-    .then(response => {
-        if (!response.ok && response.status === 403) {
-            throw new Error('CSRF validation failed. Please refresh the page.');
-        }
-        return response.json();
-    })
-    .then(data => {
-        document.getElementById('posterLoadingSpinner').style.display = 'none';
+        const idField = lookupOptions[source]?.id_field || (Object.keys(lookupOptions).length > 0 ? lookupOptions[Object.keys(lookupOptions)[0]].id_field : 'tmdb_id');
+        const fetchBody = { source: source, searchTerm: searchTerm };
+        fetchBody[idField] = movieId;
 
-        if (data.success && data.posters && data.posters.length > 0) {
-            // Update tab label if source is returned
-            if (data.source) {
-                const tab = document.getElementById('tmdb-tab');
-                if (tab) {
-                    tab.innerHTML = `<i class="bi bi-cloud-download"></i> ${data.source} Posters`;
-                }
-                const btn = document.getElementById('fetchPostersBtn');
-                if (btn) {
-                    btn.innerHTML = `<i class="bi bi-search"></i> Fetch Posters from ${data.source}`;
-                }
+        fetch('<?= base_url('media/fetchPosters/') ?>' + movieId, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+                '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
+            },
+            body: JSON.stringify(fetchBody)
+        })
+        .then(response => {
+            if (!response.ok && response.status === 403) {
+                throw new Error('CSRF validation failed. Please refresh the page.');
             }
-            displayPosterGallery(data.posters);
-            showPosterMessage(data.message, 'success');
-        } else {
-            showPosterMessage(data.message || 'No posters found', 'warning');
-        }
-    })
-    .catch(error => {
-        document.getElementById('posterLoadingSpinner').style.display = 'none';
-        showPosterMessage('Error fetching posters: ' + error.message, 'danger');
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('posterLoadingSpinner').style.display = 'none';
+
+            if (data.success && data.posters && data.posters.length > 0) {
+                // Update tab label if source is returned
+                if (data.source) {
+                    const tab = document.getElementById('tmdb-tab');
+                    if (tab) {
+                        tab.innerHTML = `<i class="bi bi-cloud-download"></i> ${data.source} Posters`;
+                    }
+                    const btn = document.getElementById('fetchPostersBtn');
+                    if (btn) {
+                        btn.innerHTML = `<i class="bi bi-search"></i> Fetch Posters from ${data.source}`;
+                    }
+                }
+                displayPosterGallery(data.posters);
+                showPosterMessage(data.message, 'success');
+            } else {
+                showPosterMessage(data.message || 'No posters found', 'warning');
+            }
+        })
+        .catch(error => {
+            document.getElementById('posterLoadingSpinner').style.display = 'none';
+            showPosterMessage('Error fetching posters: ' + error.message, 'danger');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
     });
-});
+}
 
 // Display poster gallery
 function displayPosterGallery(posters) {
@@ -931,6 +945,7 @@ function displayPosterGallery(posters) {
             <div class="card poster-option" style="cursor: pointer;" data-poster-url="${poster.url}">
                 <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
                 <div class="card-body p-2 text-center">
+                    ${poster.label ? `<div class="small fw-bold mb-1 text-truncate" title="${poster.label}">${poster.label}</div>` : ''}
                     <small class="text-muted">
                         ${poster.width && poster.height ? poster.width + ' x ' + poster.height : 'invalid image'}
                         ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}
@@ -954,19 +969,39 @@ function displayPosterGallery(posters) {
 
 // Save poster
 function savePoster(posterUrl) {
+    if (!posterUrl) return;
+    
+    const sourceSelect = document.getElementById('posterSource');
+    const source = sourceSelect ? sourceSelect.value : '';
+
+    const idField = lookupOptions[source]?.id_field || (Object.keys(lookupOptions).length > 0 ? lookupOptions[Object.keys(lookupOptions)[0]].id_field : 'tmdb_id');
+
+    const formData = new URLSearchParams();
+    formData.append('poster_url', posterUrl);
+    formData.append('type', source);
+    formData.append(idField, movieId);
+    formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
     fetch('<?= base_url('media/updatePoster/') ?>' + movieId, {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: 'poster_url=' + encodeURIComponent(posterUrl)
+        body: formData.toString()
     })
     .then(response => {
         if (!response.ok && response.status === 403) {
             throw new Error('CSRF validation failed. Please refresh the page.');
         }
-        return response.json();
+        return response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Server response was not JSON:', text);
+                throw new Error('Server returned an invalid response. Check logs for details.');
+            }
+        });
     })
     .then(data => {
         if (data.success) {
@@ -997,6 +1032,10 @@ document.getElementById('uploadPosterForm').addEventListener('submit', function(
     }
 
     const formData = new FormData(this);
+    const sourceSelect = document.getElementById('posterSource');
+    if (sourceSelect && sourceSelect.value) {
+        formData.append('media_type', sourceSelect.value);
+    }
     const btn = document.getElementById('uploadPosterBtn');
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
@@ -1012,7 +1051,14 @@ document.getElementById('uploadPosterForm').addEventListener('submit', function(
     })
     .then(response => {
         if (response.status === 401) return;
-        return response.json();
+        return response.text().then(text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Server response was not JSON:', text);
+                throw new Error('Server returned an invalid response. Check logs for details.');
+            }
+        });
     })
     .then(data => {
         if (!data) return;
@@ -1074,13 +1120,17 @@ document.getElementById('clearPosterBtn').addEventListener('click', function() {
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Removing...';
 
+    const formData = new URLSearchParams();
+    formData.append('clear_poster', 'true');
+    formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
     fetch('<?= base_url('media/updatePoster/') ?>' + movieId, {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'clear_poster=true'
+        body: formData.toString()
     })
     .then(response => {
         if (response.status === 401) return;

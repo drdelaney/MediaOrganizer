@@ -25,23 +25,74 @@ class App extends BaseConfig
         // Check environment first (allow entries in .env to override)
         $this->baseURL = env('app.baseURL', $this->baseURL);
 
+        // Attempt to detect baseURL if not set
+        if (empty($this->baseURL) || $this->baseURL === 'http://localhost:8080/') {
+            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            
+            // Clean host - remove any suspicious typos or extra dots
+            // Specifically handling the reported 'loclhst.com' error if it was a host detection issue
+            if (strpos($host, 'loclhst.com') !== false) {
+                 $host = str_replace('loclhst.com', 'localhost', $host);
+            }
+            
+            $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+            
+            // On Windows, dirname() might return backslashes, we ensure forward slashes for URL
+            $baseDir = str_replace('\\', '/', dirname($scriptName));
+            
+            // If the script is in the root of the domain (e.g. /index.php), baseDir is /
+            if ($baseDir === '/') {
+                $baseDir = '';
+            }
+            
+            // Remove /public if it's in the URL but we want the base to be the root of the app
+            if (str_ends_with($baseDir, '/public')) {
+                $baseDir = substr($baseDir, 0, -7);
+            } elseif ($baseDir === '/public') {
+                $baseDir = '';
+            }
+            
+            $this->baseURL = $protocol . '://' . $host . $baseDir . '/';
+        }
+
         try {
             // Attempt to get from database if not specifically overridden in .env
             // We check if it's NOT in .env because env() returns default if not found
-            if (env('app.baseURL') === null) {
-                $db = \Config\Database::connect();
-                if ($db->tableExists('configuration')) {
-                    $row = $db->table('configuration')
-                              ->where('param', 'app.baseURL')
-                              ->get()
-                              ->getRow();
-                    if ($row) {
-                        $this->baseURL = $row->value;
+            if (env('app.baseURL') === null || env('app.name') === null) {
+                // Check if we are in setup to avoid database connection issues
+                $path = $_SERVER['REQUEST_URI'] ?? '';
+                if (strpos($path, '/setup') === false) {
+                    // Using a static variable to avoid redundant DB hits in the same request
+                    static $dbSettings = null;
+                    
+                    if ($dbSettings === null) {
+                        $dbSettings = [];
+                        $db = \Config\Database::connect();
+                        // Query for all relevant settings at once to minimize connections/locks
+                        if ($db->tableExists('configuration')) {
+                            $results = $db->table('configuration')
+                                          ->whereIn('param', ['app.baseURL', 'app.name'])
+                                          ->get()
+                                          ->getResultArray();
+                            foreach ($results as $row) {
+                                $dbSettings[$row['param']] = $row['value'];
+                            }
+                        }
+                    }
+
+                    if (env('app.baseURL') === null && isset($dbSettings['app.baseURL'])) {
+                        $this->baseURL = $dbSettings['app.baseURL'];
+                    }
+                    
+                    if (env('app.name') === null && isset($dbSettings['app.name'])) {
+                        log_message('debug', 'App name found in DB: ' . $dbSettings['app.name']);
                     }
                 }
             }
         } catch (\Exception $e) {
             // Fallback to default/env if DB not ready
+            log_message('error', 'Error loading settings from DB in App config: ' . $e->getMessage());
         }
     }
 

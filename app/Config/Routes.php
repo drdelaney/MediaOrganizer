@@ -6,11 +6,19 @@ use CodeIgniter\Router\RouteCollection;
  * @var RouteCollection $routes
  */
 
+// Setup routes (Publicly accessible for initialization)
+$routes->get('setup', 'Setup::index', ['as' => 'setup_public']);
+$routes->post('setup/run', 'Setup::run');
+$routes->get('setup/complete', 'Setup::complete');
+$routes->post('setup/markMigrationComplete', 'Setup::markMigrationComplete');
+$routes->get('setup/(:any)', 'Setup::$1');
+$routes->post('setup/(:any)', 'Setup::$1');
+
 // Public routes
 $routes->get('login', 'Auth::login');
 $routes->post('authenticate', 'Auth::authenticate');
 $routes->get('logout', 'Auth::logout');
-$routes->match(['get', 'post'], 'public', 'PublicView::index');
+$routes->match(['GET', 'POST'], 'public', 'PublicView::index');
 
 // Re-authentication for maintenance (require basic authentication)
 $routes->group('', ['filter' => 'auth'], function($routes) {
@@ -23,7 +31,7 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     $routes->get('/', 'Home::index');
 
     // Media routes
-    $routes->match(['get', 'post'], 'media', 'Media::index');
+    $routes->match(['GET', 'POST'], 'media', 'Media::index');
     $routes->get('media/view/(:num)', 'Media::view/$1');
     $routes->get('media/edit/(:num)', 'Media::edit/$1');
     $routes->post('media/update/(:num)', 'Media::update/$1');
@@ -78,9 +86,10 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     $routes->post('reindexTables', 'DatabaseMaintenance::reindexTables');
     $routes->post('optimizeTables', 'DatabaseMaintenance::optimizeTables');
     $routes->post('convertToInnoDB', 'DatabaseMaintenance::convertToInnoDB');
-    $routes->post('fixConfigSchema', 'DatabaseMaintenance::fixConfigSchema');
+    $routes->post('applyMigrations', 'DatabaseMaintenance::applyMigrations');
     $routes->post('checkEnvironmentAjax', 'DatabaseMaintenance::checkEnvironmentAjax');
     $routes->get('backupDatabase', 'DatabaseMaintenance::backupDatabase');
+    $routes->get('downloadRawSqlite', 'DatabaseMaintenance::downloadRawSqlite');
 
     // Lookup tables management
     $routes->get('manage-lookups', 'DatabaseMaintenance::manageLookups');
@@ -139,6 +148,11 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
 
     // Poster routes
     $routes->post('poster/purge', 'DatabaseMaintenance::purgePosters');
+
+    // Cron routes
+    $routes->post('cron/toggle/(:num)', 'DatabaseMaintenance::toggleCronJob/$1');
+    $routes->post('cron/run/(:num)', 'DatabaseMaintenance::runCronJob/$1');
+    $routes->post('cron/update-schedule/(:num)', 'DatabaseMaintenance::updateCronSchedule/$1');
 
     // Config routes
     $routes->post('config/update', 'DatabaseMaintenance::updateConfig');

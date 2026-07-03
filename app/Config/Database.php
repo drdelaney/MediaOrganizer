@@ -44,6 +44,8 @@ class Database extends Config
         'port'         => 3306,
         'numberNative' => false,
         'foundRows'    => false,
+        'busyTimeout' => 5000,
+        'synchronous' => 1,
         'dateFormat'   => [
             'date'     => 'Y-m-d',
             'datetime' => 'Y-m-d H:i:s',

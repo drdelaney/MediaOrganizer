@@ -103,8 +103,8 @@ class Loans extends BaseController
                 }
 
                 $email->clear();
-                $email->setFrom($emailConfig->fromEmail, $emailConfig->fromName);
-                $email->setReplyTo($emailConfig->fromEmail, $emailConfig->fromName);
+                $email->setFrom($emailConfig->fromEmail, $emailConfig->fromName ?: 'Media Organizer');
+                $email->setReplyTo($emailConfig->fromEmail, $emailConfig->fromName ?: 'Media Organizer');
                 $email->setTo($personData['person_email']);
                 $email->setSubject('Friendly Reminder: Media Return Request');
                 

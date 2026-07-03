@@ -135,42 +135,46 @@ class Media extends BaseController
             return redirect()->back()->withInput()->with('errors', ['medium' => 'At least one media format must be selected.']);
         }
 
-        $lookupType = (string)($this->request->getPost('lookup_type') ?: 'IMDB');
-        $imdbId = trim((string)$this->request->getPost('imdb_id'));
-        $tmdbId = trim((string)$this->request->getPost('tmdb_id'));
-        $tvdbId = trim((string)$this->request->getPost('tvdb_id'));
-        $igdbId = trim((string)$this->request->getPost('igdb_id'));
-        $mbid = trim((string)$this->request->getPost('mbid'));
-        $lookupTitle = trim((string)$this->request->getPost('lookup_title'));
-        $lookupYear = $this->request->getPost('lookup_year') ?: null;
-        $lookupBarcode = trim((string)$this->request->getPost('lookup_barcode'));
-
+        $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+        $lookupType = (string)($this->request->getPost('lookup_type') ?: (!empty($enabled) ? $enabled[0] : 'IMDB'));
+        
         $apiData = null;
         try {
-            $apiService = \App\Libraries\ApiServiceFactory::create($lookupType);
-            if ($apiService && $apiService->isApiAvailable()) {
-                if ($imdbId !== '') {
-                    $apiData = method_exists($apiService, 'findByExternalId') ? $apiService->findByExternalId($imdbId, $lookupType) : null;
-                } elseif ($tmdbId !== '') {
-                    $apiData = method_exists($apiService, 'getMediaDetails') ? $apiService->getMediaDetails($tmdbId) : null;
-                } elseif ($tvdbId !== '') {
-                    $apiData = method_exists($apiService, 'getTvDetails') ? $apiService->getTvDetails($tvdbId) : null;
-                } elseif ($igdbId !== '') {
-                    $apiData = $apiService->getMediaDetails((int)$igdbId);
-                } elseif ($mbid !== '') {
-                    $apiData = $apiService->getMediaDetails($mbid);
-                } elseif ($lookupBarcode !== '' && method_exists($apiService, 'findByBarcode')) {
-                    $apiData = $apiService->findByBarcode($lookupBarcode, $lookupType);
-                } elseif ($lookupTitle !== '') {
-                    if ($lookupType === 'TVDB' && method_exists($apiService, 'searchTv')) {
-                        $apiData = $apiService->searchTv($lookupTitle, $lookupYear ? (int)$lookupYear : null);
-                    } else {
-                        $apiData = $apiService->searchMedia($lookupTitle, $lookupYear ? (int)$lookupYear : null);
+            if (\App\Libraries\LookupRegistry::isEnabled($lookupType)) {
+                $imdbId = trim((string)$this->request->getPost('imdb_id'));
+                $tmdbId = trim((string)$this->request->getPost('tmdb_id'));
+                $tvdbId = trim((string)$this->request->getPost('tvdb_id'));
+                $igdbId = trim((string)$this->request->getPost('igdb_id'));
+                $mbid = trim((string)$this->request->getPost('mbid'));
+                $lookupTitle = trim((string)$this->request->getPost('lookup_title'));
+                $lookupYear = $this->request->getPost('lookup_year') ?: null;
+                $lookupBarcode = trim((string)$this->request->getPost('lookup_barcode'));
+
+                $apiService = \App\Libraries\ApiServiceFactory::create($lookupType);
+                if ($apiService && $apiService->isApiAvailable()) {
+                    if ($imdbId !== '') {
+                        $apiData = method_exists($apiService, 'findByExternalId') ? $apiService->findByExternalId($imdbId, $lookupType) : null;
+                    } elseif ($tmdbId !== '') {
+                        $apiData = method_exists($apiService, 'getMediaDetails') ? $apiService->getMediaDetails($tmdbId) : null;
+                    } elseif ($tvdbId !== '') {
+                        $apiData = method_exists($apiService, 'getTvDetails') ? $apiService->getTvDetails($tvdbId) : null;
+                    } elseif ($igdbId !== '') {
+                        $apiData = $apiService->getMediaDetails((int)$igdbId);
+                    } elseif ($mbid !== '') {
+                        $apiData = $apiService->getMediaDetails($mbid);
+                    } elseif ($lookupBarcode !== '' && method_exists($apiService, 'findByBarcode')) {
+                        $apiData = $apiService->findByBarcode($lookupBarcode, $lookupType);
+                    } elseif ($lookupTitle !== '') {
+                        if ($lookupType === 'TVDB' && method_exists($apiService, 'searchTv')) {
+                            $apiData = $apiService->searchTv($lookupTitle, $lookupYear ? (int)$lookupYear : null);
+                        } else {
+                            $apiData = $apiService->searchMedia($lookupTitle, $lookupYear ? (int)$lookupYear : null);
+                        }
                     }
+                } elseif ($lookupBarcode !== '' && $apiService && method_exists($apiService, 'findByBarcode')) {
+                    // Even if TMDB isn’t available, try to at least resolve a title from the barcode
+                    $apiData = $apiService->findByBarcode($lookupBarcode, $lookupType);
                 }
-            } elseif ($lookupBarcode !== '' && $apiService && method_exists($apiService, 'findByBarcode')) {
-                // Even if TMDB isn’t available, try to at least resolve a title from the barcode
-                $apiData = $apiService->findByBarcode($lookupBarcode, $lookupType);
             }
         } catch (\Throwable $e) {
             log_message('error', 'API fetch during store failed: ' . $e->getMessage());
@@ -269,75 +273,99 @@ class Media extends BaseController
                 $tagModel->setTagsForMedia($mediaId, $tagIds);
             }
 
-        // Handle poster - check in this order: custom upload, selected URL, API data
-        $imageData = null;
-        
-        // 1. Check for custom uploaded poster file
-        $posterFile = $this->request->getFile('poster_upload_file');
-        if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
-            try {
-                $mimeType = $posterFile->getMimeType();
-                
-                // Validate image type
-                if (in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'])) {
-                    // Read the uploaded file
-                    $imageData = file_get_contents($posterFile->getTempName());
+            log_message('debug', 'Media stored, ID: ' . $mediaId . '. Starting poster handling.');
 
-                    // Convert to JPEG if needed
-                    if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg') {
-                        $image = imagecreatefromstring($imageData);
-                        if ($image !== false) {
-                            ob_start();
-                            imagejpeg($image, null, 90);
-                            $imageData = ob_get_clean();
-                            imagedestroy($image);
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                log_message('error', 'Failed to process uploaded poster: ' . $e->getMessage());
-                $imageData = null;
-            }
-        }
-        
-        // 2. If no upload, check for selected poster URL from modal
-        if (!$imageData) {
-            $selectedPosterUrl = $this->request->getPost('selected_poster_url');
-            if (!empty($selectedPosterUrl)) {
+            // Fix indentation and ensure poster handling is inside the if($mediaId) block
+            // Handle poster - check in this order: custom upload, selected URL, API data
+            $imageData = null;
+            
+            // 1. Check for custom uploaded poster file
+            $posterFile = $this->request->getFile('poster_upload_file');
+            if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
+                log_message('debug', 'Custom poster upload detected.');
                 try {
-                    // Use factory to get correct service for downloading
-                    $posterLookupType = $this->request->getPost('lookup_type') ?: $lookupType;
-                    $downloadService = \App\Libraries\ApiServiceFactory::create($posterLookupType);
+                    $mimeType = $posterFile->getMimeType();
+                    $clientMimeType = $posterFile->getClientMimeType();
+                    $fileName = $posterFile->getClientName();
+                    $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                     
-                    if ($downloadService && method_exists($downloadService, 'downloadPoster')) {
-                        $imageData = $downloadService->downloadPoster($selectedPosterUrl, $mediaId);
+                    log_message('debug', 'File Name: ' . $fileName . ', Extension: ' . $fileExt . ', MimeType: ' . $mimeType . ', ClientMimeType: ' . $clientMimeType);
+                    
+                    $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                    $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                    
+                    // Validate image type - be more lenient if fileinfo is missing
+                    if (in_array($mimeType, $validMimeTypes) || 
+                        in_array($clientMimeType, $validMimeTypes) || 
+                        in_array($fileExt, $validExtensions)) {
+                        
+                        // Read the uploaded file
+                        $imageData = file_get_contents($posterFile->getTempName());
+                        log_message('debug', 'Image data read. Length: ' . strlen($imageData));
+
+                        // Convert to JPEG if needed (requires GD)
+                        if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
+                            log_message('debug', 'Converting image to JPEG.');
+                            $image = @imagecreatefromstring($imageData);
+                            if ($image !== false) {
+                                ob_start();
+                                imagejpeg($image, null, 90);
+                                $imageData = ob_get_clean();
+                                imagedestroy($image);
+                            }
+                        } else if (!function_exists('imagecreatefromstring')) {
+                            log_message('debug', 'GD extension missing, skipping conversion to JPEG.');
+                        }
                     } else {
-                        // Fallback to MovieApiService which has a generic downloader
-                        $movieService = new \App\Libraries\MovieApiService();
-                        $imageData = $movieService->downloadPoster($selectedPosterUrl, $mediaId);
+                        log_message('debug', 'Invalid file type detected: ' . $mimeType . ' (Client: ' . $clientMimeType . ')');
                     }
                 } catch (\Throwable $e) {
-                    log_message('error', 'Failed to download selected poster: ' . $e->getMessage());
+                    log_message('error', 'Failed to process uploaded poster: ' . $e->getMessage());
+                    $imageData = null;
                 }
             }
-        }
-        
-        // 3. If still no poster and we have API data with poster URL, use that
-        if (!$imageData && $apiData && !empty($apiData['poster_url'])) {
-            try {
-                // Use the already created apiService if possible
-                if (isset($apiService) && method_exists($apiService, 'downloadPoster')) {
-                    $imageData = $apiService->downloadPoster($apiData['poster_url'], $mediaId);
-                } else {
-                    // Fallback to MovieApiService which has a generic downloader
-                    $movieService = new \App\Libraries\MovieApiService();
-                    $imageData = $movieService->downloadPoster($apiData['poster_url'], $mediaId);
-                }
-            } catch (\Throwable $e) {
-                log_message('error', 'Failed to download API poster: ' . $e->getMessage());
-            }
-        }
             
+            // 2. If no upload, check for selected poster URL from modal
+            if (!$imageData) {
+                $selectedPosterUrl = $this->request->getPost('selected_poster_url');
+                if (!empty($selectedPosterUrl)) {
+                    log_message('debug', 'Selected poster URL detected: ' . $selectedPosterUrl);
+                    try {
+                        // Use factory to get correct service for downloading
+                        $posterLookupType = $this->request->getPost('lookup_type') ?: $lookupType;
+                        $downloadService = \App\Libraries\ApiServiceFactory::create($posterLookupType);
+                        
+                        if ($downloadService && method_exists($downloadService, 'downloadPoster')) {
+                            log_message('debug', 'Using service to download poster: ' . $posterLookupType);
+                            $imageData = $downloadService->downloadPoster($selectedPosterUrl, $mediaId);
+                        } else {
+                            log_message('debug', 'Using default downloadRemotePoster.');
+                            // Use default download if no service or method exists
+                            $imageData = $this->downloadRemotePoster($selectedPosterUrl);
+                        }
+                        log_message('debug', 'Image data acquired. Length: ' . ($imageData ? strlen($imageData) : '0'));
+                    } catch (\Throwable $e) {
+                        log_message('error', 'Failed to download selected poster: ' . $e->getMessage());
+                    }
+                }
+            }
+            
+            // 3. If still no poster and we have API data with poster URL, use that
+            if (!$imageData && $apiData && !empty($apiData['poster_url'])) {
+                log_message('debug', 'Falling back to API data poster URL: ' . $apiData['poster_url']);
+                try {
+                    // Use the already created apiService if possible
+                    if (isset($apiService) && method_exists($apiService, 'downloadPoster')) {
+                        $imageData = $apiService->downloadPoster($apiData['poster_url'], $mediaId);
+                    } else {
+                        // Use default download if no service or method exists
+                        $imageData = $this->downloadRemotePoster($apiData['poster_url']);
+                    }
+                } catch (\Throwable $e) {
+                    log_message('error', 'Failed to download API poster: ' . $e->getMessage());
+                }
+            }
+                
             // Store the poster if we got image data from any source
             if ($imageData) {
                 try {
@@ -369,7 +397,9 @@ class Media extends BaseController
         $allTags = $this->mediaModel->getTags();
 
         // Get enabled lookups
-        $enabledLookups = \App\Libraries\LookupRegistry::getEnabledLookups();
+        $lookupRegistry = new \App\Libraries\LookupRegistry();
+        $enabledLookups = $lookupRegistry->getEnabledLookups();
+        $lookupOptions = $lookupRegistry->getLookupTypeOptions();
 
         // Get current loan if any
         $loanModel = new \App\Models\LoanModel();
@@ -381,6 +411,7 @@ class Media extends BaseController
             'allTags' => $allTags,
             'currentLoan' => $currentLoan,
             'enabledLookups' => $enabledLookups,
+            'lookupOptions' => $lookupOptions,
             'title' => 'View Media - ' . ($movie['title'] ?: $movie['o_title'] ?: 'Untitled')
         ];
 
@@ -418,6 +449,7 @@ class Media extends BaseController
             'allTags' => $allTags,
             'currentLoan' => $currentLoan,
             'lookupOptions' => $lookupOptions,
+            'enabledLookups' => \App\Libraries\LookupRegistry::getEnabledLookups(),
             'lookupSource' => get_source_from_notes($movie['notes']),
             'title' => 'Edit Media - ' . ($movie['title'] ?: $movie['o_title'] ?: 'Untitled')
         ];
@@ -463,6 +495,9 @@ class Media extends BaseController
         $fetchedPosterUrl = (string)$this->request->getPost('fetched_poster_url');
         $posterChoice = (string)$this->request->getPost('poster_choice'); // 'existing', 'fetched', or 'none'
         $hasExistingPoster = !empty($media['poster_md5']);
+        
+        $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+        $lookupType = (string)($this->request->getPost('lookup_type') ?: (!empty($enabled) ? $enabled[0] : 'IMDB'));
 
         // If the user explicitly chose no poster, clear any existing poster and skip saving fetched
         if ($posterChoice === 'none') {
@@ -486,21 +521,64 @@ class Media extends BaseController
             }
         }
 
+        // Handle manual poster upload
+        $posterFile = $this->request->getFile('poster_upload_file');
+        if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
+            try {
+                $mimeType = $posterFile->getMimeType();
+                $clientMimeType = $posterFile->getClientMimeType();
+                $fileName = $posterFile->getClientName();
+                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                
+                $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+
+                if (in_array($mimeType, $validMimeTypes) || 
+                    in_array($clientMimeType, $validMimeTypes) || 
+                    in_array($fileExt, $validExtensions)) {
+                    
+                    $imageData = file_get_contents($posterFile->getTempName());
+                    // Convert to JPEG if needed
+                    if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
+                        $image = @imagecreatefromstring($imageData);
+                        if ($image !== false) {
+                            ob_start();
+                            imagejpeg($image, null, 90);
+                            $imageData = ob_get_clean();
+                            imagedestroy($image);
+                        }
+                    }
+                    if ($imageData) {
+                        $this->mediaModel->storePosterForMedia($mediaId, $imageData);
+                        // If we uploaded a file, don't save the fetched URL
+                        $shouldSaveFetched = false;
+                    }
+                }
+            } catch (\Throwable $e) {
+                log_message('error', 'Failed to store uploaded poster on update: ' . $e->getMessage());
+            }
+        }
+
         if ($shouldSaveFetched) {
             try {
                 // Determine type from notes or fallback to IMDB
-                $type = 'IMDB';
-                if (get_igdb_id_from_notes($media['notes'])) $type = 'IGDB';
-                elseif (get_mbid_from_notes($media['notes'])) $type = 'MusicBrainz';
-                elseif (get_tvdb_id_from_notes($media['notes'])) $type = 'TVDB';
+                $type = (string)$this->request->getPost('lookup_type');
+                if (!$type) {
+                    $type = 'IMDB';
+                    if (get_igdb_id_from_notes($media['notes'])) $type = 'IGDB';
+                    elseif (get_mbid_from_notes($media['notes'])) $type = 'MusicBrainz';
+                    elseif (get_tvdb_id_from_notes($media['notes'])) $type = 'TVDB';
+                }
 
-                $apiService = \App\Libraries\ApiServiceFactory::create($type);
-                if ($apiService) {
-                    // Download poster directly from the provided URL (no API key required)
-                    $imageData = $apiService->downloadPoster($fetchedPosterUrl, $mediaId);
-                    if ($imageData) {
-                        // This updates poster_md5 and updated timestamp internally
-                        $this->mediaModel->storePosterForMedia($mediaId, $imageData);
+                if (\App\Libraries\LookupRegistry::isEnabled($type)) {
+                    $apiService = \App\Libraries\ApiServiceFactory::create($type);
+                    if ($apiService) {
+                        // Download poster directly from the provided URL (no API key required)
+                        $imageData = $apiService->downloadPoster($fetchedPosterUrl, $mediaId);
+                        if ($imageData) {
+                            // This updates poster_md5 and updated timestamp internally
+                            $this->mediaModel->storePosterForMedia($mediaId, $imageData);
+                        }
                     }
                 }
             } catch (\Throwable $e) {
@@ -550,7 +628,7 @@ class Media extends BaseController
 
         // Ensure the source tag is preserved or updated during manual update
         $lookupType = (string)$this->request->getPost('lookup_type');
-        if ($lookupType) {
+        if ($lookupType && \App\Libraries\LookupRegistry::isEnabled($lookupType)) {
             $externalIds = [
                 'tmdb' => $this->request->getPost('tmdb_id') ?: get_tmdb_id_from_notes($updateData['notes']),
                 'imdb' => $this->request->getPost('imdb_id') ?: get_imdb_id_from_notes($updateData['notes']),
@@ -715,6 +793,10 @@ class Media extends BaseController
             // Read optional custom query/year/type from JSON body (AJAX)
             $payload = $this->request->getJSON(true) ?: [];
             $type = isset($payload['type']) ? $payload['type'] : 'IMDB';
+
+            if (!\App\Libraries\LookupRegistry::isEnabled($type)) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Lookup service ' . $type . ' is disabled in settings.']);
+            }
             
             // Auto-detect type if not provided
             if (!isset($payload['type'])) {
@@ -952,15 +1034,31 @@ class Media extends BaseController
             $this->response->setHeader('Content-Type', 'application/json');
         }
         try {
-            // Gather inputs (accept JSON or form-encoded)
             $payload = $this->request->getJSON(true) ?: $this->request->getPost();
-            $lookupType = (string)($payload['lookup_type'] ?? 'IMDB');
+            $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+            $lookupType = (string)($payload['lookup_type'] ?? (!empty($enabled) ? $enabled[0] : 'IMDB'));
+            
+            if (!\App\Libraries\LookupRegistry::isEnabled($lookupType)) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Lookup service ' . $lookupType . ' is disabled in settings.']);
+            }
             
             $apiService = \App\Libraries\ApiServiceFactory::create($lookupType);
             if (!$apiService) {
                 return $this->response->setJSON(['success' => false, 'message' => 'Invalid lookup type: ' . $lookupType]);
             }
             $apiAvailable = $apiService->isApiAvailable();
+
+            // If API not available for the selected lookup type, provide a clear message
+            if (!$apiAvailable) {
+                $keyName = $lookupType . '_API_KEY';
+                if ($lookupType === 'MusicBrainz') $keyName = 'MUSICBRAINZ_EMAIL';
+                if ($lookupType === 'IGDB') $keyName = 'IGDB_CLIENT_ID/SECRET';
+                
+                return $this->response->setJSON([
+                    'success' => false,
+                    'message' => "Search failed because $keyName is not configured. Please check your application settings."
+                ]);
+            }
 
             $imdbId = trim((string)($payload['imdb_id'] ?? ''));
             $tvdbId = trim((string)($payload['tvdb_id'] ?? ''));
@@ -1099,9 +1197,20 @@ class Media extends BaseController
                 ]);
             }
 
+            $msgPrefix = '';
+            if ($lookupType === 'TMDB') {
+                $msgPrefix = 'Fetched details from TMDB. ';
+            } elseif ($lookupType === 'IMDB') {
+                $msgPrefix = 'Fetched details from IMDB. ';
+            } elseif ($lookupType === 'TVDB') {
+                $msgPrefix = 'Fetched details from TVDB. ';
+            } else {
+                $msgPrefix = 'Fetched details from API. ';
+            }
+
             return $this->response->setJSON([
                 'success' => true,
-                'message' => 'Fetched details from TMDB. Review and apply to the form before saving.' . ($apiData['poster_url'] ? '' : ' (No poster available)'),
+                'message' => $msgPrefix . 'Review and apply to the form before saving.' . (isset($apiData['poster_url']) && $apiData['poster_url'] ? '' : ' (No poster available)'),
                 'data' => $apiData
             ]);
         } catch (\Throwable $e) {
@@ -1117,26 +1226,59 @@ class Media extends BaseController
      */
     public function poster($mediaId)
     {
+        log_message('debug', 'Serving poster for media ID: ' . $mediaId);
         $posterData = $this->mediaModel->getPosterData($mediaId);
         
-        if (!$posterData || !$posterData['data']) {
+        if (!$posterData || !isset($posterData['data'])) {
+            log_message('debug', 'Poster not found in database for media ID: ' . $mediaId);
             // Return 404 or default image
             throw new \CodeIgniter\Exceptions\PageNotFoundException('Poster not found');
         }
         
+        $data = $posterData['data'];
+        log_message('debug', 'Poster data retrieved. Size: ' . (is_string($data) ? strlen($data) : 'resource') . ' bytes');
+
+        // If data is a resource (e.g. from PDO/SQLite), read it
+        if (is_resource($data)) {
+            log_message('debug', 'Poster data is a resource, reading...');
+            $data = stream_get_contents($data);
+            log_message('debug', 'Poster data read. New size: ' . strlen($data) . ' bytes');
+        }
+        
         // Verify MD5 hash
-        if ($posterData['md5sum'] !== md5($posterData['data'])) {
-            log_message('error', 'Poster data integrity check failed for media ID: ' . $mediaId);
-            throw new \CodeIgniter\Exceptions\PageNotFoundException('Poster data corrupted');
+        $calculatedMd5 = md5($data);
+        if ($posterData['md5sum'] !== $calculatedMd5) {
+            log_message('error', 'Poster data integrity check failed for media ID: ' . $mediaId . '. DB MD5: ' . $posterData['md5sum'] . ', Calculated: ' . $calculatedMd5);
+            // For now, let's still try to serve it if it's not empty, to see what happens
+            if (empty($data)) {
+                 throw new \CodeIgniter\Exceptions\PageNotFoundException('Poster data corrupted and empty');
+            }
+        }
+
+        // Determine content type from data
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->buffer($data);
+        log_message('debug', 'Detected MIME type: ' . $mimeType);
+
+        // Fallback to image/jpeg if detection fails
+        if (!$mimeType || $mimeType === 'application/octet-stream') {
+            $mimeType = 'image/jpeg';
+            log_message('debug', 'MIME type fallback to image/jpeg');
         }
         
         // Set appropriate headers
-        $this->response->setHeader('Content-Type', 'image/jpeg')
-                      ->setHeader('Content-Length', strlen($posterData['data']))
+        $this->response->setHeader('Content-Type', $mimeType)
+                      ->setHeader('Content-Length', (string)strlen($data))
                       ->setHeader('Cache-Control', 'public, max-age=31536000') // Cache for 1 year
                       ->setHeader('ETag', '"' . $posterData['md5sum'] . '"');
         
-        return $this->response->setBody($posterData['data']);
+        // Clean any output buffers to prevent corruption
+        // We use ob_get_length() to check if there is actually anything in the buffer
+        while (ob_get_level() > 0 && ob_get_length() !== false) {
+            ob_end_clean();
+        }
+
+        return $this->response->setBody($data);
     }
 
     /**
@@ -1367,7 +1509,12 @@ class Media extends BaseController
 
         try {
             $payload = $this->request->getJSON(true) ?: [];
-            $type = isset($payload['type']) ? $payload['type'] : 'IMDB';
+            $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+            $type = isset($payload['type']) ? $payload['type'] : (!empty($enabled) ? $enabled[0] : 'IMDB');
+            
+            if (!\App\Libraries\LookupRegistry::isEnabled($type)) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Lookup service ' . $type . ' is disabled in settings.']);
+            }
             
             $apiService = \App\Libraries\ApiServiceFactory::create($type);
             if (!$apiService || !$apiService->isApiAvailable()) {
@@ -1422,12 +1569,17 @@ class Media extends BaseController
 
         try {
             $payload = $this->request->getJSON(true) ?: [];
-            $type = isset($payload['type']) ? $payload['type'] : 'TMDB';
+            $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+            $type = isset($payload['type']) ? $payload['type'] : (!empty($enabled) ? $enabled[0] : 'TMDB');
             $selectedSource = isset($payload['source']) && !empty($payload['source']) ? $payload['source'] : null;
             $searchTerm = isset($payload['searchTerm']) && !empty($payload['searchTerm']) ? $payload['searchTerm'] : null;
 
             if ($selectedSource) {
                 $type = $selectedSource;
+            }
+            
+            if (!\App\Libraries\LookupRegistry::isEnabled($type)) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Lookup service ' . $type . ' is disabled in settings.']);
             }
             
             $apiService = \App\Libraries\ApiServiceFactory::create($type);
@@ -1437,40 +1589,83 @@ class Media extends BaseController
 
             $id = $payload['imdb_id'] ?? $payload['tmdb_id'] ?? $payload['tvdb_id'] ?? $payload['igdb_id'] ?? $payload['mbid'] ?? $payload['id'] ?? null;
 
-            // If a search term is provided, search by title first to get the correct ID
+            // If search term is provided, try searching for multiple results and aggregate posters
             if ($searchTerm) {
-                $apiData = ($type === 'TVDB' && method_exists($apiService, 'searchTv')) ? $apiService->searchTv($searchTerm, null) : $apiService->searchMedia($searchTerm, null);
-                if (!$apiData) {
-                    return $this->response->setJSON(['success' => false, 'message' => 'Could not find media with term: ' . $searchTerm]);
+                $title = $searchTerm;
+                $results = [];
+                
+                if ($type === 'IMDB' && method_exists($apiService, 'searchMovieMultiple')) {
+                    $searchRes = $apiService->searchMovieMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif ($type === 'TMDB' || $type === 'MOVIE') {
+                    $searchRes = $apiService->searchMovieMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif ($type === 'TV' || $type === 'TVDB') {
+                    $searchRes = $apiService->searchTvMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif (method_exists($apiService, 'searchMultiple')) {
+                    $searchRes = $apiService->searchMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } else {
+                    $apiData = $apiService->searchMedia($title, null);
+                    if ($apiData) $results[] = $apiData;
                 }
 
-                if ($type === 'TMDB' || $type === 'TVDB' || $type === 'MOVIE' || $type === 'TV') {
-                    $id = $apiData['tmdb_id'] ?? null;
-                } elseif ($type === 'IGDB' || $type === 'GAME') {
-                    $id = $apiData['igdb_id'] ?? null;
-                } elseif ($type === 'MusicBrainz' || $type === 'MUSIC') {
-                    $id = $apiData['mbid'] ?? null;
+                if (empty($results)) {
+                    return $this->response->setJSON(['success' => false, 'message' => 'Could not find media on API.']);
                 }
-            }
 
-            if (!$id) {
-                return $this->response->setJSON(['success' => false, 'message' => 'No ID provided.']);
-            }
+                $posters = [];
+                foreach ($results as $res) {
+                    $resId = null;
+                    if ($type === 'IMDB') {
+                        $resId = $res['imdb_id'] ?? null;
+                    } elseif ($type === 'TMDB' || $type === 'TVDB' || $type === 'MOVIE' || $type === 'TV') {
+                        $resId = $res['tmdb_id'] ?? $res['tvdb_id'] ?? null;
+                    } elseif ($type === 'IGDB' || $type === 'GAME') {
+                        $resId = $res['igdb_id'] ?? $res['id'] ?? null;
+                    } elseif ($type === 'MusicBrainz' || $type === 'MUSIC') {
+                        $resId = $res['mbid'] ?? null;
+                    }
 
-            // Get multiple posters (fall back to single if getPosters not implemented)
-            $posters = [];
-            if (method_exists($apiService, 'getPosters')) {
-                $posters = $apiService->getPosters($id, $type, 10);
+                    if ($resId) {
+                        if (method_exists($apiService, 'getPosters')) {
+                            $resPosters = $apiService->getPosters($resId, $type, 5);
+                            foreach ($resPosters as $rp) {
+                                // Add a label to help user identify which movie this poster belongs to
+                                $rp['label'] = ($res['title'] ?? '') . ' (' . ($res['year'] ?? '') . ')';
+                                $posters[] = $rp;
+                            }
+                        } elseif (!empty($res['poster_url'])) {
+                            $posters[] = [
+                                'url' => $res['poster_url'],
+                                'thumbnail' => $res['poster_url'],
+                                'width' => null,
+                                'height' => null,
+                                'label' => ($res['title'] ?? '') . ' (' . ($res['year'] ?? '') . ')'
+                            ];
+                        }
+                    }
+                }
             } else {
-                // Fallback: try to get details and use the poster_url
-                $details = ($type === 'TVDB' && method_exists($apiService, 'getTvDetails')) ? $apiService->getTvDetails($id) : $apiService->getMediaDetails($id);
-                if ($details && !empty($details['poster_url'])) {
-                    $posters[] = [
-                        'url' => $details['poster_url'],
-                        'thumbnail' => $details['poster_url'],
-                        'width' => null,
-                        'height' => null
-                    ];
+                // No search term, use the ID (from notes or payload)
+                if (!$id) {
+                    return $this->response->setJSON(['success' => false, 'message' => 'Could not resolve media ID.']);
+                }
+
+                // Get multiple posters
+                if (method_exists($apiService, 'getPosters')) {
+                    $posters = $apiService->getPosters($id, $type, 15);
+                } else {
+                    $details = ($type === 'TVDB' && method_exists($apiService, 'getTvDetails')) ? $apiService->getTvDetails($id) : $apiService->getMediaDetails($id);
+                    if ($details && !empty($details['poster_url'])) {
+                        $posters[] = [
+                            'url' => $details['poster_url'],
+                            'thumbnail' => $details['poster_url'],
+                            'width' => null,
+                            'height' => null
+                        ];
+                    }
                 }
             }
 
@@ -1527,19 +1722,33 @@ class Media extends BaseController
             if ($selectedSource) {
                 $type = $selectedSource;
             } else {
-                if (get_igdb_id_from_notes($notes)) {
+                if (get_imdb_id_from_notes($notes) && \App\Libraries\LookupRegistry::isEnabled('IMDB')) {
+                    $type = 'IMDB';
+                } elseif (get_tmdb_id_from_notes($notes) && \App\Libraries\LookupRegistry::isEnabled('TMDB')) {
+                    $type = 'TMDB';
+                } elseif (get_igdb_id_from_notes($notes) && \App\Libraries\LookupRegistry::isEnabled('IGDB')) {
                     $type = 'IGDB';
-                } elseif (get_mbid_from_notes($notes)) {
+                } elseif (get_mbid_from_notes($notes) && \App\Libraries\LookupRegistry::isEnabled('MusicBrainz')) {
                     $type = 'MusicBrainz';
-                } elseif (get_tvdb_id_from_notes($notes)) {
+                } elseif (get_tvdb_id_from_notes($notes) && \App\Libraries\LookupRegistry::isEnabled('TVDB')) {
                     $type = 'TVDB';
+                } else {
+                    // Default to first enabled lookup if current ones are not enabled
+                    $enabled = \App\Libraries\LookupRegistry::getEnabledLookups();
+                    $type = !empty($enabled) ? $enabled[0] : 'TMDB';
                 }
+            }
+
+            if (!\App\Libraries\LookupRegistry::isEnabled($type)) {
+                return $this->response->setJSON(['success' => false, 'message' => 'Lookup service ' . $type . ' is disabled in settings.']);
             }
 
             // Get ID based on type
             $id = null;
             if (!$searchTerm) {
-                if ($type === 'TMDB') {
+                if ($type === 'IMDB') {
+                    $id = get_imdb_id_from_notes($notes);
+                } elseif ($type === 'TMDB') {
                     $id = get_tmdb_id_from_notes($notes);
                 } elseif ($type === 'IGDB') {
                     $id = get_igdb_id_from_notes($notes);
@@ -1555,45 +1764,104 @@ class Media extends BaseController
                 return $this->response->setJSON(['success' => false, 'message' => 'API service not available.']);
             }
 
-            // If search term is provided, or no ID in notes, try searching
-            if ($searchTerm || !$id) {
-                $title = $searchTerm ?: ($media['title'] ?: $media['o_title']);
-                $year = $searchTerm ? null : $media['year'];
-                if (!$title) {
-                    return $this->response->setJSON(['success' => false, 'message' => 'No ID found and no title available for search.']);
+            // If search term is provided, try searching for multiple results and aggregate posters
+            if ($searchTerm) {
+                $title = $searchTerm;
+                $results = [];
+
+                if ($type === 'IMDB' && method_exists($apiService, 'searchMovieMultiple')) {
+                    $searchRes = $apiService->searchMovieMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif ($type === 'TMDB' || $type === 'MOVIE') {
+                    $searchRes = $apiService->searchMovieMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif ($type === 'TV' || $type === 'TVDB') {
+                    $searchRes = $apiService->searchTvMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } elseif (method_exists($apiService, 'searchMultiple')) {
+                    $searchRes = $apiService->searchMultiple($title, null, 10);
+                    $results = $searchRes['results'] ?? [];
+                } else {
+                    $apiData = $apiService->searchMedia($title, null);
+                    if ($apiData) $results[] = $apiData;
                 }
 
-                $apiData = ($type === 'TVDB' && method_exists($apiService, 'searchTv')) ? $apiService->searchTv($title, $year) : $apiService->searchMedia($title, $year);
-                if (!$apiData) {
+                if (empty($results)) {
                     return $this->response->setJSON(['success' => false, 'message' => 'Could not find media on API.']);
                 }
-                
-                if ($type === 'TMDB' || $type === 'TVDB' || $type === 'MOVIE' || $type === 'TV') {
-                    $id = $apiData['tmdb_id'] ?? null;
-                } elseif ($type === 'IGDB' || $type === 'GAME') {
-                    $id = $apiData['igdb_id'] ?? null;
-                } elseif ($type === 'MusicBrainz' || $type === 'MUSIC') {
-                    $id = $apiData['mbid'] ?? null;
+
+                $posters = [];
+                foreach ($results as $res) {
+                    $resId = null;
+                    if ($type === 'IMDB') {
+                        $resId = $res['imdb_id'] ?? null;
+                    } elseif ($type === 'TMDB' || $type === 'TVDB' || $type === 'MOVIE' || $type === 'TV') {
+                        $resId = $res['tmdb_id'] ?? $res['tvdb_id'] ?? null;
+                    } elseif ($type === 'IGDB' || $type === 'GAME') {
+                        $resId = $res['igdb_id'] ?? $res['id'] ?? null;
+                    } elseif ($type === 'MusicBrainz' || $type === 'MUSIC') {
+                        $resId = $res['mbid'] ?? null;
+                    }
+
+                    if ($resId) {
+                        if (method_exists($apiService, 'getPosters')) {
+                            $resPosters = $apiService->getPosters($resId, $type, 5);
+                            foreach ($resPosters as $rp) {
+                                $rp['label'] = ($res['title'] ?? '') . ' (' . ($res['year'] ?? '') . ')';
+                                $posters[] = $rp;
+                            }
+                        } elseif (!empty($res['poster_url'])) {
+                            $posters[] = [
+                                'url' => $res['poster_url'],
+                                'thumbnail' => $res['poster_url'],
+                                'width' => null,
+                                'height' => null,
+                                'label' => ($res['title'] ?? '') . ' (' . ($res['year'] ?? '') . ')'
+                            ];
+                        }
+                    }
                 }
-            }
-
-            if (!$id) {
-                return $this->response->setJSON(['success' => false, 'message' => 'Could not resolve media ID.']);
-            }
-
-            // Get multiple posters
-            $posters = [];
-            if (method_exists($apiService, 'getPosters')) {
-                $posters = $apiService->getPosters($id, $type, 10);
             } else {
-                $details = ($type === 'TVDB' && method_exists($apiService, 'getTvDetails')) ? $apiService->getTvDetails($id) : $apiService->getMediaDetails($id);
-                if ($details && !empty($details['poster_url'])) {
-                    $posters[] = [
-                        'url' => $details['poster_url'],
-                        'thumbnail' => $details['poster_url'],
-                        'width' => null,
-                        'height' => null
-                    ];
+                // If no search term and no ID in notes, try searching with current title
+                if (!$id) {
+                    $title = $media['title'] ?: $media['o_title'];
+                    if (!$title) {
+                        return $this->response->setJSON(['success' => false, 'message' => 'No ID found and no title available for search.']);
+                    }
+
+                    $apiData = ($type === 'TVDB' && method_exists($apiService, 'searchTv')) ? $apiService->searchTv($title, $media['year']) : $apiService->searchMedia($title, $media['year']);
+                    if (!$apiData) {
+                        return $this->response->setJSON(['success' => false, 'message' => 'Could not find media on API.']);
+                    }
+                    
+                    if ($type === 'IMDB') {
+                        $id = $apiData['imdb_id'] ?? null;
+                    } elseif ($type === 'TMDB' || $type === 'TVDB' || $type === 'MOVIE' || $type === 'TV') {
+                        $id = $apiData['tmdb_id'] ?? $apiData['tvdb_id'] ?? null;
+                    } elseif ($type === 'IGDB' || $type === 'GAME') {
+                        $id = $apiData['igdb_id'] ?? null;
+                    } elseif ($type === 'MusicBrainz' || $type === 'MUSIC') {
+                        $id = $apiData['mbid'] ?? null;
+                    }
+                }
+
+                if (!$id) {
+                    return $this->response->setJSON(['success' => false, 'message' => 'Could not resolve media ID.']);
+                }
+
+                // Get multiple posters
+                if (method_exists($apiService, 'getPosters')) {
+                    $posters = $apiService->getPosters($id, $type, 15);
+                } else {
+                    $details = ($type === 'TVDB' && method_exists($apiService, 'getTvDetails')) ? $apiService->getTvDetails($id) : $apiService->getMediaDetails($id);
+                    if ($details && !empty($details['poster_url'])) {
+                        $posters[] = [
+                            'url' => $details['poster_url'],
+                            'thumbnail' => $details['poster_url'],
+                            'width' => null,
+                            'height' => null
+                        ];
+                    }
                 }
             }
 
@@ -1703,9 +1971,19 @@ class Media extends BaseController
             // Option 2: Upload from file
             if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
                 $mimeType = $posterFile->getMimeType();
+                $clientMimeType = $posterFile->getClientMimeType();
+                $fileName = $posterFile->getClientName();
+                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 
+                $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+
                 // Validate image type
-                if (!in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'])) {
+                if (!in_array($mimeType, $validMimeTypes) && 
+                    !in_array($clientMimeType, $validMimeTypes) && 
+                    !in_array($fileExt, $validExtensions)) {
+                    
+                    log_message('debug', 'Invalid file type for poster update: ' . $mimeType . ' (Client: ' . $clientMimeType . ')');
                     return $this->response->setJSON([
                         'success' => false,
                         'message' => 'Invalid file type. Please upload a JPG, PNG, or GIF image.'
@@ -1716,8 +1994,8 @@ class Media extends BaseController
                 $imageData = file_get_contents($posterFile->getTempName());
 
                 // Convert to JPEG if needed
-                if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg') {
-                    $image = imagecreatefromstring($imageData);
+                if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
+                    $image = @imagecreatefromstring($imageData);
                     if ($image !== false) {
                         ob_start();
                         imagejpeg($image, null, 90);
@@ -1730,10 +2008,16 @@ class Media extends BaseController
             else if (!empty($posterUrl)) {
                 // Determine which service to use for downloading
                 $mediaType = $this->request->getPost('media_type');
+                log_message('debug', 'Update poster from URL: ' . $posterUrl . ' (Requested Type: ' . ($mediaType ?: 'None') . ')');
+                
                 if (empty($mediaType)) {
                     // Try to guess from notes if not provided
                     $notes = $media['notes'] ?? '';
-                    if (get_igdb_id_from_notes($notes)) {
+                    if (get_imdb_id_from_notes($notes)) {
+                        $mediaType = 'IMDB';
+                    } elseif (get_tmdb_id_from_notes($notes)) {
+                        $mediaType = 'TMDB';
+                    } elseif (get_igdb_id_from_notes($notes)) {
                         $mediaType = 'IGDB';
                     } elseif (get_mbid_from_notes($notes)) {
                         $mediaType = 'MusicBrainz';
@@ -1742,22 +2026,24 @@ class Media extends BaseController
                     } else {
                         $mediaType = 'IMDB';
                     }
+                    log_message('debug', 'Guessed media type for poster download: ' . $mediaType);
                 }
 
                 $apiService = \App\Libraries\ApiServiceFactory::create($mediaType);
-                if (!$apiService) {
-                    $apiService = new \App\Libraries\MovieApiService();
-                }
 
-                if (method_exists($apiService, 'downloadPoster')) {
+                if ($apiService && method_exists($apiService, 'downloadPoster')) {
+                    log_message('debug', 'Using API service ' . $mediaType . ' to download poster.');
                     $imageData = $apiService->downloadPoster($posterUrl, $mediaId);
-                } else {
-                    // Fallback to MovieApiService which has a generic downloader
-                    $movieService = new \App\Libraries\MovieApiService();
-                    $imageData = $movieService->downloadPoster($posterUrl, $mediaId);
+                } 
+                
+                // Fallback to generic downloader if API downloader failed or doesn't exist
+                if (!$imageData) {
+                    log_message('debug', 'Using generic remote downloader for poster.');
+                    $imageData = $this->downloadRemotePoster($posterUrl);
                 }
 
                 if (!$imageData) {
+                    log_message('error', 'All download attempts failed for poster URL: ' . $posterUrl);
                     return $this->response->setJSON([
                         'success' => false,
                         'message' => 'Failed to download poster from URL'
@@ -1773,9 +2059,11 @@ class Media extends BaseController
 
             // Store the poster
             if ($imageData) {
+                log_message('debug', 'Storing poster for media: ' . $mediaId . ' (Size: ' . strlen($imageData) . ' bytes)');
                 $success = $this->mediaModel->storePosterForMedia($mediaId, $imageData);
 
                 if ($success) {
+                    log_message('debug', 'Poster stored successfully for media: ' . $mediaId);
                     $updatedMedia = $this->mediaModel->find($mediaId);
                     return $this->response->setJSON([
                         'success' => true,
@@ -1783,6 +2071,7 @@ class Media extends BaseController
                         'poster_url' => base_url('media/poster/' . $mediaId) . '?v=' . urlencode($updatedMedia['poster_md5'])
                     ]);
                 } else {
+                    log_message('error', 'Failed to store poster in database for media: ' . $mediaId);
                     return $this->response->setJSON([
                         'success' => false,
                         'message' => 'Failed to store poster'
@@ -1802,5 +2091,66 @@ class Media extends BaseController
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+    /**
+     * Generic remote poster downloader
+     *
+     * @param string $url
+     * @return string|null
+     */
+    private function downloadRemotePoster(string $url): ?string
+    {
+        log_message('debug', 'downloadRemotePoster: Attempting to download from ' . $url);
+        
+        // Ensure URL is valid and absolute
+        if (strpos($url, 'http') !== 0) {
+            log_message('error', 'downloadRemotePoster: Invalid or relative URL provided: ' . $url);
+            return null;
+        }
+
+        try {
+            // Check if allow_url_fopen is enabled and try file_get_contents first as a fallback for missing cURL
+            if (ini_get('allow_url_fopen')) {
+                log_message('debug', 'downloadRemotePoster: trying file_get_contents');
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 30,
+                        'user_agent' => 'MediaOrganizer/1.0',
+                        'header' => "Accept: image/*\r\n",
+                        'follow_location' => 1,
+                        'max_redirects' => 5
+                    ],
+                    'ssl' => [
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                    ]
+                ]);
+                $data = @file_get_contents($url, false, $context);
+                if ($data !== false) {
+                    log_message('debug', 'downloadRemotePoster: file_get_contents success, size: ' . strlen($data));
+                    return $data;
+                }
+                log_message('debug', 'downloadRemotePoster: file_get_contents failed');
+            }
+
+            $client = \Config\Services::curlrequest([
+                'timeout' => 30,
+                'headers' => [
+                    'User-Agent' => 'MediaOrganizer/1.0',
+                    'Accept'     => 'image/*'
+                ],
+                'allow_redirects' => true,
+                'verify' => false, // Sometimes needed for local environments or misconfigured servers
+            ]);
+
+            $response = $client->get($url);
+            log_message('debug', 'Remote poster download response status: ' . $response->getStatusCode() . ' for URL: ' . $url);
+            if ($response->getStatusCode() === 200) {
+                return $response->getBody();
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Remote poster download failed: ' . $e->getMessage() . ' for URL: ' . $url);
+        }
+        return null;
     }
 }

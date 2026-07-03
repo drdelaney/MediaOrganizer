@@ -1,0 +1,12 @@
+# Development files
+.aiassistant
+.git
+.github
+.gitignore
+.junie
+ai_docs
+CLAUDE.md
+
+# Docker files
+docker/
+docker-compose.yml
