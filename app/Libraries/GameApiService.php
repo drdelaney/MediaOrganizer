@@ -277,4 +277,63 @@ class GameApiService
             'poster_url' => isset($game['cover']['url']) ? 'https:' . str_replace('t_thumb', 't_cover_big', $game['cover']['url']) : null,
         ];
     }
+    public function getPosters(int $id, string $type = 'IGDB', int $limit = 10): array
+    {
+        $token = $this->getAccessToken();
+        if (!$token) return [];
+
+        $body = "fields screenshots.url; where id = {$id};";
+
+        try {
+            $response = $this->client->post('games', [
+                'headers' => [
+                    'Client-ID' => $this->clientId,
+                    'Authorization' => 'Bearer ' . $token,
+                ],
+                'body' => $body
+            ]);
+
+            if ($response->getStatusCode() !== 200) {
+                return [];
+            }
+
+            $data = json_decode($response->getBody(), true);
+            $posters = [];
+            
+            // Add cover as first option
+            $details = $this->getMediaDetails($id);
+            if ($details && !empty($details['poster_url'])) {
+                $posters[] = [
+                    'url' => $details['poster_url'],
+                    'thumbnail' => $details['poster_url'],
+                    'width' => null,
+                    'height' => null,
+                    'vote_average' => 0
+                ];
+            }
+
+            if (!empty($data[0]['screenshots'])) {
+                $count = count($posters);
+                foreach ($data[0]['screenshots'] as $screenshot) {
+                    if ($count >= $limit) break;
+                    if (!empty($screenshot['url'])) {
+                        $url = 'https:' . str_replace('t_thumb', 't_720p', $screenshot['url']);
+                        $posters[] = [
+                            'url' => $url,
+                            'thumbnail' => 'https:' . str_replace('t_thumb', 't_screenshot_med', $screenshot['url']),
+                            'width' => null,
+                            'height' => null,
+                            'vote_average' => 0
+                        ];
+                        $count++;
+                    }
+                }
+            }
+
+            return $posters;
+        } catch (\Exception $e) {
+            log_message('error', 'IGDB getPosters Error: ' . $e->getMessage());
+            return [];
+        }
+    }
 }

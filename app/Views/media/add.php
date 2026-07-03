@@ -25,6 +25,14 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         </div>
 
         <!-- Success/Error Messages -->
+        <?php if (empty($lookupOptions)): ?>
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>No Lookups Available!</strong> It seems no media lookup services are enabled or configured with required API keys. 
+                Please visit <a href="<?= base_url('database-maintenance/manage-lookups') ?>" class="alert-link">Application Settings</a> to configure them.
+            </div>
+        <?php endif; ?>
+
         <div id="duplicateWarning" class="alert alert-warning alert-dismissible fade show" style="display:none;">
             <div class="d-flex align-items-center">
                 <i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i>
@@ -78,7 +86,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                             <label for="lookup_type" class="form-label">Type</label>
                             <select class="form-select" id="lookup_type" name="lookup_type">
                                 <?php foreach ($lookupOptions as $key => $option): ?>
-                                    <option value="<?= $key ?>" <?= old('lookup_type', array_key_first($lookupOptions)) === $key ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                    <?php if (in_array($key, $enabledLookups ?? [])): ?>
+                                        <option value="<?= $key ?>" <?= old('lookup_type', array_key_first($lookupOptions)) === $key ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                    <?php endif; ?>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -830,7 +840,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                 document.getElementById('selected_poster_url').value = '';
             }
 
-            const idField = lookupOptions[lookupType]?.id_field || 'tmdb_id';
+            const idField = lookupOptions[lookupType]?.id_field || (Object.keys(lookupOptions).length > 0 ? lookupOptions[Object.keys(lookupOptions)[0]].id_field : 'tmdb_id');
             const fetchBody = { type: lookupType };
             fetchBody[idField] = d.tmdb_id || d.tvdb_id || d.igdb_id || d.mbid || d.imdb_id;
             // Also include imdb_id and tmdb_id if available as fallbacks
@@ -850,8 +860,8 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             if (applyBtn) {
                 applyBtn.onclick = function() {
                     function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; }
-                    setVal('title', d.title);
-                    setVal('o_title', d.o_title);
+                    setVal('title', d.title || d.o_title);
+                    setVal('o_title', d.o_title || d.title);
                     setVal('director', d.director);
                     setVal('year', d.year);
                     setVal('runtime', d.runtime);
@@ -1072,14 +1082,11 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     const oldHtml = btn.innerHTML;
                     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
 
-                    const idField = lookupOptions[selected.type || lookupType]?.id_field || 'tmdb_id';
+                    const idField = lookupOptions[selected.type || lookupType]?.id_field || (Object.keys(lookupOptions).length > 0 ? lookupOptions[Object.keys(lookupOptions)[0]].id_field : 'tmdb_id');
                     const fetchBody = { type: selected.type || lookupType };
                     fetchBody[idField] = selected.tmdb_id || selected.tvdb_id || selected.igdb_id || selected.mbid || selected.imdb_id;
-                    // For TVDB, the backend expects tmdb_id if using the TMDB API
-                    if ((selected.type === 'TVDB' || lookupType === 'TVDB') && !fetchBody['tmdb_id']) {
-                        fetchBody['tmdb_id'] = selected.tmdb_id || selected.tvdb_id;
-                    }
                     if (selected.imdb_id) fetchBody['imdb_id'] = selected.imdb_id;
+                    if (selected.tvdb_id) fetchBody['tvdb_id'] = selected.tvdb_id;
                     if (selected.tmdb_id) fetchBody['tmdb_id'] = selected.tmdb_id;
 
                     fetch('<?= base_url('media/fetchDetails') ?>', {
@@ -1189,7 +1196,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         if (btn) {
             btn.addEventListener('click', function() {
                 const payload = {
-                    lookup_type: (document.getElementById('lookup_type')?.value || 'IMDB'),
+                    lookup_type: (document.getElementById('lookup_type')?.value || "<?= !empty($enabledLookups) ? $enabledLookups[0] : '' ?>"),
                     title: (document.getElementById('lookup_title')?.value || '').trim(),
                     year: (document.getElementById('lookup_year')?.value || '').trim(),
                     barcode: (document.getElementById('lookup_barcode')?.value || '').trim(),
@@ -1252,7 +1259,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                   })
                   .catch(() => {
                       setPreviewVisible(false);
-                      showToast('An error occurred while searching TMDB.', 'error');
+                      showToast('An error occurred while searching.', 'error');
                   })
                   .finally(() => { btn.disabled = false; btn.innerHTML = oldHtml; });
             });
@@ -1268,7 +1275,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         if (addFetchPostersBtn) {
             addFetchPostersBtn.addEventListener('click', function() {
                 const lookupId = document.getElementById('lookup_id_for_posters').value;
-                const mediaType = document.getElementById('media_type_for_posters').value || 'TMDB';
+                const mediaType = document.getElementById('media_type_for_posters').value || "<?= !empty($enabledLookups) ? $enabledLookups[0] : '' ?>";
 
                 if (!lookupId) {
                     showToast('No ID available. Please search first.', 'error');
@@ -1282,7 +1289,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
         if (choosePosterBtn) {
             choosePosterBtn.addEventListener('click', function() {
                 const lookupId = document.getElementById('lookup_id_for_posters').value;
-                const mediaType = document.getElementById('media_type_for_posters').value || 'TMDB';
+                const mediaType = document.getElementById('media_type_for_posters').value || "<?= !empty($enabledLookups) ? $enabledLookups[0] : '' ?>";
 
                 if (!lookupId) {
                     showToast('No ID available. Please search first.', 'error');
@@ -1323,13 +1330,9 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
             const searchTermInput = document.getElementById('addPosterSearchTerm');
             const searchTerm = searchTermInput ? searchTermInput.value : '';
 
-            const idField = lookupOptions[mediaType]?.id_field || 'tmdb_id';
+            const idField = lookupOptions[mediaType]?.id_field || (Object.keys(lookupOptions).length > 0 ? lookupOptions[Object.keys(lookupOptions)[0]].id_field : 'tmdb_id');
             const fetchBody = { type: mediaType, source: selectedSource, searchTerm: searchTerm };
             fetchBody[idField] = lookupId;
-            // Ensure we also send tmdb_id if it's the same as tvdb_id for backend compatibility
-            if (idField === 'tvdb_id' && !fetchBody['tmdb_id']) {
-                fetchBody['tmdb_id'] = lookupId;
-            }
 
             fetch('<?= base_url('media/fetchPostersForNew') ?>', {
                 method: 'POST',
@@ -1386,6 +1389,7 @@ $allTags = isset($allTags) && is_array($allTags) ? $allTags : [];
                     <div class="card add-poster-option" style="cursor: pointer;" data-poster-index="${index}">
                         <img src="${poster.thumbnail}" class="card-img-top" alt="Poster ${index + 1}">
                         <div class="card-body p-2 text-center">
+                            ${poster.label ? `<div class="small fw-bold mb-1 text-truncate" title="${poster.label}">${poster.label}</div>` : ''}
                             <small class="text-muted">
                                 ${poster.width && poster.height ? poster.width + ' x ' + poster.height : 'invalid image'}
                                 ${poster.vote_average > 0 ? '⭐ ' + poster.vote_average.toFixed(1) : ''}

@@ -192,7 +192,7 @@ $excludeSeen = $excludeSeen ?? false;
                                 <!-- Poster -->
                                 <td>
                                     <?php if ($movie['poster_md5']): ?>
-                                        <img src="<?= base_url('media/poster/' . $movie['movie_id']) ?>"
+                                        <img src="<?= base_url('media/poster/' . $movie['movie_id']) . '?v=' . urlencode($movie['poster_md5']) ?>"
                                              class="poster-thumbnail" 
                                              alt="<?= esc($movie['title'] ?: $movie['o_title']) ?>"
                                              loading="lazy">

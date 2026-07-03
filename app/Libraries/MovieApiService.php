@@ -43,7 +43,7 @@ class MovieApiService
     public function searchMedia($title, $year = null)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return null;
         }
 
         $params = [
@@ -97,7 +97,12 @@ class MovieApiService
     public function searchMovieMultiple($title, $year = null, $limit = 20, $page = 1)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return [
+                'results' => [],
+                'total_results' => 0,
+                'total_pages' => 0,
+                'page' => $page
+            ];
         }
 
         // Parse year tag if present (handle year:YYYY or year:"YYYY")
@@ -182,7 +187,7 @@ class MovieApiService
     public function getMediaDetails($tmdbId)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return null;
         }
 
         try {
@@ -225,8 +230,6 @@ class MovieApiService
                 'classification' => $this->getClassification($tmdbId),
                 'cast' => $this->getCast($tmdbId),
                 'tmdb_id' => (string)$tmdbId,
-                'imdb_id' => $externalIds['imdb_id'] ?? null,
-                'tvdb_id' => $externalIds['tvdb_id'] ?? null,
             ];
 
         } catch (\Exception $e) {
@@ -241,7 +244,7 @@ class MovieApiService
     public function searchTv($title, $year = null)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return null;
         }
         $params = [
             'api_key' => $this->tmdbApiKey,
@@ -284,7 +287,12 @@ class MovieApiService
     public function searchTvMultiple($title, $year = null, $limit = 20, $page = 1)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return [
+                'results' => [],
+                'total_results' => 0,
+                'total_pages' => 0,
+                'page' => $page
+            ];
         }
 
         // Parse year tag if present (handle year:YYYY or year:"YYYY")
@@ -369,7 +377,7 @@ class MovieApiService
     public function getTvDetails($tmdbId)
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return null;
         }
         try {
             log_message('info', 'TMDB API: Getting TV details for ID: ' . $tmdbId);
@@ -435,8 +443,6 @@ class MovieApiService
                 'classification' => $classification,
                 'cast' => $this->getTvCast($tmdbId),
                 'tmdb_id' => (string)$tmdbId,
-                'imdb_id' => $externalIds['imdb_id'] ?? null,
-                'tvdb_id' => $externalIds['tvdb_id'] ?? null,
             ];
         } catch (\Exception $e) {
             log_message('error', 'TMDB API Error getting TV details: ' . $e->getMessage());
@@ -741,7 +747,7 @@ class MovieApiService
     /**
      * Download poster image
      */
-    public function downloadPoster($posterUrl, $movieId)
+    public function downloadPoster($posterUrl, $movieId = null)
     {
         if (empty($posterUrl)) {
             return null;
@@ -786,7 +792,7 @@ class MovieApiService
     public function findByExternalId($externalId, $type = 'IMDB')
     {
         if (!$this->isApiAvailable()) {
-            throw new \Exception('TMDB API key not configured');
+            return null;
         }
 
         $externalId = trim((string)$externalId);

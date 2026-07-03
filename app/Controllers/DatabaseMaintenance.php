@@ -28,8 +28,9 @@ class DatabaseMaintenance extends BaseController
     protected $posterModel;
     protected $ratioModel;
     protected $subformatModel;
+    protected $cronJobModel;
     protected $allowedTables = [
-        'achannels', 'acodecs', 'collections', 'configuration', 'filters', 'languages', 'loans', 'media',
+        'achannels', 'acodecs', 'collections', 'configuration', 'cron_jobs', 'filters', 'languages', 'loans', 'media',
         'migrations', 'movie_lang', 'movie_tag', 'movies', 'people', 'posters',
         'ratios', 'subformats', 'tags', 'vcodecs', 'volumes'
     ];
@@ -49,6 +50,7 @@ class DatabaseMaintenance extends BaseController
         $this->posterModel = new PosterModel();
         $this->ratioModel = new RatioModel();
         $this->subformatModel = new SubformatModel();
+        $this->cronJobModel = new \App\Models\CronJobModel();
     }
 
     /**
@@ -88,13 +90,35 @@ class DatabaseMaintenance extends BaseController
             $tables = $this->getAllTables();
             $results = [];
 
+            $driver = $this->db->getPlatform();
+
             foreach ($tables as $table) {
                 if ($this->validateTable($table)) {
-                    $this->db->query("OPTIMIZE TABLE `{$table}`");
-                    $results[] = "Optimized table: {$table}";
+                    if ($driver === 'SQLite3') {
+                        // SQLite uses VACUUM for the whole database, but we can't easily 
+                        // run VACUUM per table via simple query if it's already in a transaction 
+                        // (though CI queries aren't usually in one unless specified).
+                        // However, ANALYZE is per table and helps with optimization.
+                        $this->db->query("ANALYZE `{$table}`");
+                        $results[] = "Analyzed table: {$table}";
+                    } elseif ($driver === 'MySQLi') {
+                        $this->db->query("OPTIMIZE TABLE `{$table}`");
+                        $results[] = "Optimized table: {$table} (MySQL)";
+                    } elseif ($driver === 'Postgre') {
+                        $this->db->query("VACUUM FULL `{$table}`");
+                        $results[] = "Optimized table: {$table} (Postgres)";
+                    } else {
+                        $results[] = "Optimization not supported for " . $driver;
+                    }
                 } else {
                     $results[] = "Skipped invalid table: {$table}";
                 }
+            }
+
+            if ($driver === 'SQLite3') {
+                // For SQLite, we also run VACUUM once at the end
+                $this->db->query("VACUUM");
+                $results[] = "Database VACUUM completed";
             }
 
             return $this->response->setJSON([
@@ -112,54 +136,29 @@ class DatabaseMaintenance extends BaseController
     }
 
     /**
-     * Fix configuration table schema
-     */
-    public function fixConfigSchema()
-    {
-        try {
-            // Check if column lengths are already sufficient
-            $fields = $this->db->getFieldData('configuration');
-            $paramLength = 0;
-            $valueLength = 0;
-
-            foreach ($fields as $field) {
-                if ($field->name === 'param') {
-                    $paramLength = $field->max_length;
-                } elseif ($field->name === 'value') {
-                    $valueLength = $field->max_length;
-                }
-            }
-
-            if ($paramLength < 64) {
-                $this->db->query("ALTER TABLE `configuration` MODIFY `param` VARCHAR(64) NOT NULL");
-            }
-            if ($valueLength < 255) {
-                $this->db->query("ALTER TABLE `configuration` MODIFY `value` VARCHAR(255) NOT NULL");
-            }
-
-            // Always update version to 7 if we got here
-            $configModel = new \App\Models\ConfigurationModel();
-            $configModel->setParam('version', '7');
-
-            return $this->response->setJSON([
-                'status' => 'success',
-                'message' => 'Configuration schema updated successfully'
-            ]);
-
-        } catch (\Exception $e) {
-            return $this->response->setJSON([
-                'status' => 'error',
-                'message' => 'Error fixing schema: ' . $e->getMessage()
-            ]);
-        }
-    }
-
-    /**
      * Convert tables to InnoDB engine
      */
     public function convertToInnoDB()
     {
         try {
+            $driver = $this->db->getPlatform();
+            if ($driver === 'SQLite3') {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Engine conversion skipped (SQLite does not use storage engines like MySQL)',
+                    'results' => ['SQLite does not support engine conversion. Tables are always in SQLite format.']
+                ]);
+            }
+
+            // Engine conversion is MySQL-specific
+            if ($driver !== 'MySQLi') {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Engine conversion not applicable for ' . $driver,
+                    'results' => []
+                ]);
+            }
+
             $tables = $this->getAllTables();
             $results = [];
 
@@ -193,6 +192,68 @@ class DatabaseMaintenance extends BaseController
             return $this->response->setJSON([
                 'status' => 'error',
                 'message' => 'Error during engine conversion: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Fix configuration schema if needed
+     */
+    public function fixConfigSchema()
+    {
+        try {
+            $driver = $this->db->getPlatform();
+            if ($driver === 'SQLite3') {
+                // SQLite doesn't support MODIFY COLUMN. 
+                // We'd need to recreate the table, but since SQLite has dynamic typing,
+                // VARCHAR(length) isn't strictly enforced for storage.
+                // We can skip this or just update the version.
+                
+                $configModel = new \App\Models\ConfigurationModel();
+                $configModel->setParam('version', '7');
+
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Configuration version updated (SQLite schema adjustment skipped)'
+                ]);
+            }
+
+            // Check if column lengths are already sufficient
+            $fields = $this->db->getFieldData('configuration');
+            $paramLength = 0;
+            $valueLength = 0;
+
+            foreach ($fields as $field) {
+                if ($field->name === 'param') $paramLength = $field->max_length;
+                if ($field->name === 'value') $valueLength = $field->max_length;
+            }
+
+            if ($paramLength >= 64 && $valueLength >= 255) {
+                $configModel = new \App\Models\ConfigurationModel();
+                $configModel->setParam('version', '7');
+                
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Configuration schema is already up to date'
+                ]);
+            }
+
+            // Apply schema fix (MySQL specific MODIFY COLUMN)
+            $this->db->query("ALTER TABLE configuration MODIFY COLUMN param VARCHAR(64) NOT NULL");
+            $this->db->query("ALTER TABLE configuration MODIFY COLUMN value VARCHAR(255) NOT NULL");
+            
+            $configModel = new \App\Models\ConfigurationModel();
+            $configModel->setParam('version', '7');
+
+            return $this->response->setJSON([
+                'status' => 'success',
+                'message' => 'Configuration schema fixed successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Error fixing configuration schema: ' . $e->getMessage()
             ]);
         }
     }
@@ -262,13 +323,28 @@ class DatabaseMaintenance extends BaseController
             'intl' => 'Internationalization support',
             'mbstring' => 'Multibyte string support',
             'json' => 'JSON support',
-            'mysqli' => 'MySQL database support',
             'curl' => 'CURL support for API calls',
             'openssl' => 'OpenSSL for secure connections',
             'xml' => 'XML support',
             'filter' => 'Data filtering',
-            'hash' => 'Hash functions'
+            'hash' => 'Hash functions',
         ];
+
+        // Database specific extensions
+        $dbDriver = $this->db->getPlatform();
+        $dbExtensions = [
+            'MySQLi' => ['mysqli' => 'MySQL database support'],
+            'SQLite3' => ['sqlite3' => 'SQLite3 database support'],
+            'Postgre' => ['pgsql' => 'PostgreSQL database support'],
+            'SQLSRV' => ['sqlsrv' => 'MSSQL database support'],
+        ];
+
+        // Add the current DB extension to required
+        if (isset($dbExtensions[$dbDriver])) {
+            foreach ($dbExtensions[$dbDriver] as $ext => $desc) {
+                $requiredExtensions[$ext] = $desc;
+            }
+        }
 
         foreach ($requiredExtensions as $ext => $description) {
             $loaded = extension_loaded($ext);
@@ -287,6 +363,9 @@ class DatabaseMaintenance extends BaseController
             'zip' => 'ZIP archive support',
             'fileinfo' => 'File information support'
         ];
+
+        // Add other database extensions as optional if not currently used
+        // Removed as per user request to only check for configured engine
 
         foreach ($optionalExtensions as $ext => $description) {
             $loaded = extension_loaded($ext);
@@ -354,11 +433,21 @@ class DatabaseMaintenance extends BaseController
         $configVersion = (int)$configModel->getParam('version', 0);
         $needsFix = $configVersion < 7;
 
+        // Check for pending migrations
+        $migrations = \Config\Services::migrations();
+        $available = $migrations->findMigrations();
+        $history = $migrations->getHistory();
+        $pendingMigrationsCount = count($available) - count($history);
+
         $data = [
             'title' => 'Database Maintenance',
             'tables' => $this->getTableInfo(),
             'environment' => $this->checkEnvironment(),
-            'needsFix' => $needsFix
+            'needsFix' => $needsFix,
+            'pendingMigrationsCount' => $pendingMigrationsCount,
+            'dbDriver' => $this->db->getPlatform(),
+            'cronJobs' => $this->getCronJobsData(),
+            'systemCronLastRun' => $configModel->getParam('system_cron_last_run')
         ];
 
         return view('database_maintenance/index', $data);
@@ -369,15 +458,7 @@ class DatabaseMaintenance extends BaseController
      */
     private function getAllTables()
     {
-        $query = "SHOW TABLES";
-        $result = $this->db->query($query)->getResultArray();
-
-        $tables = [];
-        foreach ($result as $row) {
-            $tables[] = array_values($row)[0];
-        }
-
-        return $tables;
+        return $this->db->listTables();
     }
 
     /**
@@ -398,22 +479,62 @@ class DatabaseMaintenance extends BaseController
                 return "Error: Invalid table name {$table}";
             }
 
-            // Get table information
-            $query = "SHOW INDEX FROM `{$table}`";
-            $indexes = $this->db->query($query)->getResultArray();
+            // Database agnostic re-indexing or maintenance is limited in CI4
+            // but we can at least check if indexes exist
+            $indexes = $this->db->getIndexData($table);
 
             if (empty($indexes)) {
                 return "No indexes found for table: {$table}";
             }
 
-            // Re-index the table
-            $this->db->query("ALTER TABLE `{$table}` DISABLE KEYS");
-            $this->db->query("ALTER TABLE `{$table}` ENABLE KEYS");
+            // Platform-specific maintenance
+            if ($this->db->getPlatform() === 'MySQLi') {
+                $this->db->query("ALTER TABLE `{$table}` DISABLE KEYS");
+                $this->db->query("ALTER TABLE `{$table}` ENABLE KEYS");
+                return "Re-indexed table: {$table} (MySQL)";
+            } elseif ($this->db->getPlatform() === 'SQLite3') {
+                $this->db->query("REINDEX `{$table}`");
+                return "Re-indexed table: {$table} (SQLite)";
+            } elseif ($this->db->getPlatform() === 'Postgre') {
+                $this->db->query("REINDEX TABLE `{$table}`");
+                return "Re-indexed table: {$table} (Postgres)";
+            }
 
-            return "Re-indexed table: {$table} (" . count($indexes) . " indexes)";
+            return "Index check completed for: {$table}";
 
         } catch (\Exception $e) {
             return "Error re-indexing {$table}: " . $e->getMessage();
+        }
+    }
+
+    /**
+     * Apply pending migrations
+     */
+    public function applyMigrations()
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->to('database-maintenance');
+        }
+
+        try {
+            $migrations = \Config\Services::migrations();
+            
+            if ($migrations->latest('App')) {
+                return $this->response->setJSON([
+                    'status' => 'success',
+                    'message' => 'Latest migrations applied successfully.'
+                ]);
+            } else {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'message' => 'No migrations to apply or migration failed.'
+                ]);
+            }
+        } catch (\Throwable $e) {
+            return $this->response->setJSON([
+                'status' => 'error',
+                'message' => 'Migration failed: ' . $e->getMessage()
+            ]);
         }
     }
 
@@ -422,17 +543,64 @@ class DatabaseMaintenance extends BaseController
      */
     private function getTableInfo()
     {
-        $query = "SELECT 
-                    TABLE_NAME as name,
-                    ENGINE as engine,
-                    TABLE_ROWS as `rows`,
-                    ROUND(((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024), 2) as size_mb
-                  FROM information_schema.TABLES 
-                  WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME IN ?
-                  ORDER BY TABLE_NAME";
+        if ($this->db->getPlatform() === 'SQLite3') {
+            $tables = $this->db->listTables();
+            $info = [];
+            foreach ($tables as $table) {
+                if (in_array($table, $this->allowedTables)) {
+                    // Get row count
+                    $rowCount = $this->db->table($table)->countAllResults();
 
-        return $this->db->query($query, [$this->allowedTables])->getResultArray();
+                    // Get table size (approximate for SQLite)
+                    // Note: SQLite doesn't easily provide size per table like MySQL
+                    $info[] = [
+                        'name' => $table,
+                        'engine' => 'SQLite',
+                        'rows' => $rowCount,
+                        'size_mb' => 0 // SQLite doesn't provide easy per-table size
+                    ];
+                }
+            }
+            return $info;
+        }
+
+        $results = [];
+        foreach ($this->allowedTables as $table) {
+            if (!$this->db->tableExists($table)) continue;
+
+            $info = [
+                'name' => $table,
+                'engine' => 'N/A',
+                'rows' => $this->db->table($table)->countAllResults(),
+                'size_mb' => 'N/A'
+            ];
+
+            if ($this->db->getPlatform() === 'MySQLi') {
+                $q = $this->db->query("SELECT ENGINE, ROUND(((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024), 2) as size_mb 
+                                     FROM information_schema.TABLES 
+                                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", [$table])->getRowArray();
+                if ($q) {
+                    $info['engine'] = $q['ENGINE'];
+                    $info['size_mb'] = $q['size_mb'];
+                }
+            } elseif ($this->db->getPlatform() === 'SQLite3') {
+                $info['engine'] = 'SQLite';
+                // Try to get size from database file
+                $dbPath = $this->db->database;
+                if (file_exists($dbPath)) {
+                    $info['size_mb'] = round(filesize($dbPath) / 1024 / 1024, 2);
+                }
+            } elseif ($this->db->getPlatform() === 'Postgre') {
+                $info['engine'] = 'PostgreSQL';
+                $q = $this->db->query("SELECT pg_size_pretty(pg_total_relation_size(?)) as size", [$table])->getRowArray();
+                if ($q) {
+                    $info['size_mb'] = $q['size'];
+                }
+            }
+
+            $results[] = $info;
+        }
+        return $results;
     }
 
     /**
@@ -467,6 +635,8 @@ class DatabaseMaintenance extends BaseController
 
         $lookupSettings = [
             'TMDB_API_KEY' => $configModel->getParam('TMDB_API_KEY', ''),
+            'IMDB_API_KEY' => $configModel->getParam('IMDB_API_KEY', ''),
+            'TVDB_API_KEY' => $configModel->getParam('TVDB_API_KEY', ''),
             'IGDB_CLIENT_ID' => $configModel->getParam('IGDB_CLIENT_ID', ''),
             'IGDB_CLIENT_SECRET' => $configModel->getParam('IGDB_CLIENT_SECRET', ''),
             'MUSICBRAINZ_EMAIL' => $configModel->getParam('MUSICBRAINZ_EMAIL', ''),
@@ -484,6 +654,32 @@ class DatabaseMaintenance extends BaseController
             'fromName' => $configModel->getParam('email.fromName', 'Media Organizer'),
             'SMTPVerifyPeer' => $configModel->getParam('email.SMTPVerifyPeer', 'true'),
             'SMTPVerifyPeerName' => $configModel->getParam('email.SMTPVerifyPeerName', 'true'),
+        ];
+
+        // Identify which settings are overridden by .env
+        $overridden = [
+            'app.name' => $configModel->isEnvOverridden('app.name'),
+            'app.baseURL' => $configModel->isEnvOverridden('app.baseURL'),
+            'timezone' => $configModel->isEnvOverridden('timezone'),
+            'deauth_time' => $configModel->isEnvOverridden('deauth_time'),
+            'user_agent' => $configModel->isEnvOverridden('user_agent'),
+            'TMDB_API_KEY' => $configModel->isEnvOverridden('TMDB_API_KEY'),
+            'IMDB_API_KEY' => $configModel->isEnvOverridden('IMDB_API_KEY'),
+            'TVDB_API_KEY' => $configModel->isEnvOverridden('TVDB_API_KEY'),
+            'IGDB_CLIENT_ID' => $configModel->isEnvOverridden('IGDB_CLIENT_ID'),
+            'IGDB_CLIENT_SECRET' => $configModel->isEnvOverridden('IGDB_CLIENT_SECRET'),
+            'MUSICBRAINZ_EMAIL' => $configModel->isEnvOverridden('MUSICBRAINZ_EMAIL'),
+            'ENABLED_LOOKUPS' => $configModel->isEnvOverridden('ENABLED_LOOKUPS'),
+            'email.protocol' => $configModel->isEnvOverridden('email.protocol'),
+            'email.fromEmail' => $configModel->isEnvOverridden('email.fromEmail'),
+            'email.fromName' => $configModel->isEnvOverridden('email.fromName'),
+            'email.SMTPHost' => $configModel->isEnvOverridden('email.SMTPHost'),
+            'email.SMTPUser' => $configModel->isEnvOverridden('email.SMTPUser'),
+            'email.SMTPPass' => $configModel->isEnvOverridden('email.SMTPPass'),
+            'email.SMTPPort' => $configModel->isEnvOverridden('email.SMTPPort'),
+            'email.SMTPCrypto' => $configModel->isEnvOverridden('email.SMTPCrypto'),
+            'email.SMTPVerifyPeer' => $configModel->isEnvOverridden('email.SMTPVerifyPeer'),
+            'email.SMTPVerifyPeerName' => $configModel->isEnvOverridden('email.SMTPVerifyPeerName'),
         ];
 
         $data = [
@@ -507,6 +703,7 @@ class DatabaseMaintenance extends BaseController
             'appBaseURL' => $appBaseURL,
             'lookupSettings' => $lookupSettings,
             'emailSettings' => $emailSettings,
+            'overridden' => $overridden,
             'availableTimezones' => \DateTimeZone::listIdentifiers()
         ];
 
@@ -530,35 +727,35 @@ class DatabaseMaintenance extends BaseController
 
             $errors = [];
 
-            if ($timezone) {
+            if ($timezone !== null && !$configModel->isEnvOverridden('timezone')) {
                 if (!$configModel->setParam('timezone', $timezone)) {
                     $success = false;
                     $errors[] = "Failed to save timezone";
                 }
             }
 
-            if ($deauthTime !== null) {
+            if ($deauthTime !== null && !$configModel->isEnvOverridden('deauth_time')) {
                 if (!$configModel->setParam('deauth_time', (string)$deauthTime)) {
                     $success = false;
                     $errors[] = "Failed to save deauth_time";
                 }
             }
 
-            if ($userAgent !== null) {
+            if ($userAgent !== null && !$configModel->isEnvOverridden('user_agent')) {
                 if (!$configModel->setParam('user_agent', (string)$userAgent)) {
                     $success = false;
                     $errors[] = "Failed to save user_agent";
                 }
             }
 
-            if ($appName !== null) {
+            if ($appName !== null && !$configModel->isEnvOverridden('app.name')) {
                 if (!$configModel->setParam('app.name', (string)$appName)) {
                     $success = false;
                     $errors[] = "Failed to save app.name";
                 }
             }
 
-            if ($appBaseURL !== null) {
+            if ($appBaseURL !== null && !$configModel->isEnvOverridden('app.baseURL')) {
                 if (!$configModel->setParam('app.baseURL', (string)$appBaseURL)) {
                     $success = false;
                     $errors[] = "Failed to save app.baseURL";
@@ -573,6 +770,7 @@ class DatabaseMaintenance extends BaseController
             ];
 
             foreach ($emailParams as $param) {
+                if ($configModel->isEnvOverridden($param)) continue;
                 $value = $this->request->getPost(str_replace('email.', 'email_', $param));
                 if ($value !== null) {
                     if (!$configModel->setParam($param, (string)$value)) {
@@ -584,18 +782,23 @@ class DatabaseMaintenance extends BaseController
 
             // Media Lookup Settings
             $tmdbKey = $this->request->getPost('TMDB_API_KEY');
+            $imdbKey = $this->request->getPost('IMDB_API_KEY');
+            $tvdbKey = $this->request->getPost('TVDB_API_KEY');
             $mbEmail = $this->request->getPost('MUSICBRAINZ_EMAIL');
             $igdbId = $this->request->getPost('IGDB_CLIENT_ID');
             $igdbSecret = $this->request->getPost('IGDB_CLIENT_SECRET');
 
             $lookupParams = [
                 'TMDB_API_KEY' => $tmdbKey,
+                'IMDB_API_KEY' => $imdbKey,
+                'TVDB_API_KEY' => $tvdbKey,
                 'IGDB_CLIENT_ID' => $igdbId,
                 'IGDB_CLIENT_SECRET' => $igdbSecret,
                 'MUSICBRAINZ_EMAIL' => $mbEmail,
             ];
 
             foreach ($lookupParams as $param => $value) {
+                if ($configModel->isEnvOverridden($param)) continue;
                 if ($value !== null) {
                     if (!$configModel->setParam($param, (string)$value)) {
                         $success = false;
@@ -605,27 +808,39 @@ class DatabaseMaintenance extends BaseController
             }
 
             // Handle ENABLED_LOOKUPS checkboxes
-            $enabledLookups = $this->request->getPost('ENABLED_LOOKUPS');
-            if (is_array($enabledLookups)) {
-                // Filter out lookups that don't have required API keys/settings
-                $filteredLookups = [];
-                foreach ($enabledLookups as $lookup) {
-                    if ($lookup === 'TMDB' && empty($tmdbKey)) continue;
-                    if ($lookup === 'IGDB' && (empty($igdbId) || empty($igdbSecret))) continue;
-                    if ($lookup === 'MusicBrainz' && empty($mbEmail)) continue;
-                    $filteredLookups[] = $lookup;
-                }
+            if (!$configModel->isEnvOverridden('ENABLED_LOOKUPS')) {
+                $enabledLookups = $this->request->getPost('ENABLED_LOOKUPS');
+                if (is_array($enabledLookups)) {
+                    // Filter out lookups that don't have required API keys/settings
+                    $filteredLookups = [];
+                    foreach ($enabledLookups as $lookup) {
+                        // Use getParam to get current value (might be from env or post)
+                        $lookupTmdbKey = $configModel->getParam('TMDB_API_KEY');
+                        $lookupImdbKey = $configModel->getParam('IMDB_API_KEY');
+                        $lookupTvdbKey = $configModel->getParam('TVDB_API_KEY');
+                        $lookupMbEmail = $configModel->getParam('MUSICBRAINZ_EMAIL');
+                        $lookupIgdbId = $configModel->getParam('IGDB_CLIENT_ID');
+                        $lookupIgdbSecret = $configModel->getParam('IGDB_CLIENT_SECRET');
 
-                $enabledLookupsStr = implode(',', $filteredLookups);
-                if (!$configModel->setParam('ENABLED_LOOKUPS', $enabledLookupsStr)) {
-                    $success = false;
-                    $errors[] = "Failed to save ENABLED_LOOKUPS";
-                }
-            } else {
-                // If none checked, it might be empty or null
-                if (!$configModel->setParam('ENABLED_LOOKUPS', '')) {
-                    $success = false;
-                    $errors[] = "Failed to save ENABLED_LOOKUPS";
+                        if ($lookup === 'TMDB' && empty($lookupTmdbKey)) continue;
+                        if ($lookup === 'IMDB' && empty($lookupImdbKey)) continue;
+                        if ($lookup === 'TVDB' && empty($lookupTvdbKey)) continue;
+                        if ($lookup === 'IGDB' && (empty($lookupIgdbId) || empty($lookupIgdbSecret))) continue;
+                        if ($lookup === 'MusicBrainz' && empty($lookupMbEmail)) continue;
+                        $filteredLookups[] = $lookup;
+                    }
+
+                    $enabledLookupsStr = implode(',', $filteredLookups);
+                    if (!$configModel->setParam('ENABLED_LOOKUPS', $enabledLookupsStr)) {
+                        $success = false;
+                        $errors[] = "Failed to save ENABLED_LOOKUPS";
+                    }
+                } else {
+                    // If none checked, it might be empty or null
+                    if (!$configModel->setParam('ENABLED_LOOKUPS', '')) {
+                        $success = false;
+                        $errors[] = "Failed to save ENABLED_LOOKUPS";
+                    }
                 }
             }
 
@@ -957,7 +1172,7 @@ class DatabaseMaintenance extends BaseController
     }
 
     /**
-     * Generate and download database backup (mysqldump style)
+     * Generate and download database backup (best effort for current platform)
      */
     public function backupDatabase()
     {
@@ -965,78 +1180,144 @@ class DatabaseMaintenance extends BaseController
             $dbName = $this->db->getDatabase();
             $tables = $this->getAllTables();
             
+            // Set headers for download
+            $filename = $dbName . '_backup_' . date('Y-m-d_His') . '.sql';
+            
+            header('Content-Type: application/sql');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+
+            // Open output stream
+            $output = fopen('php://output', 'w');
+            
             // Start building SQL dump
-            $dump = "-- MediaOrganizer Database Backup\n";
-            $dump .= "-- Generated: " . date('Y-m-d H:i:s') . "\n";
-            $dump .= "-- Database: " . $dbName . "\n\n";
-            $dump .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
-            $dump .= "SET time_zone = \"+00:00\";\n\n";
-            $dump .= "/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n";
-            $dump .= "/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;\n";
-            $dump .= "/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;\n";
-            $dump .= "/*!40101 SET NAMES utf8mb4 */;\n\n";
+            fwrite($output, "-- MediaOrganizer Database Backup\n");
+            fwrite($output, "-- Generated: " . date('Y-m-d H:i:s') . "\n");
+            fwrite($output, "-- Database: " . $dbName . "\n");
+            fwrite($output, "-- Platform: " . $this->db->getPlatform() . "\n\n");
+
+            if ($this->db->getPlatform() === 'MySQLi') {
+                fwrite($output, "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n");
+                fwrite($output, "SET time_zone = \"+00:00\";\n\n");
+                fwrite($output, "/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n");
+                fwrite($output, "/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;\n");
+                fwrite($output, "/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;\n");
+                fwrite($output, "/*!40101 SET NAMES utf8mb4 */;\n\n");
+            }
             
             foreach ($tables as $table) {
                 if (!$this->validateTable($table)) {
                     continue;
                 }
 
-                // Add table structure
-                $dump .= "--\n-- Table structure for table `{$table}`\n--\n\n";
-                $dump .= "DROP TABLE IF EXISTS `{$table}`;\n";
+                // Add table structure (best effort)
+                fwrite($output, "--\n-- Table structure for table `{$table}`\n--\n\n");
                 
-                // Get CREATE TABLE statement
-                $createTable = $this->db->query("SHOW CREATE TABLE `{$table}`")->getRowArray();
-                $dump .= $createTable['Create Table'] . ";\n\n";
+                if ($this->db->getPlatform() === 'MySQLi') {
+                    fwrite($output, "DROP TABLE IF EXISTS `{$table}`;\n");
+                    $createTable = $this->db->query("SHOW CREATE TABLE `{$table}`")->getRowArray();
+                    fwrite($output, $createTable['Create Table'] . ";\n\n");
+                } elseif ($this->db->getPlatform() === 'SQLite3') {
+                    fwrite($output, "DROP TABLE IF EXISTS `{$table}`;\n");
+                    $createTable = $this->db->query("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", [$table])->getRowArray();
+                    if ($createTable && isset($createTable['sql'])) {
+                        fwrite($output, $createTable['sql'] . ";\n\n");
+                    }
+                } else {
+                    fwrite($output, "-- (Full schema backup only supported on MySQL and SQLite. Use native tools for other platforms.)\n\n");
+                }
                 
-                // Get table data
-                $rows = $this->db->table($table)->get()->getResultArray();
+                // Get table data in chunks to save memory
+                $builder = $this->db->table($table);
+                $totalRows = $builder->countAllResults(false);
                 
-                if (!empty($rows)) {
-                    $dump .= "--\n-- Dumping data for table `{$table}`\n--\n\n";
+                if ($totalRows > 0) {
+                    fwrite($output, "--\n-- Dumping data for table `{$table}`\n--\n\n");
                     
                     // Get column names for INSERT statement
-                    $columns = array_keys($rows[0]);
-                    $columnList = '`' . implode('`, `', $columns) . '`';
-                    
-                    foreach ($rows as $row) {
-                        $values = [];
-                        foreach ($row as $value) {
-                            if ($value === null) {
-                                $values[] = 'NULL';
-                            } else {
-                                $values[] = $this->db->escape($value);
+                    $firstRow = $builder->get(1)->getRowArray();
+                    if ($firstRow) {
+                        $columns = array_keys($firstRow);
+                        $columnList = '`' . implode('`, `', $columns) . '`';
+                        
+                        // Process in chunks of 100 rows
+                        $chunkSize = 100;
+                        for ($offset = 0; $offset < $totalRows; $offset += $chunkSize) {
+                            $rows = $builder->get($chunkSize, $offset)->getResultArray();
+                            foreach ($rows as $row) {
+                                $values = [];
+                                foreach ($row as $value) {
+                                    if ($value === null) {
+                                        $values[] = 'NULL';
+                                    } else {
+                                        $values[] = $this->db->escape($value);
+                                    }
+                                }
+                                fwrite($output, "INSERT INTO `{$table}` ({$columnList}) VALUES (" . implode(', ', $values) . ");\n");
                             }
                         }
-                        $dump .= "INSERT INTO `{$table}` ({$columnList}) VALUES (" . implode(', ', $values) . ");\n";
                     }
-                    $dump .= "\n";
+                    fwrite($output, "\n");
                 }
             }
             
-            $dump .= "/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;\n";
-            $dump .= "/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;\n";
-            $dump .= "/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;\n";
-            
-            // Set headers for download
-            $filename = $dbName . '_backup_' . date('Y-m-d_His') . '.sql';
-            
-            // Use CodeIgniter's download helper approach
-            return $this->response->download($filename, $dump);
-                
-        } catch (\Exception $e) {
-            // If AJAX request, return JSON error
-            if ($this->request->isAJAX()) {
-                return $this->response->setJSON([
-                    'status' => 'error',
-                    'message' => 'Error creating backup: ' . $e->getMessage()
-                ]);
+            if ($this->db->getPlatform() === 'MySQLi') {
+                fwrite($output, "/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;\n");
+                fwrite($output, "/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;\n");
+                fwrite($output, "/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;\n");
             }
             
-            // Otherwise redirect with error message
-            return redirect()->to(base_url('database-maintenance'))
-                ->with('error', 'Error creating backup: ' . $e->getMessage());
+            fclose($output);
+            exit;
+                
+        } catch (\Exception $e) {
+            // If headers haven't been sent yet, we can try to report the error properly
+            if (!headers_sent()) {
+                // If AJAX request, return JSON error
+                if ($this->request->isAJAX()) {
+                    return $this->response->setJSON([
+                        'status' => 'error',
+                        'message' => 'Error creating backup: ' . $e->getMessage()
+                    ]);
+                }
+                
+                // Otherwise redirect with error message
+                return redirect()->to(base_url('database-maintenance'))
+                    ->with('error', 'Error creating backup: ' . $e->getMessage());
+            } else {
+                // Headers sent, we can only log it and stop
+                log_message('error', 'Error creating backup: ' . $e->getMessage());
+                exit;
+            }
         }
+    }
+
+    /**
+     * Download the raw SQLite database file
+     */
+    public function downloadRawSqlite()
+    {
+        if ($this->db->getPlatform() !== 'SQLite3') {
+            return redirect()->to(base_url('database-maintenance'))
+                ->with('error', 'Raw SQLite download is only available for SQLite databases.');
+        }
+
+        $config = config('Database');
+        $group = $this->db->group ?? $config->defaultGroup;
+        $dbConfig = $config->$group;
+        $dbPath = $dbConfig['database'];
+
+        if ($dbPath !== ':memory:' && ! str_contains($dbPath, DIRECTORY_SEPARATOR)) {
+            $dbPath = WRITEPATH . $dbPath;
+        }
+
+        if ($dbPath === ':memory:' || !file_exists($dbPath)) {
+            return redirect()->to(base_url('database-maintenance'))
+                ->with('error', 'Database file not found or is in-memory.');
+        }
+
+        return $this->response->download($dbPath, null)->setFileName(basename($dbPath));
     }
 
     /**
@@ -1390,6 +1671,108 @@ class DatabaseMaintenance extends BaseController
                 'status' => 'success',
                 'message' => "Purged {$affectedRows} unused poster(s) from the database."
             ]);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Get cron jobs data
+     */
+    private function getCronJobsData()
+    {
+        try {
+            if (!$this->db->tableExists('cron_jobs')) {
+                return [];
+            }
+            return $this->cronJobModel->findAll();
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Toggle cron job enabled status
+     */
+    public function toggleCronJob($id)
+    {
+        if ($this->request->isAJAX()) {
+            $enabled = $this->request->getPost('enabled');
+            if ($this->cronJobModel->update($id, ['enabled' => $enabled])) {
+                return $this->response->setJSON(['status' => 'success']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to update job status']);
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Run cron job manually
+     */
+    public function runCronJob($id)
+    {
+        if ($this->request->isAJAX()) {
+            $job = $this->cronJobModel->find($id);
+            if (!$job) {
+                return $this->response->setJSON(['status' => 'error', 'message' => 'Job not found']);
+            }
+
+            // Run using Spark command via exec/system or better, via command service
+            try {
+                // Since we are in a web context, we can't easily use the command service 
+                // because it's designed for CLI. We'll call the command's run method directly.
+                $command = null;
+                /** @var \Psr\Log\LoggerInterface $logger */
+                $logger = service('logger');
+                switch ($job['job_key']) {
+                    case 'purge_posters':
+                        $command = new \App\Commands\CronPurgePosters($logger, \Config\Services::commands());
+                        break;
+                    case 'loan_reminders':
+                        $command = new \App\Commands\CronLoanReminders($logger, \Config\Services::commands());
+                        break;
+                }
+
+                if ($command) {
+                    // This might write to CLI output which we don't want, but let's try.
+                    // Actually, let's just use the same logic as the command here or make a Service.
+                    // For simplicity, I'll just trigger the command.
+                    ob_start();
+                    $command->run([]);
+                    ob_end_clean();
+                    
+                    $updatedJob = $this->cronJobModel->find($id);
+                    return $this->response->setJSON([
+                        'status' => 'success', 
+                        'message' => 'Job executed: ' . $updatedJob['last_message'],
+                        'job' => $updatedJob
+                    ]);
+                }
+                
+                return $this->response->setJSON(['status' => 'error', 'message' => 'Command not found for job: ' . $job['job_key']]);
+            } catch (\Exception $e) {
+                return $this->response->setJSON(['status' => 'error', 'message' => 'Error running job: ' . $e->getMessage()]);
+            }
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Update cron job schedule
+     */
+    public function updateCronSchedule($id)
+    {
+        if ($this->request->isAJAX()) {
+            $schedule = $this->request->getPost('schedule');
+            
+            // Basic validation for cron expression (at least 5 parts)
+            if (empty($schedule) || count(explode(' ', trim($schedule))) < 5) {
+                return $this->response->setJSON(['status' => 'error', 'message' => 'Invalid cron expression']);
+            }
+
+            if ($this->cronJobModel->update($id, ['schedule' => $schedule])) {
+                return $this->response->setJSON(['status' => 'success', 'message' => 'Schedule updated successfully']);
+            }
+            return $this->response->setJSON(['status' => 'error', 'message' => 'Failed to update schedule']);
         }
         return $this->response->setStatusCode(404);
     }

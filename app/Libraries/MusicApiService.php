@@ -232,4 +232,56 @@ class MusicApiService
             return null;
         }
     }
+    public function getPosters(string $mbid, string $type = 'MusicBrainz', int $limit = 10): array
+    {
+        try {
+            $response = \Config\Services::curlrequest()->get("https://coverartarchive.org/release/{$mbid}", [
+                'headers' => [
+                    'User-Agent' => $this->userAgent,
+                    'Accept'     => 'application/json',
+                ],
+                'follow_location' => true,
+            ]);
+
+            if ($response->getStatusCode() !== 200) {
+                // Fallback to the single front image if we can't get the list
+                $details = $this->getMediaDetails($mbid);
+                if ($details && !empty($details['poster_url'])) {
+                    return [[
+                        'url' => $details['poster_url'],
+                        'thumbnail' => $details['poster_url'],
+                        'width' => null,
+                        'height' => null,
+                        'vote_average' => 0
+                    ]];
+                }
+                return [];
+            }
+
+            $data = json_decode($response->getBody(), true);
+            $posters = [];
+            $count = 0;
+
+            if (!empty($data['images'])) {
+                foreach ($data['images'] as $image) {
+                    if ($count >= $limit) break;
+                    if (!empty($image['image'])) {
+                        $posters[] = [
+                            'url' => $image['image'],
+                            'thumbnail' => $image['thumbnails']['small'] ?? $image['image'],
+                            'width' => null,
+                            'height' => null,
+                            'vote_average' => 0
+                        ];
+                        $count++;
+                    }
+                }
+            }
+
+            return $posters;
+        } catch (\Exception $e) {
+            log_message('error', 'MusicBrainz getPosters Error: ' . $e->getMessage());
+            return [];
+        }
+    }
 }

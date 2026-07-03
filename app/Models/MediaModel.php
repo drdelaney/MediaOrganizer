@@ -53,7 +53,7 @@ class MediaModel extends Model
     public function getNextAvailableNumber(): int
     {
         $row = $this->db->table($this->table)
-            ->select('IFNULL(MAX(number), 0) AS maxnum', false)
+            ->select('MAX(number) AS maxnum')
             ->get()
             ->getRowArray();
         $max = isset($row['maxnum']) ? (int)$row['maxnum'] : 0;
@@ -651,13 +651,52 @@ class MediaModel extends Model
             ->getRowArray();
 
         if (!$existingPoster) {
+            log_message('debug', 'Inserting new poster into posters table. MD5: ' . $md5sum . ', Size: ' . strlen($posterData));
             // Insert new poster
-            $this->db->table('posters')->insert([
+            $data = [
                 'md5sum' => $md5sum,
                 'data' => $posterData
-            ]);
+            ];
             
-            log_message('info', 'Poster stored with MD5: ' . $md5sum);
+            // Explicitly handle BLOB for SQLite to ensure it's treated as binary
+            if ($this->db->DBDriver === 'SQLite3') {
+                // In CI4, we can use the prepare() method from the connection
+                // to get a raw SQLite3 statement if needed, or use query() with bindings.
+                // However, the issue might be that the driver is treating the bound parameter as a string.
+                // Let's try to use the underlying SQLite3 connection if possible.
+                
+                $rawConnection = $this->db->getConnection();
+                if ($rawConnection !== false && (get_class($rawConnection) === 'SQLite3' || (is_object($rawConnection) && property_exists($rawConnection, 'connID') && get_class($rawConnection->connID) === 'SQLite3'))) {
+                    $conn = get_class($rawConnection) === 'SQLite3' ? $rawConnection : $rawConnection->connID;
+                    $stmt = $conn->prepare("INSERT INTO posters (md5sum, data) VALUES (?, ?)");
+                    $stmt->bindValue(1, $md5sum, SQLITE3_TEXT);
+                    $stmt->bindValue(2, $posterData, SQLITE3_BLOB);
+                    $result = $stmt->execute();
+                    $inserted = ($result !== false);
+                } else {
+                    // Fallback to standard query with positional placeholders
+                    $sql = "INSERT INTO posters (md5sum, data) VALUES (?, ?)";
+                    $query = $this->db->query($sql, [$md5sum, $posterData]);
+                    $inserted = ($this->db->affectedRows() > 0);
+                }
+                
+                if (!$inserted) {
+                    // Fallback to simpler insert if query() didn't report affected rows correctly
+                    try {
+                        $inserted = $this->db->table('posters')->insert(['md5sum' => $md5sum, 'data' => $posterData]);
+                    } catch (\Exception $e) {
+                        log_message('error', 'Fallback insert failed: ' . $e->getMessage());
+                    }
+                }
+            } else {
+                $inserted = $this->db->table('posters')->insert($data);
+            }
+            
+            if ($inserted) {
+                log_message('info', 'Poster stored with MD5: ' . $md5sum);
+            } else {
+                log_message('error', 'Failed to insert poster into posters table. MD5: ' . $md5sum);
+            }
         } else {
             log_message('info', 'Poster already exists with MD5: ' . $md5sum);
         }
@@ -770,15 +809,42 @@ class MediaModel extends Model
     public function getPosterData($mediaId)
     {
         $result = $this->db->table('movies m')
-            ->select('p.data, p.md5sum')
+            ->select('p.data, p.md5sum, m.movie_id, m.poster_md5')
             ->join('posters p', 'm.poster_md5 = p.md5sum', 'left')
             ->where('m.movie_id', $mediaId)
             ->get()
             ->getRowArray();
         
-        if ($result && $result['data']) {
+        if (!$result) {
+            log_message('debug', 'No movie record found for ID: ' . $mediaId);
+            return null;
+        }
+
+        if (empty($result['poster_md5'])) {
+            log_message('debug', 'Movie record has no poster_md5 for ID: ' . $mediaId);
+            return null;
+        }
+
+        if (!isset($result['data']) || $result['data'] === null) {
+            log_message('debug', 'No poster data found in posters table for MD5: ' . $result['poster_md5']);
+            return null;
+        }
+        
+        if (isset($result['data'])) {
+            $data = $result['data'];
+            // Handle binary data from SQLite
+            if (is_resource($data)) {
+                log_message('debug', 'Converting poster resource to string');
+                $data = stream_get_contents($data);
+            }
+            
+            // In some environments, SQLite might return the string 'BLOB' if not handled correctly
+            if ($data === 'BLOB') {
+                log_message('error', 'Poster data retrieved as literal string "BLOB" for media ID: ' . $mediaId);
+            }
+            
             return [
-                'data' => $result['data'],
+                'data' => $data,
                 'md5sum' => $result['md5sum']
             ];
         }

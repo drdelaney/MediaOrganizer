@@ -17,8 +17,12 @@ class LookupRegistry
         $configModel = new \App\Models\ConfigurationModel();
         $enabled = $configModel->getParam('ENABLED_LOOKUPS');
         
+        if ($enabled === null) {
+            return [];
+        }
+        
         if (empty($enabled)) {
-            $enabled = 'IMDB,TVDB';
+            return [];
         }
         
         $lookups = array_map('trim', explode(',', $enabled));
@@ -47,6 +51,16 @@ class LookupRegistry
         $finalLookups = [];
         foreach ($mappedLookups as $lookup) {
             switch ($lookup) {
+                case 'IMDB':
+                    if (!empty($configModel->getParam('IMDB_API_KEY'))) {
+                        $finalLookups[] = 'IMDB';
+                    }
+                    break;
+                case 'TVDB':
+                    if (!empty($configModel->getParam('TVDB_API_KEY'))) {
+                        $finalLookups[] = 'TVDB';
+                    }
+                    break;
                 case 'TMDB':
                     if (!empty($configModel->getParam('TMDB_API_KEY'))) {
                         $finalLookups[] = 'TMDB';
@@ -62,14 +76,8 @@ class LookupRegistry
                         $finalLookups[] = 'MusicBrainz';
                     }
                     break;
-                case 'IMDB':
-                case 'TVDB':
-                    // These don't have explicit keys in the prompt, but let's keep them if they are in the list
-                    $finalLookups[] = $lookup;
-                    break;
                 default:
                     // Any other supported types?
-                    $finalLookups[] = $lookup;
                     break;
             }
         }

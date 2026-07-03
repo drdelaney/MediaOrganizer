@@ -39,6 +39,70 @@
     </style>
 </head>
 <body>
+    <?php
+    // Check if setup is complete
+    $setupComplete = false;
+    static $cachedSetupComplete = null;
+    if ($cachedSetupComplete !== null) {
+        $setupComplete = $cachedSetupComplete;
+    } else {
+        try {
+            $db = \Config\Database::connect();
+            if ($db->tableExists('configuration')) {
+                $configModel = new \App\Models\ConfigurationModel();
+                $setupComplete = (bool) $configModel->getParam('app.setupComplete', false);
+            } else {
+                $setupComplete = (bool) env('app.setupComplete', false);
+            }
+        } catch (\Throwable $e) {
+            $setupComplete = (bool) env('app.setupComplete', false);
+        }
+        $cachedSetupComplete = $setupComplete;
+    }
+
+    if (!$setupComplete && service('router')->getMatchedRoute()[0] !== 'setup'): ?>
+        <div class="alert alert-warning alert-dismissible fade show mb-0 rounded-0 text-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Setup Incomplete!</strong> Please <a href="<?= base_url('setup') ?>" class="alert-link">complete the setup</a> to ensure all features work correctly.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
+    <?php
+    // Check if initial password is still in use
+    $showInitialPasswordWarning = false;
+    static $cachedInitialPasswordWarning = null;
+    if (session()->get('authenticated')) {
+        if ($cachedInitialPasswordWarning !== null) {
+            $showInitialPasswordWarning = $cachedInitialPasswordWarning;
+        } else {
+            try {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('configuration')) {
+                    $initialPassword = env('auth.initialPassword');
+                    if (!empty($initialPassword)) {
+                        $configModel = new \App\Models\ConfigurationModel();
+                        $storedHash = $configModel->getParam('password_hash');
+                        if ($storedHash && password_verify($initialPassword, $storedHash)) {
+                            $showInitialPasswordWarning = true;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Silently fail if DB is not ready
+            }
+            $cachedInitialPasswordWarning = $showInitialPasswordWarning;
+        }
+    }
+
+    if ($showInitialPasswordWarning && service('router')->getMatchedRoute()[0] !== 'settings/password'): ?>
+        <div class="alert alert-danger alert-dismissible fade show mb-0 rounded-0 text-center" role="alert">
+            <i class="bi bi-shield-lock-fill"></i>
+            <strong>Security Warning!</strong> You are still using the initial password. Please <a href="<?= base_url('settings/password') ?>" class="alert-link">change your password</a> immediately for security.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
     <!-- Navigation -->
     <?php if (!isset($hide_nav) || !$hide_nav): ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">

@@ -23,3 +23,4 @@
 - Do not remove values from .env or .env.example if defined in the database.
 - Any option defined in settings should provide a tooltip with the .env override variable name.
 - If any new API endpoints are added for Media search, make sure to add support for searching within the badges.
+- Use existing CodeIgniter helpers and models wherever possible.

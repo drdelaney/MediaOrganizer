@@ -21,6 +21,14 @@
             </div>
 
             <!-- Success/Error Messages -->
+            <?php if (empty($lookupOptions)): ?>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>No Lookups Available!</strong> It seems no media lookup services are enabled or configured with required API keys. 
+                    Please visit <a href="<?= base_url('database-maintenance/manage-lookups') ?>" class="alert-link">Application Settings</a> to configure them.
+                </div>
+            <?php endif; ?>
+
             <?php if (session()->getFlashdata('success')): ?>
                 <div class="alert alert-success alert-dismissible fade show">
                     <?= session()->getFlashdata('success') ?>
@@ -105,14 +113,13 @@
             </div>
 
             <!-- Edit Form -->
-            <form action="<?= base_url('media/update/' . $movie['movie_id']) ?>" method="post">
+            <form action="<?= base_url('media/update/' . $movie['movie_id']) ?>" method="post" enctype="multipart/form-data">
                 <?= csrf_field() ?>
                 <input type="hidden" id="fetched_poster_url" name="fetched_poster_url" value="">
 
-                <!-- Poster selection (existing vs fetched) -->
-                <div id="poster-compare-container" class="card mb-4" style="display: none;">
+                <div id="poster-compare-container" class="card mb-4">
                     <div class="card-header">
-                        <h5><i class="bi bi-images"></i> Choose Poster to Save</h5>
+                        <h5><i class="bi bi-images"></i> Media Poster</h5>
                     </div>
                     <div class="card-body">
                         <div class="row align-items-start">
@@ -154,6 +161,17 @@
                                 No poster (clear poster on save)
                             </label>
                         </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <label for="poster_upload_file" class="form-label">
+                                <i class="bi bi-upload"></i> Upload Custom Poster
+                            </label>
+                            <input type="file" class="form-control" id="poster_upload_file" name="poster_upload_file" accept="image/*">
+                            <div class="form-text">Uploading a file will override any other poster selection.</div>
+                        </div>
+
                         <small class="text-muted">Choose to keep the existing poster, use the newly fetched one, or select "No poster" to remove it. Your selection will be applied when you click "Update Media". Cancel will discard any fetched changes.</small>
                     </div>
                 </div>
@@ -535,15 +553,17 @@
                                                 <label for="apiSearch" class="visually-hidden">Search</label>
                                                 <select class="form-select flex-shrink-0" style="max-width: 140px" id="apiType" name="lookup_type" aria-label="Search Type">
                                                     <?php foreach ($lookupOptions as $key => $option): ?>
-                                                        <?php 
-                                                            $selected = false;
-                                                            if ($lookupSource && $key === $lookupSource) {
-                                                                $selected = true;
-                                                            } elseif (!$lookupSource && $key === array_key_first($lookupOptions)) {
-                                                                $selected = true;
-                                                            }
-                                                        ?>
-                                                        <option value="<?= $key ?>" <?= $selected ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                                        <?php if (in_array($key, $enabledLookups ?? [])): ?>
+                                                            <?php 
+                                                                $selected = false;
+                                                                if ($lookupSource && $key === $lookupSource) {
+                                                                    $selected = true;
+                                                                } elseif (!$lookupSource && $key === array_key_first($lookupOptions)) {
+                                                                    $selected = true;
+                                                                }
+                                                            ?>
+                                                            <option value="<?= $key ?>" <?= $selected ? 'selected' : '' ?>><?= esc($option['label']) ?></option>
+                                                        <?php endif; ?>
                                                     <?php endforeach; ?>
                                                 </select>
                                                 <input type="text" class="form-control" id="apiSearch" placeholder="Search by title or paste ID" value="<?= esc($movie['title'] ?: $movie['o_title'] ?: '') ?>">
@@ -864,11 +884,8 @@
                         const idField = lookupOptions[selected.type || lookupType]?.id_field || 'tmdb_id';
                         const fetchBody = { type: selected.type || lookupType };
                         fetchBody[idField] = selected.tmdb_id || selected.tvdb_id || selected.igdb_id || selected.mbid || selected.imdb_id;
-                        // For TVDB, the backend expects tmdb_id if using the TMDB API
-                        if ((selected.type === 'TVDB' || lookupType === 'TVDB') && !fetchBody['tmdb_id']) {
-                            fetchBody['tmdb_id'] = selected.tmdb_id || selected.tvdb_id;
-                        }
                         if (selected.imdb_id) fetchBody['imdb_id'] = selected.imdb_id;
+                        if (selected.tvdb_id) fetchBody['tvdb_id'] = selected.tvdb_id;
                         if (selected.tmdb_id) fetchBody['tmdb_id'] = selected.tmdb_id;
 
                         fetch('<?= base_url('media/fetchDetails') ?>', {
@@ -966,7 +983,7 @@
                     const yearInput = document.getElementById('year');
                     const query = (searchInput && searchInput.value.trim()) ? searchInput.value.trim() : (document.getElementById('title')?.value || '');
                     const yearVal = (yearInput && yearInput.value) ? parseInt(yearInput.value, 10) : null;
-                    const lookupType = document.getElementById('apiType')?.value || 'IMDB';
+                    const lookupType = document.getElementById('apiType')?.value || "<?= !empty($enabledLookups) ? $enabledLookups[0] : '' ?>";
 
                     const searchParams = { query: query, year: yearVal, type: lookupType };
 

@@ -12,6 +12,17 @@ class ConfigurationModel extends Model
     protected $allowedFields = ['param', 'value'];
 
     /**
+     * Check if a configuration parameter is overridden by an environment variable.
+     *
+     * @param string $param
+     * @return bool
+     */
+    public function isEnvOverridden(string $param): bool
+    {
+        return env($param) !== null;
+    }
+
+    /**
      * Get a configuration value by parameter name.
      * Environment variables always override database values.
      *
@@ -44,7 +55,7 @@ class ConfigurationModel extends Model
         }
 
         $row = $this->where('param', $param)->first();
-        return $row ? $row['value'] : $default;
+        return $row['value'] ?? $default;
     }
 
     /**
