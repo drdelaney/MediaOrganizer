@@ -22,10 +22,13 @@ class CronLoanReminders extends BaseCommand
         $cronModel->markStarted($jobKey);
 
         try {
+            $configModel = new \App\Models\ConfigurationModel();
+            $timezone = $configModel->getParam('timezone', 'UTC');
+
             $loanModel = new LoanModel();
             $loanedMedia = $loanModel->getAllLoanedMedia();
             
-            $now = time();
+            $now = \CodeIgniter\I18n\Time::now($timezone);
             $overdueLoans = [];
             $allLoansByPerson = [];
             
@@ -43,8 +46,8 @@ class CronLoanReminders extends BaseCommand
                     ];
                 }
 
-                $loanDate = strtotime($loan['date']);
-                $diff = $now - $loanDate;
+                $loanDate = \CodeIgniter\I18n\Time::parse($loan['date'], 'UTC')->setTimezone($timezone);
+                $diff = $now->getTimestamp() - $loanDate->getTimestamp();
                 $days = floor($diff / (60 * 60 * 24));
                 
                 $loan['is_overdue'] = ($days > 30);

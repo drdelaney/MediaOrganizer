@@ -284,40 +284,11 @@ class Media extends BaseController
             if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
                 log_message('debug', 'Custom poster upload detected.');
                 try {
-                    $mimeType = $posterFile->getMimeType();
-                    $clientMimeType = $posterFile->getClientMimeType();
-                    $fileName = $posterFile->getClientName();
-                    $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-                    
-                    log_message('debug', 'File Name: ' . $fileName . ', Extension: ' . $fileExt . ', MimeType: ' . $mimeType . ', ClientMimeType: ' . $clientMimeType);
-                    
-                    $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-                    $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
-                    
-                    // Validate image type - be more lenient if fileinfo is missing
-                    if (in_array($mimeType, $validMimeTypes) || 
-                        in_array($clientMimeType, $validMimeTypes) || 
-                        in_array($fileExt, $validExtensions)) {
-                        
-                        // Read the uploaded file
-                        $imageData = file_get_contents($posterFile->getTempName());
-                        log_message('debug', 'Image data read. Length: ' . strlen($imageData));
-
-                        // Convert to JPEG if needed (requires GD)
-                        if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
-                            log_message('debug', 'Converting image to JPEG.');
-                            $image = @imagecreatefromstring($imageData);
-                            if ($image !== false) {
-                                ob_start();
-                                imagejpeg($image, null, 90);
-                                $imageData = ob_get_clean();
-                                imagedestroy($image);
-                            }
-                        } else if (!function_exists('imagecreatefromstring')) {
-                            log_message('debug', 'GD extension missing, skipping conversion to JPEG.');
-                        }
+                    $imageData = $this->validateAndNormalizePosterUpload($posterFile);
+                    if ($imageData === null) {
+                        log_message('debug', 'Rejected invalid/unsupported poster upload for: ' . $posterFile->getClientName());
                     } else {
-                        log_message('debug', 'Invalid file type detected: ' . $mimeType . ' (Client: ' . $clientMimeType . ')');
+                        log_message('debug', 'Image data read. Length: ' . strlen($imageData));
                     }
                 } catch (\Throwable $e) {
                     log_message('error', 'Failed to process uploaded poster: ' . $e->getMessage());
@@ -525,34 +496,13 @@ class Media extends BaseController
         $posterFile = $this->request->getFile('poster_upload_file');
         if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
             try {
-                $mimeType = $posterFile->getMimeType();
-                $clientMimeType = $posterFile->getClientMimeType();
-                $fileName = $posterFile->getClientName();
-                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-                
-                $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-                $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
-
-                if (in_array($mimeType, $validMimeTypes) || 
-                    in_array($clientMimeType, $validMimeTypes) || 
-                    in_array($fileExt, $validExtensions)) {
-                    
-                    $imageData = file_get_contents($posterFile->getTempName());
-                    // Convert to JPEG if needed
-                    if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
-                        $image = @imagecreatefromstring($imageData);
-                        if ($image !== false) {
-                            ob_start();
-                            imagejpeg($image, null, 90);
-                            $imageData = ob_get_clean();
-                            imagedestroy($image);
-                        }
-                    }
-                    if ($imageData) {
-                        $this->mediaModel->storePosterForMedia($mediaId, $imageData);
-                        // If we uploaded a file, don't save the fetched URL
-                        $shouldSaveFetched = false;
-                    }
+                $imageData = $this->validateAndNormalizePosterUpload($posterFile);
+                if ($imageData) {
+                    $this->mediaModel->storePosterForMedia($mediaId, $imageData);
+                    // If we uploaded a file, don't save the fetched URL
+                    $shouldSaveFetched = false;
+                } else {
+                    log_message('debug', 'Rejected invalid/unsupported poster upload on update for: ' . $posterFile->getClientName());
                 }
             } catch (\Throwable $e) {
                 log_message('error', 'Failed to store uploaded poster on update: ' . $e->getMessage());
@@ -1112,6 +1062,43 @@ class Media extends BaseController
                 if ($apiAvailable && method_exists($apiService, 'findByBarcode')) {
                     $apiData = $apiService->findByBarcode($barcode, $lookupType);
                 }
+
+                // Check for rate limit error from primary service
+                if ($apiData && isset($apiData['error']) && $apiData['error'] === 'EXCEED_LIMIT') {
+                    return $this->response->setJSON([
+                        'success' => false,
+                        'message' => $apiData['message'] ?? 'Barcode lookup limit exceeded. Please try again later.'
+                    ]);
+                }
+
+                // If no result from primary service, try other services as cross-type fallback
+                if (!$apiData) {
+                    $allTypes = ['TMDB', 'IMDB', 'TVDB', 'IGDB', 'MusicBrainz'];
+                    foreach ($allTypes as $type) {
+                        if ($type === $lookupType) continue; // Skip primary already tried
+                        
+                        if (\App\Libraries\LookupRegistry::isEnabled($type)) {
+                            $fallbackService = \App\Libraries\ApiServiceFactory::create($type);
+                            if ($fallbackService && method_exists($fallbackService, 'findByBarcode')) {
+                                $fallbackData = $fallbackService->findByBarcode($barcode, $type);
+                                
+                                // Check for rate limit error from fallback service
+                                if ($fallbackData && isset($fallbackData['error']) && $fallbackData['error'] === 'EXCEED_LIMIT') {
+                                    return $this->response->setJSON([
+                                        'success' => false,
+                                        'message' => $fallbackData['message'] ?? 'Barcode lookup limit exceeded. Please try again later.'
+                                    ]);
+                                }
+
+                                if ($fallbackData) {
+                                    $apiData = $fallbackData;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (!$apiData && ($title === '' && !$apiAvailable)) {
                     return $this->response->setJSON([
                         'success' => false,
@@ -1265,9 +1252,20 @@ class Media extends BaseController
             $mimeType = 'image/jpeg';
             log_message('debug', 'MIME type fallback to image/jpeg');
         }
-        
+
+        // Never reflect a detected type outside a small image allowlist as
+        // the response Content-Type. Stored poster data that sniffs to,
+        // e.g., text/html must not be served as such -- doing so would let
+        // a stored non-image payload execute as a document in the browser.
+        $allowedPosterMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!in_array($mimeType, $allowedPosterMimeTypes, true)) {
+            log_message('error', 'Refusing to serve poster for media ID ' . $mediaId . ' with disallowed detected MIME type: ' . $mimeType);
+            throw new \CodeIgniter\Exceptions\PageNotFoundException('Poster not found');
+        }
+
         // Set appropriate headers
         $this->response->setHeader('Content-Type', $mimeType)
+                      ->setHeader('X-Content-Type-Options', 'nosniff')
                       ->setHeader('Content-Length', (string)strlen($data))
                       ->setHeader('Cache-Control', 'public, max-age=31536000') // Cache for 1 year
                       ->setHeader('ETag', '"' . $posterData['md5sum'] . '"');
@@ -1970,38 +1968,14 @@ class Media extends BaseController
 
             // Option 2: Upload from file
             if ($posterFile && $posterFile->isValid() && !$posterFile->hasMoved()) {
-                $mimeType = $posterFile->getMimeType();
-                $clientMimeType = $posterFile->getClientMimeType();
-                $fileName = $posterFile->getClientName();
-                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-                
-                $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-                $validExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                $imageData = $this->validateAndNormalizePosterUpload($posterFile);
 
-                // Validate image type
-                if (!in_array($mimeType, $validMimeTypes) && 
-                    !in_array($clientMimeType, $validMimeTypes) && 
-                    !in_array($fileExt, $validExtensions)) {
-                    
-                    log_message('debug', 'Invalid file type for poster update: ' . $mimeType . ' (Client: ' . $clientMimeType . ')');
+                if ($imageData === null) {
+                    log_message('debug', 'Invalid file type for poster update: ' . $posterFile->getClientName());
                     return $this->response->setJSON([
                         'success' => false,
                         'message' => 'Invalid file type. Please upload a JPG, PNG, or GIF image.'
                     ]);
-                }
-
-                // Read the uploaded file
-                $imageData = file_get_contents($posterFile->getTempName());
-
-                // Convert to JPEG if needed
-                if ($mimeType !== 'image/jpeg' && $mimeType !== 'image/jpg' && function_exists('imagecreatefromstring')) {
-                    $image = @imagecreatefromstring($imageData);
-                    if ($image !== false) {
-                        ob_start();
-                        imagejpeg($image, null, 90);
-                        $imageData = ob_get_clean();
-                        imagedestroy($image);
-                    }
                 }
             }
             // Option 3: Download from URL
@@ -2093,6 +2067,59 @@ class Media extends BaseController
         }
     }
     /**
+     * Validate an uploaded poster file and return normalized image bytes,
+     * or null if the file isn't a genuine, supported image.
+     *
+     * The MIME type must be server-detected (fileinfo, via
+     * UploadedFile::getMimeType()) as an allowed image type -- the
+     * client-supplied MIME type and filename extension are attacker
+     * controlled and are never sufficient on their own to accept a file.
+     * Non-JPEG images are re-encoded through GD; if that decode fails
+     * (i.e. the bytes aren't actually a valid image despite the detected
+     * type), the upload is rejected rather than stored as-is.
+     *
+     * @param \CodeIgniter\HTTP\Files\UploadedFile $posterFile
+     * @return string|null
+     */
+    private function validateAndNormalizePosterUpload($posterFile): ?string
+    {
+        $validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+
+        $mimeType = $posterFile->getMimeType();
+        if (!in_array($mimeType, $validMimeTypes, true)) {
+            log_message('debug', 'Rejected poster upload: unsupported detected MIME type ' . $mimeType);
+            return null;
+        }
+
+        $imageData = file_get_contents($posterFile->getTempName());
+        if ($imageData === false || $imageData === '') {
+            return null;
+        }
+
+        if ($mimeType === 'image/jpeg' || $mimeType === 'image/jpg') {
+            return $imageData;
+        }
+
+        if (!function_exists('imagecreatefromstring')) {
+            log_message('debug', 'GD extension missing, skipping conversion to JPEG.');
+            return $imageData;
+        }
+
+        $image = @imagecreatefromstring($imageData);
+        if ($image === false) {
+            log_message('debug', 'Rejected poster upload: detected MIME type ' . $mimeType . ' but image data failed to decode.');
+            return null;
+        }
+
+        ob_start();
+        imagejpeg($image, null, 90);
+        $normalized = ob_get_clean();
+        imagedestroy($image);
+
+        return $normalized ?: null;
+    }
+
+    /**
      * Generic remote poster downloader
      *
      * @param string $url
@@ -2101,56 +2128,10 @@ class Media extends BaseController
     private function downloadRemotePoster(string $url): ?string
     {
         log_message('debug', 'downloadRemotePoster: Attempting to download from ' . $url);
-        
-        // Ensure URL is valid and absolute
-        if (strpos($url, 'http') !== 0) {
-            log_message('error', 'downloadRemotePoster: Invalid or relative URL provided: ' . $url);
-            return null;
-        }
 
-        try {
-            // Check if allow_url_fopen is enabled and try file_get_contents first as a fallback for missing cURL
-            if (ini_get('allow_url_fopen')) {
-                log_message('debug', 'downloadRemotePoster: trying file_get_contents');
-                $context = stream_context_create([
-                    'http' => [
-                        'timeout' => 30,
-                        'user_agent' => 'MediaOrganizer/1.0',
-                        'header' => "Accept: image/*\r\n",
-                        'follow_location' => 1,
-                        'max_redirects' => 5
-                    ],
-                    'ssl' => [
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                    ]
-                ]);
-                $data = @file_get_contents($url, false, $context);
-                if ($data !== false) {
-                    log_message('debug', 'downloadRemotePoster: file_get_contents success, size: ' . strlen($data));
-                    return $data;
-                }
-                log_message('debug', 'downloadRemotePoster: file_get_contents failed');
-            }
-
-            $client = \Config\Services::curlrequest([
-                'timeout' => 30,
-                'headers' => [
-                    'User-Agent' => 'MediaOrganizer/1.0',
-                    'Accept'     => 'image/*'
-                ],
-                'allow_redirects' => true,
-                'verify' => false, // Sometimes needed for local environments or misconfigured servers
-            ]);
-
-            $response = $client->get($url);
-            log_message('debug', 'Remote poster download response status: ' . $response->getStatusCode() . ' for URL: ' . $url);
-            if ($response->getStatusCode() === 200) {
-                return $response->getBody();
-            }
-        } catch (\Throwable $e) {
-            log_message('error', 'Remote poster download failed: ' . $e->getMessage() . ' for URL: ' . $url);
-        }
-        return null;
+        // fetch_remote_image() validates the host (and every redirect hop)
+        // resolves only to a public address, to prevent SSRF via
+        // user-supplied poster URLs targeting internal/loopback services.
+        return fetch_remote_image($url, 'MediaOrganizer/1.0');
     }
 }

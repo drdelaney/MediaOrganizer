@@ -6,6 +6,7 @@ use CodeIgniter\HTTP\CURLRequest;
 
 class ImdbApiService
 {
+    use BarcodeLookupTrait;
     private $imdbApiKey;
     private $userAgent;
     private $client;
@@ -183,24 +184,21 @@ class ImdbApiService
     {
         if (empty($posterUrl)) return null;
         log_message('debug', 'ImdbApiService: downloadPoster from ' . $posterUrl);
+
+        helper('app');
+
         try {
-            // If the URL is absolute (starts with http), use it as is
-            // Otherwise, it might be relative to the baseURI (OMDB)
+            // If the URL is absolute (starts with http), it may be
+            // attacker-controlled, so fetch via the SSRF-safe helper, which
+            // validates the destination host (and every redirect hop)
+            // resolves only to a public address.
+            // Otherwise, it's relative to the trusted, configured baseURI (OMDB).
             if (strpos($posterUrl, 'http') === 0) {
-                // For absolute URLs, use a fresh client or just the native curl
-                $client = \Config\Services::curlrequest([
-                    'timeout' => 30,
-                    'headers' => [
-                        'User-Agent' => 'MediaOrganizer/1.0',
-                        'Accept'     => 'image/*'
-                    ],
-                    'allow_redirects' => true,
-                ]);
-                $response = $client->get($posterUrl);
-            } else {
-                $response = $this->client->get($posterUrl);
+                return fetch_remote_image($posterUrl, 'MediaOrganizer/1.0');
             }
-            
+
+            $response = $this->client->get($posterUrl);
+
             if ($response->getStatusCode() === 200) {
                 return $response->getBody();
             }
@@ -231,5 +229,55 @@ class ImdbApiService
         }
 
         return [];
+    }
+
+    /**
+     * Find details by barcode using UPCItemDB
+     */
+    public function findByBarcode(string $barcode)
+    {
+        $barcode = preg_replace('/[^0-9]/', '', (string)$barcode);
+        if ($barcode === '') {
+            return null;
+        }
+
+        try {
+            $item = $this->lookupBarcode($barcode);
+            if ($item && isset($item['error']) && $item['error'] === 'EXCEED_LIMIT') {
+                return $item;
+            }
+            if (!$item || empty($item['title'])) {
+                return null;
+            }
+
+            // Clean title
+            $clean = preg_replace('/\s*[\[(].*?[)\]]\s*/', ' ', $item['title']);
+            $clean = preg_replace('/\s{2,}/', ' ', $clean);
+            $clean = trim($clean);
+
+            // Extract year
+            $year = null;
+            if (preg_match('/\b(19\d{2}|20\d{2})\b/', $clean, $m)) {
+                $year = (int)$m[1];
+            }
+
+            // Search OMDb
+            if ($this->isApiAvailable()) {
+                return $this->searchMedia($clean, $year);
+            }
+
+            // Fallback
+            return [
+                'title' => $clean,
+                'year' => $year,
+                'plot' => $item['description'] ?? null,
+                'studio' => $item['brand'] ?? null,
+                'poster_url' => !empty($item['images']) ? $item['images'][0] : null,
+                'type' => 'IMDB'
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'IMDB Barcode lookup failed: ' . $e->getMessage());
+            return null;
+        }
     }
 }

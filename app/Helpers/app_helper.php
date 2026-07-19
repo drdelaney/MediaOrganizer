@@ -50,6 +50,152 @@ if (!function_exists('app_name')) {
 }
 
 /**
+ * Determine whether every IP address a hostname resolves to is a public,
+ * routable address (not loopback, private, link-local, or otherwise
+ * reserved). A literal IP is validated directly.
+ *
+ * Used to block SSRF via user-supplied poster URLs that could otherwise
+ * reach internal services (e.g. 127.0.0.1, 169.254.169.254, RFC1918).
+ *
+ * @param string $host
+ * @return bool
+ */
+if (!function_exists('is_public_host')) {
+    function is_public_host(string $host): bool
+    {
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+        }
+
+        // Cache per-request: the same host is often re-validated across
+        // redirect hops and across multiple poster candidates in one request.
+        static $cache = [];
+        if (array_key_exists($host, $cache)) {
+            return $cache[$host];
+        }
+
+        // gethostbynamel() (A records only) goes through the system
+        // resolver/cache and is fast in practice. Querying AAAA up front via
+        // dns_get_record($host, DNS_A + DNS_AAAA) is dramatically slower in
+        // many environments -- the AAAA half can take several seconds to
+        // time out when there's no IPv6 route -- so only fall back to an
+        // explicit AAAA lookup when the (quick) A lookup finds nothing.
+        $ips = @gethostbynamel($host);
+
+        if ($ips === false || empty($ips)) {
+            $records = @dns_get_record($host, DNS_AAAA);
+            $ips = array_filter(array_map(function ($record) {
+                return $record['ipv6'] ?? null;
+            }, $records ?: []));
+        }
+
+        if (empty($ips)) {
+            // Fail closed: if we can't resolve it, we can't prove it's safe.
+            return $cache[$host] = false;
+        }
+
+        foreach ($ips as $ip) {
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $cache[$host] = false;
+            }
+        }
+
+        return $cache[$host] = true;
+    }
+}
+
+/**
+ * True if a URL is an absolute http(s) URL whose host resolves only to
+ * public addresses. Rejects non-http(s) schemes, missing hosts, and any
+ * host resolving to a private/loopback/reserved address.
+ *
+ * @param string $url
+ * @return bool
+ */
+if (!function_exists('is_safe_remote_image_url')) {
+    function is_safe_remote_image_url(string $url): bool
+    {
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower($parts['scheme'] ?? '');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return false;
+        }
+
+        return is_public_host($parts['host']);
+    }
+}
+
+/**
+ * Safely fetch a remote image, validating the host (public/routable only)
+ * before every request, including redirect targets, so a malicious server
+ * can't bypass the check by 30x-redirecting to an internal address.
+ *
+ * @param string $url
+ * @param string $userAgent
+ * @param int $maxRedirects
+ * @return string|null Raw response body, or null on failure/blocked URL
+ */
+if (!function_exists('fetch_remote_image')) {
+    function fetch_remote_image(string $url, string $userAgent = 'MediaOrganizer/1.0', int $maxRedirects = 5): ?string
+    {
+        $current = $url;
+
+        for ($hop = 0; $hop <= $maxRedirects; $hop++) {
+            if (!is_safe_remote_image_url($current)) {
+                log_message('error', 'fetch_remote_image: blocked unsafe or invalid URL: ' . $current);
+                return null;
+            }
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $current,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_USERAGENT => $userAgent,
+                CURLOPT_HTTPHEADER => ['Accept: image/*'],
+            ]);
+
+            $body = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($body === false) {
+                log_message('error', 'fetch_remote_image: request failed for ' . $current . ': ' . $error);
+                return null;
+            }
+
+            if (in_array($httpCode, [301, 302, 303, 307, 308], true)) {
+                $location = curl_getinfo($ch, CURLINFO_REDIRECT_URL) ?: null;
+                if (empty($location)) {
+                    log_message('error', 'fetch_remote_image: redirect with no Location for ' . $current);
+                    return null;
+                }
+                $current = $location;
+                continue;
+            }
+
+            if ($httpCode === 200) {
+                return $body;
+            }
+
+            log_message('error', 'fetch_remote_image: unexpected status ' . $httpCode . ' for ' . $current);
+            return null;
+        }
+
+        log_message('error', 'fetch_remote_image: too many redirects for ' . $url);
+        return null;
+    }
+}
+
+/**
  * Add TMDB, IMDB, IGDB, and/or MusicBrainz IDs to notes field using tag format
  * Tags: <!tmdb>xxxx, <!imdb>xxxx, <!tvdb>xxxx, <!igdb>xxxx, <!mbid>xxxx, <!source>xxxx
  * 

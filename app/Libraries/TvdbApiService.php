@@ -6,6 +6,7 @@ use CodeIgniter\HTTP\CURLRequest;
 
 class TvdbApiService
 {
+    use BarcodeLookupTrait;
     private $tvdbApiKey;
     private $userAgent;
     private $client;
@@ -153,10 +154,20 @@ class TvdbApiService
     public function downloadPoster($posterUrl, $movieId = null)
     {
         if (empty($posterUrl)) return null;
+
+        helper('app');
+
+        // $posterUrl may be attacker-controlled (e.g. passed through from a
+        // user-submitted "selected poster URL"). For absolute URLs, fetch
+        // via the SSRF-safe helper rather than the shared API client, which
+        // doesn't validate destination hosts.
+        if (strpos($posterUrl, 'http') === 0) {
+            return fetch_remote_image($posterUrl, 'MediaOrganizer/1.0');
+        }
+
         try {
-            // Check if we need to authenticate for the image URL (some TVDB images require it, some don't)
-            // But usually image_url is a direct link or requires the same token if it's protected.
-            // Let's try direct first.
+            // Relative paths resolve against this service's configured,
+            // trusted base URI, so they're not attacker-controlled hosts.
             $response = $this->client->get($posterUrl);
             if ($response->getStatusCode() === 200) {
                 return $response->getBody();
@@ -216,6 +227,56 @@ class TvdbApiService
         } catch (\Exception $e) {
             log_message('error', 'TVDB API Error getting posters: ' . $e->getMessage());
             return [];
+        }
+    }
+
+    /**
+     * Find details by barcode using UPCItemDB
+     */
+    public function findByBarcode(string $barcode)
+    {
+        $barcode = preg_replace('/[^0-9]/', '', (string)$barcode);
+        if ($barcode === '') {
+            return null;
+        }
+
+        try {
+            $item = $this->lookupBarcode($barcode);
+            if ($item && isset($item['error']) && $item['error'] === 'EXCEED_LIMIT') {
+                return $item;
+            }
+            if (!$item || empty($item['title'])) {
+                return null;
+            }
+
+            // Clean title
+            $clean = preg_replace('/\s*[\[(].*?[)\]]\s*/', ' ', $item['title']);
+            $clean = preg_replace('/\s{2,}/', ' ', $clean);
+            $clean = trim($clean);
+
+            // Extract year
+            $year = null;
+            if (preg_match('/\b(19\d{2}|20\d{2})\b/', $clean, $m)) {
+                $year = (int)$m[1];
+            }
+
+            // Search TVDB
+            if ($this->isApiAvailable()) {
+                return $this->searchMedia($clean, $year);
+            }
+
+            // Fallback
+            return [
+                'title' => $clean,
+                'year' => $year,
+                'plot' => $item['description'] ?? null,
+                'studio' => $item['brand'] ?? null,
+                'poster_url' => !empty($item['images']) ? $item['images'][0] : null,
+                'type' => 'TVDB'
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'TVDB Barcode lookup failed: ' . $e->getMessage());
+            return null;
         }
     }
 }

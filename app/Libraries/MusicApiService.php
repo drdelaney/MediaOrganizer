@@ -7,6 +7,8 @@ namespace App\Libraries;
  */
 class MusicApiService
 {
+    use BarcodeLookupTrait;
+
     private $userAgent;
     private $client;
 
@@ -209,28 +211,12 @@ class MusicApiService
      */
     public function downloadPoster(string $url): ?string
     {
-        try {
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => $url,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_USERAGENT => $this->userAgent
-            ]);
+        helper('app');
 
-            $imageData = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($imageData === false || $httpCode !== 200) {
-                return null;
-            }
-
-            return $imageData;
-        } catch (\Exception $e) {
-            return null;
-        }
+        // fetch_remote_image() validates the destination host (and every
+        // redirect hop) resolves only to a public address, to prevent SSRF
+        // via a manipulated cover art URL.
+        return fetch_remote_image($url, $this->userAgent);
     }
     public function getPosters(string $mbid, string $type = 'MusicBrainz', int $limit = 10): array
     {
@@ -282,6 +268,56 @@ class MusicApiService
         } catch (\Exception $e) {
             log_message('error', 'MusicBrainz getPosters Error: ' . $e->getMessage());
             return [];
+        }
+    }
+
+    /**
+     * Find music details by barcode using UPCItemDB
+     */
+    public function findByBarcode(string $barcode)
+    {
+        $barcode = preg_replace('/[^0-9]/', '', (string)$barcode);
+        if ($barcode === '') {
+            return null;
+        }
+
+        try {
+            $item = $this->lookupBarcode($barcode);
+            if ($item && isset($item['error']) && $item['error'] === 'EXCEED_LIMIT') {
+                return $item;
+            }
+            if (!$item || empty($item['title'])) {
+                return null;
+            }
+
+            // Clean title
+            $clean = preg_replace('/\s*[\[(].*?[)\]]\s*/', ' ', $item['title']);
+            $clean = preg_replace('/\s{2,}/', ' ', $clean);
+            $clean = trim($clean);
+
+            // Extract year
+            $year = null;
+            if (preg_match('/\b(19\d{2}|20\d{2})\b/', $clean, $m)) {
+                $year = (int)$m[1];
+            }
+
+            // Search MusicBrainz
+            if ($this->isApiAvailable()) {
+                return $this->searchMedia($clean, $year);
+            }
+
+            // Fallback
+            return [
+                'title' => $clean,
+                'year' => $year,
+                'plot' => $item['description'] ?? null,
+                'studio' => $item['brand'] ?? null,
+                'poster_url' => !empty($item['images']) ? $item['images'][0] : null,
+                'type' => 'MusicBrainz'
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'Music Barcode lookup failed: ' . $e->getMessage());
+            return null;
         }
     }
 }

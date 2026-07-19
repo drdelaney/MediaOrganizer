@@ -816,6 +816,13 @@ $overridden = isset($overridden) ? $overridden : [];
                                             Used for API compliance.
                                         </div>
                                     </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="config_upcitemdb_key" class="form-label" data-bs-toggle="tooltip" title="UPCITEMDB_API_KEY">UPCItemDB API Key <i class="bi bi-info-circle small text-muted"></i> <?= !empty($overridden['UPCITEMDB_API_KEY']) ? '<span class="badge bg-secondary">From .env</span>' : '' ?></label>
+                                        <input type="text" class="form-control" id="config_upcitemdb_key" name="UPCITEMDB_API_KEY" value="<?= esc($lookupSettings['UPCITEMDB_API_KEY']) ?>" <?= !empty($overridden['UPCITEMDB_API_KEY']) ? 'disabled' : '' ?>>
+                                        <div class="form-text">
+                                            Optional. Used for production barcode lookups.
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="row">
                                     <div class="col-md-6 mb-3">

@@ -167,6 +167,11 @@
                                         <i class="bi bi-key"></i> Change Password
                                     </a>
                                 </li>
+                                <li>
+                                    <a class="dropdown-item" href="<?= base_url('settings/about') ?>">
+                                        <i class="bi bi-info-circle"></i> Support / About
+                                    </a>
+                                </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <a class="dropdown-item" href="<?= base_url('logout') ?>">
