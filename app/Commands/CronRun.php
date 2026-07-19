@@ -20,22 +20,14 @@ class CronRun extends BaseCommand
         $cronModel = new CronJobModel();
         $jobs = $cronModel->where('enabled', 1)->findAll();
 
-        $now = time();
+        $configModel = new \App\Models\ConfigurationModel();
+        $timezone = $configModel->getParam('timezone', 'UTC');
+        
+        $now = \CodeIgniter\I18n\Time::now($timezone);
         $runCount = 0;
 
         foreach ($jobs as $job) {
-            $due = false;
-            
-            if (!$job['next_run']) {
-                $due = true;
-            } else {
-                $nextRunTime = strtotime($job['next_run']);
-                if ($now >= $nextRunTime) {
-                    $due = true;
-                }
-            }
-
-            if ($due) {
+            if ($cronModel->isDue($job['schedule'] ?? '0 0 * * *', $job['last_run'])) {
                 CLI::write("Running job: {$job['name']} ({$job['job_key']})...", 'yellow');
                 $this->executeJob($job['job_key']);
                 $runCount++;
@@ -49,8 +41,7 @@ class CronRun extends BaseCommand
         }
 
         // Update a 'system_cron_last_run' setting to show it is active
-        $configModel = new \App\Models\ConfigurationModel();
-        $configModel->setParam('system_cron_last_run', date('Y-m-d H:i:s'));
+        $configModel->setParam('system_cron_last_run', \CodeIgniter\I18n\Time::now($timezone)->format('Y-m-d H:i:s'));
     }
 
     private function executeJob(string $key)

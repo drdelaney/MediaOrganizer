@@ -6,6 +6,8 @@ use CodeIgniter\HTTP\CURLRequest;
 
 class MovieApiService
 {
+    use BarcodeLookupTrait;
+
     private $tmdbApiKey;
     private $userAgent;
     private $client;
@@ -753,36 +755,23 @@ class MovieApiService
             return null;
         }
 
-        try {
-            log_message('info', 'TMDB API: Downloading poster from: ' . $posterUrl);
+        helper('app');
 
-            // Use cURL directly to ensure redirects are followed (image CDN may 30x)
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL => $posterUrl,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_USERAGENT => 'MediaOrganizer/1.0 (+https://github.com/drdelaney/MediaOrganizer)'
-            ]);
+        log_message('info', 'TMDB API: Downloading poster from: ' . $posterUrl);
 
-            $imageData = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlErr = curl_error($ch);
-            curl_close($ch);
+        // fetch_remote_image() follows redirects (image CDN may 30x) while
+        // validating that the host of every hop resolves only to a public
+        // address, to prevent SSRF via a manipulated poster URL.
+        $imageData = fetch_remote_image($posterUrl, 'MediaOrganizer/1.0 (+https://github.com/drdelaney/MediaOrganizer)');
 
-            if ($imageData === false || $httpCode < 200 || $httpCode >= 300) {
-                throw new \Exception('Failed to download poster, status: ' . ($httpCode ?: 'N/A') . ' error: ' . $curlErr);
-            }
-            
-            log_message('info', 'TMDB API: Poster downloaded successfully, size: ' . strlen($imageData) . ' bytes');
-
-            return $imageData;
-
-        } catch (\Exception $e) {
-            log_message('error', 'TMDB API: Poster download error: ' . $e->getMessage());
+        if ($imageData === null) {
+            log_message('error', 'TMDB API: Poster download failed for: ' . $posterUrl);
             return null;
         }
+
+        log_message('info', 'TMDB API: Poster downloaded successfully, size: ' . strlen($imageData) . ' bytes');
+
+        return $imageData;
     }
 
     /**
@@ -851,7 +840,7 @@ class MovieApiService
 
     /**
      * Resolve a UPC/EAN barcode to a product title, then map to TMDB movie/TV details when possible
-     * This uses UPCItemDB public trial endpoint (rate-limited). If TMDB is available, we search there.
+     * This uses UPCItemDB. If TMDB is available, we search there.
      * Returns normalized data like searchMovie/searchTv or minimal title-only data when TMDB unavailable.
      */
     public function findByBarcode(string $barcode, string $type = 'IMDB')
@@ -860,31 +849,18 @@ class MovieApiService
         if ($barcode === '') {
             return null;
         }
+
         try {
-            // 1) Query UPCItemDB trial API
-            $url = 'https://api.upcitemdb.com/prod/trial/lookup?upc=' . urlencode($barcode);
-            $resp = $this->client->get($url, [ 'headers' => [ 'Accept' => 'application/json' ]]);
-            if ($resp->getStatusCode() !== 200) {
-                log_message('warning', 'UPC lookup failed with status ' . $resp->getStatusCode());
+            // 1) Query UPCItemDB
+            $item = $this->lookupBarcode($barcode);
+            if ($item && isset($item['error']) && $item['error'] === 'EXCEED_LIMIT') {
+                return $item;
             }
-            $body = json_decode($resp->getBody() ?? '{}', true);
-            $title = null;
-            if (isset($body['items']) && is_array($body['items']) && count($body['items']) > 0) {
-                // Prefer first item with title
-                foreach ($body['items'] as $item) {
-                    $t = trim((string)($item['title'] ?? ''));
-                    if ($t !== '') { $title = $t; break; }
-                }
+            if (!$item || empty($item['title'])) {
+                return null;
             }
-            if (!$title) {
-                // Try description field as fallback
-                if (!empty($body['items'][0]['description'])) {
-                    $title = trim((string)$body['items'][0]['description']);
-                }
-            }
-            if (!$title) {
-                return null; // Could not resolve barcode to a title
-            }
+
+            $title = $item['title'];
 
             // Clean title (remove typical media suffixes e.g., (Blu-ray), [DVD], etc.)
             $clean = preg_replace('/\s*[\[(].*?[)\]]\s*/', ' ', $title);
@@ -914,11 +890,11 @@ class MovieApiService
                 'genre' => null,
                 'country' => null,
                 'studio' => null,
-                'plot' => null,
+                'plot' => $item['description'] ?? null,
                 'rating' => null,
                 'site' => null,
                 'o_site' => null,
-                'poster_url' => null,
+                'poster_url' => !empty($item['images']) ? $item['images'][0] : null,
                 'director' => null,
                 'classification' => null,
             ];

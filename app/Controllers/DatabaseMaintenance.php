@@ -640,6 +640,7 @@ class DatabaseMaintenance extends BaseController
             'IGDB_CLIENT_ID' => $configModel->getParam('IGDB_CLIENT_ID', ''),
             'IGDB_CLIENT_SECRET' => $configModel->getParam('IGDB_CLIENT_SECRET', ''),
             'MUSICBRAINZ_EMAIL' => $configModel->getParam('MUSICBRAINZ_EMAIL', ''),
+            'UPCITEMDB_API_KEY' => $configModel->getParam('UPCITEMDB_API_KEY', ''),
             'ENABLED_LOOKUPS' => $enabledLookups,
         ];
 
@@ -669,6 +670,7 @@ class DatabaseMaintenance extends BaseController
             'IGDB_CLIENT_ID' => $configModel->isEnvOverridden('IGDB_CLIENT_ID'),
             'IGDB_CLIENT_SECRET' => $configModel->isEnvOverridden('IGDB_CLIENT_SECRET'),
             'MUSICBRAINZ_EMAIL' => $configModel->isEnvOverridden('MUSICBRAINZ_EMAIL'),
+            'UPCITEMDB_API_KEY' => $configModel->isEnvOverridden('UPCITEMDB_API_KEY'),
             'ENABLED_LOOKUPS' => $configModel->isEnvOverridden('ENABLED_LOOKUPS'),
             'email.protocol' => $configModel->isEnvOverridden('email.protocol'),
             'email.fromEmail' => $configModel->isEnvOverridden('email.fromEmail'),

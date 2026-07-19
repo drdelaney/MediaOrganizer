@@ -8,6 +8,8 @@ namespace App\Libraries;
  */
 class GameApiService
 {
+    use BarcodeLookupTrait;
+
     private $clientId;
     private $clientSecret;
     private $accessToken;
@@ -334,6 +336,56 @@ class GameApiService
         } catch (\Exception $e) {
             log_message('error', 'IGDB getPosters Error: ' . $e->getMessage());
             return [];
+        }
+    }
+
+    /**
+     * Find game details by barcode using UPCItemDB
+     */
+    public function findByBarcode(string $barcode)
+    {
+        $barcode = preg_replace('/[^0-9]/', '', (string)$barcode);
+        if ($barcode === '') {
+            return null;
+        }
+
+        try {
+            $item = $this->lookupBarcode($barcode);
+            if ($item && isset($item['error']) && $item['error'] === 'EXCEED_LIMIT') {
+                return $item;
+            }
+            if (!$item || empty($item['title'])) {
+                return null;
+            }
+
+            // Clean title
+            $clean = preg_replace('/\s*[\[(].*?[)\]]\s*/', ' ', $item['title']);
+            $clean = preg_replace('/\s{2,}/', ' ', $clean);
+            $clean = trim($clean);
+
+            // Extract year
+            $year = null;
+            if (preg_match('/\b(19\d{2}|20\d{2})\b/', $clean, $m)) {
+                $year = (int)$m[1];
+            }
+
+            // Search IGDB
+            if ($this->isApiAvailable()) {
+                return $this->searchMedia($clean, $year);
+            }
+
+            // Fallback
+            return [
+                'title' => $clean,
+                'year' => $year,
+                'plot' => $item['description'] ?? null,
+                'studio' => $item['brand'] ?? null,
+                'poster_url' => !empty($item['images']) ? $item['images'][0] : null,
+                'type' => 'IGDB'
+            ];
+        } catch (\Exception $e) {
+            log_message('error', 'Game Barcode lookup failed: ' . $e->getMessage());
+            return null;
         }
     }
 }

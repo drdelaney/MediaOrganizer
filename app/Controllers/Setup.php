@@ -103,9 +103,44 @@ class Setup extends BaseController
         return $checks;
     }
 
+    /**
+     * True once the given param already has a non-empty value stored in
+     * the configuration table. Queries the DB directly rather than via
+     * ConfigurationModel::getParam(), which prefers an env override -- and
+     * several of these params (e.g. app.baseURL) ship a non-empty default
+     * in .env/.env.example, which would make an env-based check always
+     * report "already set" and block legitimate first-run writes.
+     */
+    private function isConfigParamSetInDb(string $param): bool
+    {
+        try {
+            $db = Database::connect();
+            if (!$db->tableExists('configuration')) {
+                return false;
+            }
+
+            $row = $db->table('configuration')->where('param', $param)->get()->getRowArray();
+            return !empty($row['value']);
+        } catch (\Throwable $e) {
+            log_message('error', 'Setup::isConfigParamSetInDb - ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * True once an admin password has already been persisted to the
+     * configuration table. Used as a data-backed guard against re-running
+     * setup and overwriting live credentials, independent of the
+     * app.setupComplete env flag (which admins may fail to set).
+     */
+    private function isPasswordAlreadySet(): bool
+    {
+        return $this->isConfigParamSetInDb('password_hash');
+    }
+
     public function run()
     {
-        if (env('app.setupComplete') === true) {
+        if (env('app.setupComplete') === true || $this->isPasswordAlreadySet()) {
             return redirect()->to('/')->with('error', 'Setup has already been completed.');
         }
 
@@ -212,13 +247,34 @@ class Setup extends BaseController
                 $appName = $this->request->getPost('app_name') ?: 'Media Organizer';
                 $timezone = $this->request->getPost('timezone') ?: 'UTC';
                 $initialPassword = $this->request->getPost('initial_password');
-                
-                $configModel->setParam('app.name', $appName);
-                $configModel->setParam('app.baseURL', base_url());
-                $configModel->setParam('timezone', $timezone);
-                $configModel->setParam('deauth_time', '5');
-                
-                if (!empty($initialPassword)) {
+
+                // Only ever initialize these on a genuine first run. Even
+                // though isPasswordAlreadySet() above should already stop a
+                // resubmission from reaching this point, guard each
+                // individual write too so a partially-configured instance
+                // (e.g. password set via some other path, or a future code
+                // change to the top-level gate) can't have its live
+                // app name, base URL, timezone, or session timeout silently
+                // overwritten by an unauthenticated POST. Checked against
+                // the DB directly (not getParam()), since getParam() prefers
+                // an env override and some of these ship non-empty .env
+                // defaults that would otherwise mask real first-run writes.
+                if (!$this->isConfigParamSetInDb('app.name')) {
+                    $configModel->setParam('app.name', $appName);
+                }
+                if (!$this->isConfigParamSetInDb('app.baseURL')) {
+                    $configModel->setParam('app.baseURL', base_url());
+                }
+                if (!$this->isConfigParamSetInDb('timezone')) {
+                    $configModel->setParam('timezone', $timezone);
+                }
+                if (!$this->isConfigParamSetInDb('deauth_time')) {
+                    $configModel->setParam('deauth_time', '5');
+                }
+
+                // Never overwrite an already-set admin password, even if this
+                // method is somehow reached again (e.g. setupComplete flag lag).
+                if (!empty($initialPassword) && !$this->isConfigParamSetInDb('password_hash')) {
                     $hash = password_hash($initialPassword, PASSWORD_DEFAULT);
                     $configModel->setParam('password_hash', $hash);
                 }

@@ -528,6 +528,9 @@
                         <div class="mb-3">
                             <label for="notes" class="form-label">Notes</label>
                             <textarea class="form-control" id="notes" name="notes" rows="4"><?= esc(old('notes', $movie['notes'])) ?></textarea>
+                            <div class="form-text">
+                                Use <code>&lt;!skipduplicate&gt;</code> to exempt this entry from duplicate lookups.
+                            </div>
                         </div>
                     </div>
                 </div>
