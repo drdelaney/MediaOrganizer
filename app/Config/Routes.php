@@ -119,6 +119,7 @@ $routes->group('database-maintenance', ['filter' => 'maintenanceauth'], function
     // Lookup tables management
     $routes->get('manage-lookups', 'DatabaseMaintenance::manageLookups');
     $routes->get('duplicate-detector', 'DatabaseMaintenance::duplicateDetector');
+    $routes->post('ping', 'DatabaseMaintenance::ping');
 
     // Medium routes
     $routes->post('medium/add', 'DatabaseMaintenance::addMedium');

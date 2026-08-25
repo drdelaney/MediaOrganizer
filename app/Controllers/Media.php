@@ -1339,7 +1339,7 @@ class Media extends BaseController
     {
         if ($this->request->isAJAX()) {
             $loanModel = new \App\Models\LoanModel();
-            $loan = $loanModel->select('loans.*, people.name as person_name, people.email, movies.title, movies.o_title')
+            $loan = $loanModel->select('loans.*, people.name as person_name, people.email, people.notifications, movies.title, movies.o_title')
                 ->join('people', 'people.person_id = loans.person_id')
                 ->join('movies', 'movies.movie_id = loans.movie_id')
                 ->where('loans.loan_id', $loanId)
@@ -1349,6 +1349,13 @@ class Media extends BaseController
                 return $this->response->setJSON([
                     'status' => 'error',
                     'message' => 'Loan record not found.'
+                ]);
+            }
+
+            if ((int)$loan['notifications'] === 0) {
+                return $this->response->setJSON([
+                    'status' => 'error',
+                    'message' => 'Email notifications are disabled for ' . $loan['person_name'] . '.'
                 ]);
             }
 
@@ -1417,9 +1424,10 @@ class Media extends BaseController
             $peopleModel = new \App\Models\PeopleModel();
             
             $data = [
-                'name'  => $this->request->getPost('name'),
-                'email' => $this->request->getPost('email'),
-                'phone' => $this->request->getPost('phone'),
+                'name'          => $this->request->getPost('name'),
+                'email'         => $this->request->getPost('email'),
+                'phone'         => $this->request->getPost('phone'),
+                'notifications' => $this->request->getPost('notifications') ?? 1,
             ];
 
             if ($peopleModel->insert($data)) {

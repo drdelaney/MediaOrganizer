@@ -21,7 +21,6 @@ class MaintenanceAuthFilter implements FilterInterface
         }
 
         // Check if recently authenticated (within dynamic timeout or 15 minutes default)
-        $authTime = session()->get('auth_time');
         $recentAuthTime = session()->get('recent_auth_time');
 
         $currentTime = time();
@@ -47,11 +46,21 @@ class MaintenanceAuthFilter implements FilterInterface
             return redirect()->to('/reauth');
         }
 
+        // Renew the auth timer on every successful access to maintenance pages
+        session()->set('recent_auth_time', time());
+
         return null;
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
     {
-        // No after-processing needed
+        // Add header for the frontend to update its timer
+        $recentAuthTime = session()->get('recent_auth_time');
+        if ($recentAuthTime) {
+            $configModel = new \App\Models\ConfigurationModel();
+            $deauthTimeMinutes = $configModel->getParam('deauth_time', 15);
+            $expiresAt = $recentAuthTime + ($deauthTimeMinutes * 60);
+            $response->setHeader('X-Maintenance-Expires', (string)$expiresAt);
+        }
     }
 }

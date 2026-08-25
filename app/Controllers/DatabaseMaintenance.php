@@ -433,18 +433,86 @@ class DatabaseMaintenance extends BaseController
         $configVersion = (int)$configModel->getParam('version', 0);
         $needsFix = $configVersion < 7;
 
-        // Check for pending migrations
-        $migrations = \Config\Services::migrations();
-        $available = $migrations->findMigrations();
-        $history = $migrations->getHistory();
-        $pendingMigrationsCount = count($available) - count($history);
+        $migrations = \Config\Services::migrations(null, $this->db);
+        // Ensure we check the App namespace for our migrations
+        $available = $migrations->setNamespace('App')->findMigrations();
+        
+        // Get all applied migrations from history across all groups/namespaces for better accuracy
+        $history = [];
+        if ($this->db->tableExists('migrations')) {
+            $history = $this->db->table('migrations')->get()->getResult();
+        }
+
+        $historyUids = [];
+        foreach ($history as $row) {
+            // Replicate CI4's getObjectUid logic: stripped version + class name
+            $historyUids[] = preg_replace('/[^0-9]/', '', $row->version) . $row->class;
+        }
+
+        $hasPendingMigrations = false;
+        foreach ($available as $migration) {
+            if (!in_array($migration->uid, $historyUids)) {
+                $hasPendingMigrations = true;
+                break;
+            }
+        }
+
+        // Check for pending notifications (overdue loans with notifications enabled)
+        $hasPendingNotifications = false;
+        $overdueCount = 0;
+        try {
+            $loanModel = new \App\Models\LoanModel();
+            $loanedMedia = $loanModel->getAllLoanedMedia();
+            $now = time();
+            $thirtyDaysAgo = $now - (30 * 24 * 60 * 60);
+
+            foreach ($loanedMedia as $loan) {
+                if (!empty($loan['date'])) {
+                    $loanDate = strtotime($loan['date']);
+                    if ($loanDate < $thirtyDaysAgo) {
+                        // Check if notifications are enabled for this person and they have an email
+                        if (($loan['person_notifications'] ?? 1) == 1 && !empty($loan['person_email'])) {
+                            $hasPendingNotifications = true;
+                            $overdueCount++;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'Could not check pending notifications: ' . $e->getMessage());
+        }
+
+        // Get current migration info directly from the database for accuracy
+        $currentMigration = 'None';
+        $lastAppliedTime = null;
+        
+        if ($this->db->tableExists('migrations')) {
+            $lastMigration = $this->db->table('migrations')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRow();
+                
+            if ($lastMigration) {
+                $className = $lastMigration->class;
+                // Strip namespace if present for cleaner display
+                if (($pos = strrpos($className, '\\')) !== false) {
+                    $className = substr($className, $pos + 1);
+                }
+                $currentMigration = $lastMigration->version . ' (' . $className . ')';
+                $lastAppliedTime = $lastMigration->time;
+            }
+        }
 
         $data = [
             'title' => 'Database Maintenance',
             'tables' => $this->getTableInfo(),
             'environment' => $this->checkEnvironment(),
             'needsFix' => $needsFix,
-            'pendingMigrationsCount' => $pendingMigrationsCount,
+            'hasPendingMigrations' => $hasPendingMigrations,
+            'hasPendingNotifications' => $hasPendingNotifications,
+            'overdueCount' => $overdueCount,
+            'currentMigration' => $currentMigration,
+            'lastAppliedTime' => $lastAppliedTime,
             'dbDriver' => $this->db->getPlatform(),
             'cronJobs' => $this->getCronJobsData(),
             'systemCronLastRun' => $configModel->getParam('system_cron_last_run')
@@ -516,10 +584,19 @@ class DatabaseMaintenance extends BaseController
             return redirect()->to('database-maintenance');
         }
 
+        // Consolidate migration groups to avoid double-application due to group mismatch
+        if ($this->db->tableExists('migrations')) {
+            $defaultGroup = config('Database')->defaultGroup ?? 'default';
+            $this->db->table('migrations')
+                ->where('group !=', $defaultGroup)
+                ->update(['group' => $defaultGroup]);
+        }
+
         try {
-            $migrations = \Config\Services::migrations();
+            $migrations = \Config\Services::migrations(null, $this->db);
+            $migrations->setNamespace('App');
             
-            if ($migrations->latest('App')) {
+            if ($migrations->latest()) {
                 return $this->response->setJSON([
                     'status' => 'success',
                     'message' => 'Latest migrations applied successfully.'
@@ -606,6 +683,11 @@ class DatabaseMaintenance extends BaseController
     /**
      * Show lookup tables management page
      */
+    public function ping()
+    {
+        return $this->response->setJSON(['status' => 'success', 'message' => 'Timer renewed']);
+    }
+
     public function manageLookups()
     {
         $tagModel = new \App\Models\TagModel();
@@ -684,6 +766,13 @@ class DatabaseMaintenance extends BaseController
             'email.SMTPVerifyPeerName' => $configModel->isEnvOverridden('email.SMTPVerifyPeerName'),
         ];
 
+        try {
+            $people = $this->peopleModel->orderBy('name')->findAll();
+        } catch (\Throwable $e) {
+            log_message('error', 'Could not load people in manageLookups: ' . $e->getMessage());
+            $people = [];
+        }
+
         $data = [
             'title' => 'Manage Lookup Tables',
             'mediums' => $this->mediaModel->orderBy('name')->findAll(),
@@ -691,7 +780,7 @@ class DatabaseMaintenance extends BaseController
             'volumes' => $this->volumeModel->orderBy('name')->findAll(),
             'codecs' => $this->vcodecModel->orderBy('name')->findAll(),
             'tags' => $tags,
-            'people' => $this->peopleModel->orderBy('name')->findAll(),
+            'people' => $people,
             'achannels' => $this->achannelModel->orderBy('name')->findAll(),
             'acodecs' => $this->acodecModel->orderBy('name')->findAll(),
             'languages' => $this->languageModel->orderBy('name')->findAll(),

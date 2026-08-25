@@ -39,7 +39,6 @@ class Auth extends BaseController
             session()->set([
                 'authenticated' => true,
                 'auth_time' => time(),
-                'recent_auth_time' => time() // Set initial reauth time upon login
             ]);
 
             // Handle remember-me

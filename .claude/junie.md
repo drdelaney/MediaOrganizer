@@ -1,0 +1,3 @@
+- Always follow the guidelines in .junie/ MD files.
+- Always follow the guidelines in ai_docs/ MD files.
+- 

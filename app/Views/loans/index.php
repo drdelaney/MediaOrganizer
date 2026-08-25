@@ -63,6 +63,7 @@ $loanedMedia = $loanedMedia ?? [];
                             <th>Title</th>
                             <th>Loaned To</th>
                             <th>Contact</th>
+                            <th>Notifications</th>
                             <th>Loan Date</th>
                             <th>Days Out</th>
                             <th>Medium</th>
@@ -139,6 +140,26 @@ $loanedMedia = $loanedMedia ?? [];
                                             <i class="bi bi-phone"></i> 
                                             <?= esc($loan['person_phone']) ?>
                                         </div>
+                                    <?php endif; ?>
+                                </td>
+
+                                <!-- Notifications -->
+                                <td>
+                                    <?php if ($loan['person_id']): ?>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input notification-toggle" type="checkbox" 
+                                                   id="notif-<?= $loan['loan_id'] ?>"
+                                                   data-person-id="<?= $loan['person_id'] ?>"
+                                                   data-person-name="<?= esc($loan['person_name'], 'attr') ?>"
+                                                   data-person-email="<?= esc($loan['person_email'] ?? '', 'attr') ?>"
+                                                   data-person-phone="<?= esc($loan['person_phone'] ?? '', 'attr') ?>"
+                                                   <?= ($loan['person_notifications'] ?? 1) ? 'checked' : '' ?>>
+                                            <label class="form-check-label visually-hidden" for="notif-<?= $loan['loan_id'] ?>">
+                                                Notifications
+                                            </label>
+                                        </div>
+                                    <?php else: ?>
+                                        -
                                     <?php endif; ?>
                                 </td>
 
@@ -355,6 +376,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Send email reminder
     const sendReminderBtn = document.getElementById('sendReminderBtn');
+
+    // Toggle notifications
+    document.querySelectorAll('.notification-toggle').forEach(toggle => {
+        toggle.addEventListener('change', function() {
+            const personId = this.dataset.personId;
+            const personName = this.dataset.personName;
+            const personEmail = this.dataset.personEmail;
+            const personPhone = this.dataset.personPhone;
+            const isChecked = this.checked;
+            
+            this.disabled = true;
+            
+            const formData = new URLSearchParams();
+            formData.append('name', personName);
+            formData.append('email', personEmail);
+            formData.append('phone', personPhone);
+            formData.append('notifications', isChecked ? 1 : 0);
+            formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+
+            fetch(`<?= base_url('people/update') ?>/${personId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData.toString()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update all other toggles for the same person
+                    document.querySelectorAll(`.notification-toggle[data-person-id="${personId}"]`).forEach(t => {
+                        t.checked = isChecked;
+                        t.disabled = false;
+                    });
+                    showNotification(`Notifications ${isChecked ? 'enabled' : 'disabled'} for ${personName}`, 'success');
+                } else {
+                    this.checked = !isChecked;
+                    this.disabled = false;
+                    showNotification(data.message || 'Error updating notification settings', 'error');
+                }
+            })
+            .catch(error => {
+                this.checked = !isChecked;
+                this.disabled = false;
+                showNotification('Connection error occurred: ' + error.message, 'error');
+            });
+        });
+    });
+
     if (sendReminderBtn) {
         sendReminderBtn.addEventListener('click', function() {
             const checkedBoxes = document.querySelectorAll('.loan-checkbox:checked');

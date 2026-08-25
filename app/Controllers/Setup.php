@@ -14,7 +14,8 @@ class Setup extends BaseController
         }
 
         // Debug: Check if we can see migrations
-        $migrations = \Config\Services::migrations();
+        $db = Database::connect();
+        $migrations = \Config\Services::migrations(null, $db);
         $available = $migrations->findMigrations();
         log_message('debug', 'Setup::index - Found ' . count($available) . ' migrations');
         foreach ($available as $m) {
@@ -151,13 +152,14 @@ class Setup extends BaseController
         // Increase execution time for migrations and seeds
         set_time_limit(300);
 
-        $migrations = \Config\Services::migrations();
+        $db = Database::connect();
+        $migrations = \Config\Services::migrations(null, $db);
         $seeder = Database::seeder();
 
         try {
             // Check for missing extensions
             $requiredExtensions = ['intl', 'mbstring'];
-            $dbDriver = Database::connect()->getPlatform();
+            $dbDriver = $db->getPlatform();
             $dbExtensions = [
                 'MySQLi' => 'mysqli',
                 'SQLite3' => 'sqlite3',
@@ -207,22 +209,17 @@ class Setup extends BaseController
             $found = $migrations->findMigrations();
             log_message('debug', 'Setup::run - Discovered ' . count($found) . ' migrations');
 
-            if ($migrations->latest('App')) {
+            if ($migrations->latest()) {
                 log_message('debug', 'Setup::run - Migrations finished successfully');
             } else {
-                 log_message('debug', 'Setup::run - Migrations latest(\'App\') returned false/failed. Trying without namespace.');
-                 if ($migrations->latest()) {
-                     log_message('debug', 'Setup::run - Migrations latest() successful');
-                 } else {
-                     log_message('error', 'Setup::run - Migrations failed completely');
-                 }
+                log_message('error', 'Setup::run - Migrations failed completely');
             }
             
             $history = $migrations->getHistory();
             log_message('debug', 'Setup::run - History after: ' . count($history));
             
             // Run Seeds if database is empty
-            $db = Database::connect();
+            // $db already connected
             
             // For SQLite, make sure we have the tables before seeding
             if ($db->getPlatform() === 'SQLite3') {
@@ -378,7 +375,7 @@ class Setup extends BaseController
             $data = [
                 'version'   => $version,
                 'class'     => $class,
-                'group'     => 'App',
+                'group'     => 'default',
                 'namespace' => 'App',
                 'time'      => time(),
                 'batch'     => $batch,
@@ -410,8 +407,8 @@ class Setup extends BaseController
                 $updateData = [];
                 $firstRecord = $existing[0];
 
-                if ($firstRecord['group'] !== 'App') {
-                    $updateData['group'] = 'App';
+                if ($firstRecord['group'] !== 'default') {
+                    $updateData['group'] = 'default';
                 }
                 if ($firstRecord['class'] !== $class) {
                     $updateData['class'] = $class;
