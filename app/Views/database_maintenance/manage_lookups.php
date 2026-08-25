@@ -353,6 +353,7 @@ $overridden = isset($overridden) ? $overridden : [];
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Phone</th>
+                                    <th>Notifications</th>
                                     <th style="width: 150px;">Actions</th>
                                 </tr>
                                 </thead>
@@ -364,11 +365,19 @@ $overridden = isset($overridden) ? $overridden : [];
                                         <td><?= $person['email'] ? esc($person['email']) : '<span class="text-muted">-</span>' ?></td>
                                         <td><?= $person['phone'] ? esc($person['phone']) : '<span class="text-muted">-</span>' ?></td>
                                         <td>
+                                            <?php if ($person['notifications'] ?? 1): ?>
+                                                <span class="badge bg-success">Enabled</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary">Disabled</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
                                             <button class="btn btn-sm btn-info edit-person"
                                                     data-id="<?= $person['person_id'] ?>"
                                                     data-name="<?= esc($person['name'], 'attr') ?>"
                                                     data-email="<?= esc($person['email'], 'attr') ?>"
-                                                    data-phone="<?= esc($person['phone'], 'attr') ?>">
+                                                    data-phone="<?= esc($person['phone'], 'attr') ?>"
+                                                    data-notifications="<?= $person['notifications'] ?? 1 ?>">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-sm btn-danger delete-person"
@@ -1208,6 +1217,12 @@ $overridden = isset($overridden) ? $overridden : [];
                             <label for="person_phone" class="form-label">Phone</label>
                             <input type="text" class="form-control" id="person_phone" name="phone">
                         </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="person_notifications" name="notifications" value="1" checked>
+                                <label class="form-check-label" for="person_notifications">Email Notifications</label>
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -1241,6 +1256,12 @@ $overridden = isset($overridden) ? $overridden : [];
                         <div class="mb-3">
                             <label for="edit_person_phone" class="form-label">Phone</label>
                             <input type="text" class="form-control" id="edit_person_phone" name="phone">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="edit_person_notifications" name="notifications" value="1">
+                                <label class="form-check-label" for="edit_person_notifications">Email Notifications</label>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -1525,6 +1546,18 @@ $overridden = isset($overridden) ? $overridden : [];
             // Helper function to save current tab to URL hash
             function saveActiveTab() {
                 window.location.hash = getActiveTabId();
+                renewTimer();
+            }
+
+            // Renew the maintenance auth timer
+            function renewTimer() {
+                fetch('<?= base_url('database-maintenance/ping') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        '<?= csrf_header() ?>': '<?= csrf_hash() ?>'
+                    }
+                });
             }
             
             // Restore active tab from URL hash on page load
@@ -2185,6 +2218,7 @@ $overridden = isset($overridden) ? $overridden : [];
                 const name = document.getElementById('person_name').value;
                 const email = document.getElementById('person_email').value;
                 const phone = document.getElementById('person_phone').value;
+                const notifications = document.getElementById('person_notifications').checked ? 1 : 0;
 
                 fetch('<?= base_url('people/add') ?>', {
                     method: 'POST',
@@ -2192,7 +2226,7 @@ $overridden = isset($overridden) ? $overridden : [];
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
+                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone) + '&notifications=' + notifications
                 })
                     .then(response => {
                         if (response.status === 401) return;
@@ -2217,11 +2251,13 @@ $overridden = isset($overridden) ? $overridden : [];
                     const name = this.dataset.name;
                     const email = this.dataset.email;
                     const phone = this.dataset.phone;
+                    const notifications = this.dataset.notifications;
 
                     document.getElementById('edit_person_id').value = id;
                     document.getElementById('edit_person_name').value = name;
                     document.getElementById('edit_person_email').value = email;
                     document.getElementById('edit_person_phone').value = phone;
+                    document.getElementById('edit_person_notifications').checked = (parseInt(notifications) === 1);
 
                     new bootstrap.Modal(document.getElementById('editPersonModal')).show();
                 });
@@ -2232,6 +2268,7 @@ $overridden = isset($overridden) ? $overridden : [];
                 const name = document.getElementById('edit_person_name').value;
                 const email = document.getElementById('edit_person_email').value;
                 const phone = document.getElementById('edit_person_phone').value;
+                const notifications = document.getElementById('edit_person_notifications').checked ? 1 : 0;
 
                 fetch(`<?= base_url('people/update') ?>/${id}`, {
                     method: 'POST',
@@ -2239,7 +2276,7 @@ $overridden = isset($overridden) ? $overridden : [];
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone)
+                    body: 'name=' + encodeURIComponent(name) + '&email=' + encodeURIComponent(email) + '&phone=' + encodeURIComponent(phone) + '&notifications=' + notifications
                 })
                     .then(response => {
                         if (response.status === 401) return;

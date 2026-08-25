@@ -142,15 +142,25 @@
                 </div>
             </div>
 
-            <?php if (isset($pendingMigrationsCount) && $pendingMigrationsCount > 0): ?>
             <div class="col-md-4 mb-4">
-                <div class="card">
+                <div class="card <?= ($hasPendingMigrations ?? false) ? 'border-danger' : '' ?>">
                     <div class="card-body text-center">
-                        <i class="bi bi-database-gear display-4 text-danger"></i>
+                        <i class="bi bi-database-gear display-4 <?= ($hasPendingMigrations ?? false) ? 'text-danger' : 'text-secondary' ?>"></i>
                         <h5 class="card-title mt-3">Apply Migrations</h5>
-                        <p class="card-text">Apply latest database migrations to keep your schema up to date.</p>
+                        <div class="card-text mb-3">
+                            Current Version: <strong><?= esc($currentMigration ?? 'None') ?></strong><br>
+                            <?php if (!empty($lastAppliedTime)): ?>
+                                <small class="text-muted">Applied on: <?= date('Y-m-d H:i:s', (int)$lastAppliedTime) ?></small><br>
+                            <?php endif; ?>
+                            <hr class="my-2">
+                            <?php if ($hasPendingMigrations ?? false): ?>
+                                <span class="text-danger"><strong>Pending migrations available.</strong></span>
+                            <?php else: ?>
+                                <span class="text-success">Database is up to date.</span>
+                            <?php endif; ?>
+                        </div>
                         <div class="btn-group w-100">
-                            <button id="apply-migrations-btn" class="btn btn-danger">
+                            <button id="apply-migrations-btn" class="btn <?= ($hasPendingMigrations ?? false) ? 'btn-danger' : 'btn-secondary' ?>" <?= ($hasPendingMigrations ?? false) ? '' : 'disabled' ?>>
                                 <i class="bi bi-database-up"></i> Apply Now
                             </button>
                             <?php if (env('app.setupComplete') !== true): ?>
@@ -162,7 +172,6 @@
                     </div>
                 </div>
             </div>
-            <?php endif; ?>
 
             <div class="col-md-4 mb-4">
                 <div class="card">
@@ -170,6 +179,11 @@
                         <i class="bi bi-calendar-check display-4 text-secondary"></i>
                         <h5 class="card-title mt-3">Cron Jobs</h5>
                         <p class="card-text">Manage and monitor background tasks and scheduled maintenance.</p>
+                        <?php if ($hasPendingNotifications ?? false): ?>
+                            <p class="card-text text-warning small mb-3">
+                                <i class="bi bi-envelope-exclamation"></i> <strong><?= $overdueCount ?? 0 ?></strong> loan(s) pending reminder emails.
+                            </p>
+                        <?php endif; ?>
                         <button id="show-cron-btn" class="btn btn-secondary">
                             <i class="bi bi-calendar-check"></i> Manage Crons
                         </button>

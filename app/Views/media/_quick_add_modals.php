@@ -74,6 +74,12 @@
                         <label for="new_person_phone" class="form-label">Phone (Optional)</label>
                         <input type="text" class="form-control" id="new_person_phone" placeholder="Enter phone number">
                     </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="new_person_notifications" value="1" checked>
+                            <label class="form-check-label" for="new_person_notifications">Email Notifications</label>
+                        </div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -323,6 +329,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const name = document.getElementById('new_person_name').value;
             const email = document.getElementById('new_person_email').value;
             const phone = document.getElementById('new_person_phone').value;
+            const notifications = document.getElementById('new_person_notifications').checked ? 1 : 0;
             const alertDiv = document.getElementById('addPersonAlert');
             
             if (!name || !email) {
@@ -338,6 +345,7 @@ document.addEventListener('DOMContentLoaded', function() {
             formData.append('name', name);
             formData.append('email', email);
             formData.append('phone', phone);
+            formData.append('notifications', notifications);
 
             fetch('<?= base_url('media/addPerson') ?>', {
                 method: 'POST',
@@ -364,6 +372,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('new_person_name').value = '';
                     document.getElementById('new_person_email').value = '';
                     document.getElementById('new_person_phone').value = '';
+                    document.getElementById('new_person_notifications').checked = true;
                     alertDiv.innerHTML = '';
                 } else {
                     let errorMsg = data.errors ? Object.values(data.errors).join('<br>') : 'Error adding person';

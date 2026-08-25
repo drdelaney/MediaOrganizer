@@ -42,6 +42,7 @@ class CronLoanReminders extends BaseCommand
                     $allLoansByPerson[$personId] = [
                         'person_name' => $loan['person_name'],
                         'person_email' => $loan['person_email'],
+                        'notifications' => $loan['person_notifications'] ?? 1,
                         'loans' => []
                     ];
                 }
@@ -81,8 +82,10 @@ class CronLoanReminders extends BaseCommand
                     continue;
                 }
 
-                if (empty($personData['person_email'])) {
-                    $failedCount++;
+                if (empty($personData['person_email']) || (int)$personData['notifications'] === 0) {
+                    if (empty($personData['person_email'])) {
+                        $failedCount++;
+                    }
                     continue;
                 }
 
@@ -135,14 +138,16 @@ class CronLoanReminders extends BaseCommand
             foreach ($allLoansByPerson as $personId => $user) {
                 $items = array_map(function($loan) {
                     $color = $loan['is_overdue'] ? 'red' : 'inherit';
-                    return "<span style='color: {$color};'>{$loan['title']} ({$loan['date']})</span>";
+                    return "<div style='color: {$color}; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #eee;'><strong>{$loan['title']}</strong><br><small>({$loan['date']})</small></div>";
                 }, $user['loans']);
                 
                 $status = "";
                 if (in_array($personId, $notifiedPersonIds)) {
                     $status = "<span style='color: green;'>Notified (Overdue)</span>";
                 } elseif (array_filter($user['loans'], function($l) { return $l['is_overdue']; })) {
-                    if (empty($user['person_email'])) {
+                    if ((int)$user['notifications'] === 0) {
+                        $status = "<span style='color: gray;'>Notifications Disabled</span>";
+                    } elseif (empty($user['person_email'])) {
                         $status = "<span style='color: orange;'>Overdue (No Email)</span>";
                     } else {
                         $status = "<span style='color: red;'>Notification Failed</span>";
@@ -152,10 +157,10 @@ class CronLoanReminders extends BaseCommand
                 }
 
                 $html .= "<tr>";
-                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px;'>{$user['person_name']}</td>";
-                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px;'>{$user['person_email']}</td>";
-                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px;'>" . implode("<br>", $items) . "</td>";
-                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px;'>{$status}</td>";
+                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px; vertical-align: top;'>{$user['person_name']}</td>";
+                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px; vertical-align: top;'>{$user['person_email']}</td>";
+                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px; vertical-align: top;'>" . implode("", $items) . "</td>";
+                $html .= "<td style='border: 1px solid #dee2e6; padding: 8px; vertical-align: top;'>{$status}</td>";
                 $html .= "</tr>";
             }
             $html .= "</tbody></table>";
@@ -173,9 +178,9 @@ class CronLoanReminders extends BaseCommand
 
     private function buildSimpleReminderEmail($personName, $loans)
     {
-        $mediaList = "<ul>";
+        $mediaList = "<ul style='list-style-type: disc; padding-left: 20px;'>";
         foreach ($loans as $loan) {
-            $mediaList .= "<li><strong>{$loan['title']}</strong> (Loaned on: {$loan['date']})</li>";
+            $mediaList .= "<li style='margin-bottom: 15px;'><strong>{$loan['title']}</strong><br><span style='color: #666;'>Loaned on: {$loan['date']}</span></li>";
         }
         $mediaList .= "</ul>";
 

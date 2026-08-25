@@ -19,7 +19,12 @@ class Loans extends BaseController
      */
     public function index()
     {
-        $loanedMedia = $this->loanModel->getAllLoanedMedia();
+        try {
+            $loanedMedia = $this->loanModel->getAllLoanedMedia();
+        } catch (\Throwable $e) {
+            log_message('error', 'Could not load loaned media in Loans controller: ' . $e->getMessage());
+            $loanedMedia = [];
+        }
 
         $data = [
             'title' => 'Currently Loaned Media',
@@ -80,9 +85,10 @@ class Loans extends BaseController
                 $personId = $loan['person_id'];
                 if (!isset($loansByPerson[$personId])) {
                     $loansByPerson[$personId] = [
-                        'person_name' => $loan['person_name'],
-                        'person_email' => $loan['person_email'],
-                        'loans' => []
+                        'person_name'   => $loan['person_name'],
+                        'person_email'  => $loan['person_email'],
+                        'notifications' => $loan['person_notifications'] ?? 1,
+                        'loans'         => []
                     ];
                 }
                 $loansByPerson[$personId]['loans'][] = $loan;
@@ -96,6 +102,12 @@ class Loans extends BaseController
             $errors = [];
 
             foreach ($loansByPerson as $personId => $personData) {
+                if ((int)$personData['notifications'] === 0) {
+                    $failedCount++;
+                    $errors[] = "Notifications are disabled for {$personData['person_name']}";
+                    continue;
+                }
+
                 if (empty($personData['person_email'])) {
                     $failedCount++;
                     $errors[] = "No email address for {$personData['person_name']}";
@@ -209,11 +221,11 @@ class Loans extends BaseController
             }
             $daysText = "<span class='days-out {$daysClass}'>{$daysOut} " . ($daysOut === 1 ? 'day' : 'days') . " out</span>";
             
-            $message .= ">
+            $message .= "
+                <div class=\"media-item\">
                     <div class=\"media-title\">{$title}{$year}</div>
-                    {$mediumLine}{$daysText}<br>
-                </div>
-                </p>";
+                    {$mediumLine}{$daysText}
+                </div>";
         }
 
         $message .= "

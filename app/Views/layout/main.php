@@ -212,6 +212,29 @@
                             </button>
                         </span>
                     </p>
+                    <?php if (ENVIRONMENT === 'development' && session()->get('authenticated')): ?>
+                        <div class="mt-2 text-muted small" id="debug-auth-timer">
+                            <?php
+                                $recentAuthTime = session()->get('recent_auth_time');
+                                if ($recentAuthTime):
+                                    $configModel = new \App\Models\ConfigurationModel();
+                                    $deauthTimeMinutes = $configModel->getParam('deauth_time', 15);
+                                    $expiresAt = $recentAuthTime + ($deauthTimeMinutes * 60);
+                                    $timeLeft = $expiresAt - time();
+                            ?>
+                                <span class="badge bg-info text-dark" title="Maintenance session expiration timer (Development Mode Only)">
+                                    <i class="bi bi-shield-lock"></i> Maintenance Expiry: 
+                                    <span id="auth-timer-countdown" data-expires="<?= $expiresAt ?>" data-now="<?= time() ?>">
+                                        <?= gmdate($timeLeft > 3600 ? "H:i:s" : "i:s", max(0, $timeLeft)) ?>
+                                    </span>
+                                </span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary" title="Development Mode Only">
+                                    <i class="bi bi-shield-slash"></i> Maintenance: Locked
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -316,6 +339,27 @@
                     window.location.href = '<?= base_url('login') ?>';
                     return response;
                 }
+
+                // Update maintenance timer if header is present
+                const maintenanceExpires = response.headers.get('X-Maintenance-Expires');
+                if (maintenanceExpires) {
+                    const timerSpan = document.getElementById('auth-timer-countdown');
+                    if (timerSpan) {
+                        timerSpan.dataset.expires = maintenanceExpires;
+                        const badge = timerSpan.closest('.badge');
+                        if (badge) {
+                            badge.classList.remove('bg-danger');
+                            badge.classList.add('bg-info');
+                        }
+                    } else {
+                        // If it was locked, we might need to reload or reconstruct the UI
+                        // For now, a reload is safest if the UI needs to change significantly
+                        const debugContainer = document.getElementById('debug-auth-timer');
+                        if (debugContainer && debugContainer.innerHTML.includes('Locked')) {
+                            location.reload();
+                        }
+                    }
+                }
                 
                 return response;
             };
@@ -323,6 +367,48 @@
     </script>
     
     <!-- Page-specific scripts -->
+    <?php if (ENVIRONMENT === 'development' && session()->get('authenticated')): ?>
+    <script>
+        (function() {
+            const timerSpan = document.getElementById('auth-timer-countdown');
+            if (timerSpan) {
+                const serverNow = parseInt(timerSpan.dataset.now);
+                const clientNow = Math.floor(Date.now() / 1000);
+                const offset = clientNow - serverNow;
+
+                const updateTimer = () => {
+                    const currentExpires = parseInt(timerSpan.dataset.expires);
+                    const now = Math.floor(Date.now() / 1000) - offset;
+                    const timeLeft = Math.max(0, currentExpires - now);
+                    
+                    if (timeLeft <= 0) {
+                        timerSpan.textContent = 'Expired';
+                        const badge = timerSpan.closest('.badge');
+                        if (badge) {
+                            badge.classList.replace('bg-info', 'bg-danger');
+                        }
+                        return;
+                    }
+                    
+                    const hours = Math.floor(timeLeft / 3600);
+                    const minutes = Math.floor((timeLeft % 3600) / 60);
+                    const seconds = timeLeft % 60;
+                    
+                    let timeStr = '';
+                    if (hours > 0) {
+                        timeStr += hours.toString().padStart(2, '0') + ':';
+                    }
+                    timeStr += minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0');
+                    
+                    timerSpan.textContent = timeStr;
+                };
+                
+                updateTimer(); // Run immediately
+                setInterval(updateTimer, 1000);
+            }
+        })();
+    </script>
+    <?php endif; ?>
     <?= $this->renderSection('scripts') ?>
 </body>
 </html>

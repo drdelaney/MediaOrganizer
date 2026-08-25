@@ -15,7 +15,7 @@ class LoanModel extends Model
      */
     public function getActiveLoanForMedia($mediaId)
     {
-        return $this->select('loans.*, people.name as person_name, people.email, people.phone')
+        return $this->select('loans.*, people.name as person_name, people.email, people.phone, people.notifications')
             ->join('people', 'people.person_id = loans.person_id')
             ->where('loans.movie_id', $mediaId)
             ->where('loans.return_date IS NULL')
@@ -27,7 +27,7 @@ class LoanModel extends Model
      */
     public function getLoanHistoryForMedia($mediaId)
     {
-        return $this->select('loans.*, people.name as person_name, people.email, people.phone')
+        return $this->select('loans.*, people.name as person_name, people.email, people.phone, people.notifications')
             ->join('people', 'people.person_id = loans.person_id')
             ->where('loans.movie_id', $mediaId)
             ->orderBy('loans.date', 'DESC')
@@ -64,7 +64,8 @@ class LoanModel extends Model
             // Try to find the active loan record for each
             $loan = $this->select('loans.*, 
                                  people.person_id, people.name as person_name, 
-                                 people.email as person_email, people.phone as person_phone')
+                                 people.email as person_email, people.phone as person_phone,
+                                 people.notifications as person_notifications')
                 ->join('people', 'people.person_id = loans.person_id', 'left')
                 ->where('loans.movie_id', $movie['movie_id'])
                 ->where('loans.return_date IS NULL')
@@ -88,6 +89,7 @@ class LoanModel extends Model
                     'person_name' => 'Unknown (Orphaned Record)',
                     'person_email' => null,
                     'person_phone' => null,
+                    'person_notifications' => 1,
                     'date' => null,
                     'medium_name' => $mediumName
                 ]);

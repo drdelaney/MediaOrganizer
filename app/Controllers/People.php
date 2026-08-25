@@ -37,7 +37,8 @@ class People extends BaseController
             $data = [
                 'name' => $this->request->getPost('name'),
                 'email' => $this->request->getPost('email') ?: null,
-                'phone' => $this->request->getPost('phone') ?: null
+                'phone' => $this->request->getPost('phone') ?: null,
+                'notifications' => $this->request->getPost('notifications') ?? 1
             ];
 
             if ($this->peopleModel->insert($data)) {
@@ -67,7 +68,8 @@ class People extends BaseController
                 'person_id' => $id,
                 'name' => $this->request->getPost('name'),
                 'email' => $this->request->getPost('email') ?: null,
-                'phone' => $this->request->getPost('phone') ?: null
+                'phone' => $this->request->getPost('phone') ?: null,
+                'notifications' => $this->request->getPost('notifications') ?? 1
             ];
 
             if ($this->peopleModel->update($id, $data)) {
