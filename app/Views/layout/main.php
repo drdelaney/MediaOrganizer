@@ -103,6 +103,41 @@
         </div>
     <?php endif; ?>
 
+    <?php
+    // Check for uncommitted database migrations
+    $showMigrationWarning = false;
+    static $cachedMigrationWarning = null;
+    if ($cachedMigrationWarning !== null) {
+        $showMigrationWarning = $cachedMigrationWarning;
+    } else {
+        try {
+            if ($setupComplete && has_pending_migrations()) {
+                $showMigrationWarning = true;
+            }
+        } catch (\Throwable $e) {
+            // Silently fail if DB is not ready
+        }
+        $cachedMigrationWarning = $showMigrationWarning;
+    }
+
+    $matchedRouteName = '';
+    try {
+        $matched = service('router')->getMatchedRoute();
+        if (is_array($matched) && isset($matched[0])) {
+            $matchedRouteName = $matched[0];
+        }
+    } catch (\Throwable $e) {
+        // Silently fail if router is not initialized
+    }
+
+    if ($showMigrationWarning && $matchedRouteName !== 'database-maintenance' && $matchedRouteName !== 'setup'): ?>
+        <div class="alert alert-warning alert-dismissible fade show mb-0 rounded-0 text-center" role="alert">
+            <i class="bi bi-database-exclamation"></i>
+            <strong>Database Migration Notice!</strong> You have uncommitted database migration changes. Please visit <a href="<?= base_url('database-maintenance') ?>" class="alert-link">Database Maintenance</a> to apply pending migrations.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
     <!-- Navigation -->
     <?php if (!isset($hide_nav) || !$hide_nav): ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">

@@ -551,3 +551,57 @@ if (!function_exists('get_wishlist_tag')) {
         return null;
     }
 }
+
+/**
+ * Check if there are uncommitted / pending database migrations.
+ * 
+ * @param bool $refresh Whether to refresh cached result
+ * @return bool True if there are pending migrations, false otherwise
+ */
+if (!function_exists('has_pending_migrations')) {
+    function has_pending_migrations(bool $refresh = false): bool
+    {
+        static $cachedHasPending = null;
+        if (!$refresh && $cachedHasPending !== null) {
+            return $cachedHasPending;
+        }
+
+        try {
+            $db = \Config\Database::connect();
+            $migrationTable = config('Migrations')->table ?? 'migrations';
+            if (!$db->tableExists($migrationTable)) {
+                $cachedHasPending = false;
+                return false;
+            }
+
+            $migrations = \Config\Services::migrations(null, $db);
+            $available = $migrations->setNamespace('App')->findMigrations();
+
+            if (empty($available)) {
+                $cachedHasPending = false;
+                return false;
+            }
+
+            $history = $db->table($migrationTable)->get()->getResult();
+            $historyUids = [];
+            foreach ($history as $row) {
+                // Stripped version + class name matches CI4's getObjectUid
+                $historyUids[] = preg_replace('/[^0-9]/', '', $row->version) . $row->class;
+            }
+
+            $hasPending = false;
+            foreach ($available as $migration) {
+                if (!in_array($migration->uid, $historyUids, true)) {
+                    $hasPending = true;
+                    break;
+                }
+            }
+
+            $cachedHasPending = $hasPending;
+            return $cachedHasPending;
+        } catch (\Throwable $e) {
+            $cachedHasPending = false;
+            return false;
+        }
+    }
+}

@@ -25,12 +25,15 @@ class GameApiService
         $this->userAgent = $configModel->getParam('user_agent', 'MediaOrganizer/1.0');
         
         $this->client = \Config\Services::curlrequest([
-            'baseURI' => 'https://api.igdb.com/v4/',
-            'timeout' => 30,
-            'headers' => [
+            'baseURI'     => 'https://api.igdb.com/v4/',
+            'timeout'     => 30,
+            'http_errors' => false,
+            'version'     => 1.1,
+            'headers'     => [
                 'User-Agent' => $this->userAgent,
+                'Accept'     => 'application/json',
             ],
-        ]);
+        ], null, null, false);
     }
 
     /**
@@ -50,18 +53,26 @@ class GameApiService
             return $this->accessToken;
         }
 
+        if (!$this->isApiAvailable()) {
+            return null;
+        }
+
         try {
             $tokenClient = \Config\Services::curlrequest([
-                'headers' => [
+                'timeout'     => 30,
+                'http_errors' => false,
+                'version'     => 1.1,
+                'headers'     => [
                     'User-Agent' => $this->userAgent,
+                    'Accept'     => 'application/json',
                 ],
-            ]);
+            ], null, null, false);
             $response = $tokenClient->post('https://id.twitch.tv/oauth2/token', [
-                'query' => [
-                    'client_id' => $this->clientId,
+                'form_params' => [
+                    'client_id'     => $this->clientId,
                     'client_secret' => $this->clientSecret,
-                    'grant_type' => 'client_credentials',
-                ]
+                    'grant_type'    => 'client_credentials',
+                ],
             ]);
 
             if ($response->getStatusCode() === 200) {
@@ -69,6 +80,8 @@ class GameApiService
                 $this->accessToken = $data['access_token'] ?? null;
                 return $this->accessToken;
             }
+
+            log_message('error', 'IGDB Auth Error (' . $response->getStatusCode() . '): ' . $response->getBody());
         } catch (\Exception $e) {
             log_message('error', 'IGDB Auth Error: ' . $e->getMessage());
         }
@@ -82,20 +95,28 @@ class GameApiService
     public function searchMedia(string $title, ?int $year = null): ?array
     {
         $token = $this->getAccessToken();
-        if (!$token) return null;
+        if (!$token) {
+            return null;
+        }
 
         $body = 'search "' . addslashes($title) . '"; fields id,name,first_release_date,summary,genres.name,involved_companies.company.name,cover.url,platforms.name,url; limit 1;';
 
         try {
             $response = $this->client->post('games', [
                 'headers' => [
-                    'Client-ID' => $this->clientId,
+                    'Client-ID'     => $this->clientId,
                     'Authorization' => 'Bearer ' . $token,
                 ],
-                'body' => $body
+                'body'    => $body,
             ]);
 
+            if ($response->getStatusCode() === 401) {
+                $this->accessToken = null;
+                return null;
+            }
+
             if ($response->getStatusCode() !== 200) {
+                log_message('error', 'IGDB Search Error (' . $response->getStatusCode() . '): ' . $response->getBody());
                 return null;
             }
 
@@ -117,20 +138,28 @@ class GameApiService
     public function getMediaDetails(int $id): ?array
     {
         $token = $this->getAccessToken();
-        if (!$token) return null;
+        if (!$token) {
+            return null;
+        }
 
         $body = "fields id,name,first_release_date,summary,genres.name,involved_companies.company.name,cover.url,platforms.name,url; where id = {$id};";
 
         try {
             $response = $this->client->post('games', [
                 'headers' => [
-                    'Client-ID' => $this->clientId,
+                    'Client-ID'     => $this->clientId,
                     'Authorization' => 'Bearer ' . $token,
                 ],
-                'body' => $body
+                'body'    => $body,
             ]);
 
+            if ($response->getStatusCode() === 401) {
+                $this->accessToken = null;
+                return null;
+            }
+
             if ($response->getStatusCode() !== 200) {
+                log_message('error', 'IGDB Details Error (' . $response->getStatusCode() . '): ' . $response->getBody());
                 return null;
             }
 
@@ -152,7 +181,9 @@ class GameApiService
     public function searchMultiple(string $title, ?int $year = null, int $limit = 20, int $page = 1): array
     {
         $token = $this->getAccessToken();
-        if (!$token) return ['results' => []];
+        if (!$token) {
+            return ['results' => []];
+        }
 
         // Parse tags from title if present
         $originalTitle = $title;
@@ -160,7 +191,7 @@ class GameApiService
         if (preg_match('/system:\s*"([^"]+)"/i', $title, $matches)) {
             $platformsFilter = $matches[1];
             $title = str_replace($matches[0], '', $title);
-        } elseif (preg_match('/system:\s*(\S+)/i', $title, $matches)) {
+        } else if (preg_match('/system:\s*(\S+)/i', $title, $matches)) {
             $platformsFilter = $matches[1];
             $title = str_replace($matches[0], '', $title);
         }
@@ -197,13 +228,19 @@ class GameApiService
         try {
             $response = $this->client->post('games', [
                 'headers' => [
-                    'Client-ID' => $this->clientId,
+                    'Client-ID'     => $this->clientId,
                     'Authorization' => 'Bearer ' . $token,
                 ],
-                'body' => $body
+                'body'    => $body,
             ]);
 
+            if ($response->getStatusCode() === 401) {
+                $this->accessToken = null;
+                return ['results' => []];
+            }
+
             if ($response->getStatusCode() !== 200) {
+                log_message('error', 'IGDB Multiple Search Error (' . $response->getStatusCode() . '): ' . $response->getBody());
                 return ['results' => []];
             }
 
@@ -223,7 +260,7 @@ class GameApiService
                     'poster_url'  => isset($game['cover']['url']) ? 'https:' . str_replace('t_thumb', 't_cover_big', $game['cover']['url']) : null,
                     'overview'    => $game['summary'] ?? null,
                     'platforms'   => !empty($platforms) ? implode(', ', $platforms) : null,
-                    'type'        => 'IGDB'
+                    'type'        => 'IGDB',
                 ];
             }
 
@@ -238,7 +275,7 @@ class GameApiService
                 'total_results' => $totalResults,
                 'page'          => $page,
                 'total_pages'   => $totalPages,
-                'is_estimated'  => $hasMore // Flag to indicate that totals are estimated
+                'is_estimated'  => $hasMore, // Flag to indicate that totals are estimated
             ];
         } catch (\Exception $e) {
             log_message('error', 'IGDB Multiple Search Error: ' . $e->getMessage());
@@ -282,20 +319,28 @@ class GameApiService
     public function getPosters(int $id, string $type = 'IGDB', int $limit = 10): array
     {
         $token = $this->getAccessToken();
-        if (!$token) return [];
+        if (!$token) {
+            return [];
+        }
 
         $body = "fields screenshots.url; where id = {$id};";
 
         try {
             $response = $this->client->post('games', [
                 'headers' => [
-                    'Client-ID' => $this->clientId,
+                    'Client-ID'     => $this->clientId,
                     'Authorization' => 'Bearer ' . $token,
                 ],
-                'body' => $body
+                'body'    => $body,
             ]);
 
+            if ($response->getStatusCode() === 401) {
+                $this->accessToken = null;
+                return [];
+            }
+
             if ($response->getStatusCode() !== 200) {
+                log_message('error', 'IGDB getPosters Error (' . $response->getStatusCode() . '): ' . $response->getBody());
                 return [];
             }
 
@@ -306,26 +351,28 @@ class GameApiService
             $details = $this->getMediaDetails($id);
             if ($details && !empty($details['poster_url'])) {
                 $posters[] = [
-                    'url' => $details['poster_url'],
-                    'thumbnail' => $details['poster_url'],
-                    'width' => null,
-                    'height' => null,
-                    'vote_average' => 0
+                    'url'          => $details['poster_url'],
+                    'thumbnail'    => $details['poster_url'],
+                    'width'        => null,
+                    'height'       => null,
+                    'vote_average' => 0,
                 ];
             }
 
             if (!empty($data[0]['screenshots'])) {
                 $count = count($posters);
                 foreach ($data[0]['screenshots'] as $screenshot) {
-                    if ($count >= $limit) break;
+                    if ($count >= $limit) {
+                        break;
+                    }
                     if (!empty($screenshot['url'])) {
                         $url = 'https:' . str_replace('t_thumb', 't_720p', $screenshot['url']);
                         $posters[] = [
-                            'url' => $url,
-                            'thumbnail' => 'https:' . str_replace('t_thumb', 't_screenshot_med', $screenshot['url']),
-                            'width' => null,
-                            'height' => null,
-                            'vote_average' => 0
+                            'url'          => $url,
+                            'thumbnail'    => 'https:' . str_replace('t_thumb', 't_screenshot_med', $screenshot['url']),
+                            'width'        => null,
+                            'height'       => null,
+                            'vote_average' => 0,
                         ];
                         $count++;
                     }

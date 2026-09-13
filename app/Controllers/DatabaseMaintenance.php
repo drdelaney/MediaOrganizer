@@ -433,29 +433,7 @@ class DatabaseMaintenance extends BaseController
         $configVersion = (int)$configModel->getParam('version', 0);
         $needsFix = $configVersion < 7;
 
-        $migrations = \Config\Services::migrations(null, $this->db);
-        // Ensure we check the App namespace for our migrations
-        $available = $migrations->setNamespace('App')->findMigrations();
-        
-        // Get all applied migrations from history across all groups/namespaces for better accuracy
-        $history = [];
-        if ($this->db->tableExists('migrations')) {
-            $history = $this->db->table('migrations')->get()->getResult();
-        }
-
-        $historyUids = [];
-        foreach ($history as $row) {
-            // Replicate CI4's getObjectUid logic: stripped version + class name
-            $historyUids[] = preg_replace('/[^0-9]/', '', $row->version) . $row->class;
-        }
-
-        $hasPendingMigrations = false;
-        foreach ($available as $migration) {
-            if (!in_array($migration->uid, $historyUids)) {
-                $hasPendingMigrations = true;
-                break;
-            }
-        }
+        $hasPendingMigrations = has_pending_migrations(true);
 
         // Check for pending notifications (overdue loans with notifications enabled)
         $hasPendingNotifications = false;
@@ -1268,6 +1246,10 @@ class DatabaseMaintenance extends BaseController
     public function backupDatabase()
     {
         try {
+            // Prevent execution timeout and memory exhaustion during backup of large tables/blobs
+            @ini_set('memory_limit', '512M');
+            @set_time_limit(0);
+
             $dbName = $this->db->getDatabase();
             $tables = $this->getAllTables();
             
@@ -1332,11 +1314,11 @@ class DatabaseMaintenance extends BaseController
                         $columns = array_keys($firstRow);
                         $columnList = '`' . implode('`, `', $columns) . '`';
                         
-                        // Process in chunks of 100 rows
-                        $chunkSize = 100;
+                        // Process in chunks - smaller chunks for large binary/blob tables (like posters)
+                        $chunkSize = ($table === 'posters') ? 10 : 100;
                         for ($offset = 0; $offset < $totalRows; $offset += $chunkSize) {
-                            $rows = $builder->get($chunkSize, $offset)->getResultArray();
-                            foreach ($rows as $row) {
+                            $query = $builder->get($chunkSize, $offset);
+                            while ($row = $query->getUnbufferedRow('array')) {
                                 $values = [];
                                 foreach ($row as $value) {
                                     if ($value === null) {
@@ -1346,7 +1328,15 @@ class DatabaseMaintenance extends BaseController
                                     }
                                 }
                                 fwrite($output, "INSERT INTO `{$table}` ({$columnList}) VALUES (" . implode(', ', $values) . ");\n");
+                                unset($values, $row);
                             }
+                            if (function_exists('gc_collect_cycles')) {
+                                gc_collect_cycles();
+                            }
+                            if (ob_get_level() > 0) {
+                                ob_flush();
+                            }
+                            flush();
                         }
                     }
                     fwrite($output, "\n");

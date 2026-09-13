@@ -26,7 +26,7 @@ class MovieApiService
                 'User-Agent' => $this->userAgent,
                 'Accept'     => 'application/json',
             ],
-        ]);
+        ], null, null, false);
     }
 
     /**
