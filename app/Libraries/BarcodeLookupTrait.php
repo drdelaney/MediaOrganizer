@@ -23,7 +23,7 @@ trait BarcodeLookupTrait
 
         $url = "https://api.upcitemdb.com/prod/trial/lookup?upc=" . urlencode($barcode);
         
-        $client = \Config\Services::curlrequest();
+        $client = \Config\Services::curlrequest([], null, null, false);
         $headers = [
             'User-Agent' => $userAgent,
             'Accept' => 'application/json',

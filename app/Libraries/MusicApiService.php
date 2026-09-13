@@ -27,7 +27,7 @@ class MusicApiService
                 'User-Agent' => $this->userAgent,
                 'Accept'     => 'application/json',
             ],
-        ]);
+        ], null, null, false);
     }
 
     /**
@@ -221,7 +221,7 @@ class MusicApiService
     public function getPosters(string $mbid, string $type = 'MusicBrainz', int $limit = 10): array
     {
         try {
-            $response = \Config\Services::curlrequest()->get("https://coverartarchive.org/release/{$mbid}", [
+            $response = \Config\Services::curlrequest([], null, null, false)->get("https://coverartarchive.org/release/{$mbid}", [
                 'headers' => [
                     'User-Agent' => $this->userAgent,
                     'Accept'     => 'application/json',
