@@ -138,6 +138,30 @@
         </div>
     <?php endif; ?>
 
+    <?php
+    // Check for vulnerable/bad PHP runtime versions
+    $showPhpSecurityWarning = false;
+    $phpSecurityInfo = [];
+    static $cachedPhpSecurityInfo = null;
+    if ($cachedPhpSecurityInfo !== null) {
+        $phpSecurityInfo = $cachedPhpSecurityInfo;
+    } else {
+        $phpSecurityInfo = check_php_version_security();
+        $cachedPhpSecurityInfo = $phpSecurityInfo;
+    }
+
+    if ($phpSecurityInfo['is_vulnerable'] && (session()->get('authenticated') || $matchedRouteName === 'setup')) {
+        $showPhpSecurityWarning = true;
+    }
+
+    if ($showPhpSecurityWarning): ?>
+        <div class="alert alert-danger alert-dismissible fade show mb-0 rounded-0 text-center" role="alert">
+            <i class="bi bi-shield-slash-fill"></i>
+            <strong>Security Warning!</strong> <?= esc($phpSecurityInfo['message']) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
     <!-- Navigation -->
     <?php if (!isset($hide_nav) || !$hide_nav): ?>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">

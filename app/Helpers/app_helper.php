@@ -605,3 +605,63 @@ if (!function_exists('has_pending_migrations')) {
         }
     }
 }
+
+if (!function_exists('check_php_version_security')) {
+    /**
+     * Check the PHP runtime against known critical vulnerabilities:
+     * - CVE-2026-109618 / CVE-2026-109619 ("PHP2Shell"): fixed in PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12.
+     *   PHP < 8.2 is EOL and has no fix.
+     *
+     * CVE-2026-111497 (Brotli, fixed in libbrotli 1.2.1) is intentionally not checked: distributions
+     * such as Rocky Linux backport the fix into older Brotli releases (e.g. 1.0.9), so a version
+     * comparison produces false positives.
+     *
+     * Note: Linux distributions often backport fixes without changing PHP_VERSION, so a
+     * vulnerable result there should be confirmed against the package vendor's advisory.
+     *
+     * @param string|null $phpVersion PHP version to check (defaults to PHP_VERSION)
+     * @return array{is_vulnerable: bool, current_version: string, min_safe_version: ?string, fixed_versions: array, cves: array, message: ?string}
+     */
+    function check_php_version_security(?string $phpVersion = null): array
+    {
+        $fixedVersions = [
+            '8.2' => '8.2.35',
+            '8.3' => '8.3.36',
+            '8.4' => '8.4.27',
+            '8.5' => '8.5.12',
+        ];
+
+        $version = $phpVersion ?? PHP_VERSION;
+        $cves = [];
+        $minSafeVersion = null;
+        $branch = implode('.', array_slice(explode('.', $version), 0, 2));
+
+        if (version_compare($version, '8.2.0', '<')) {
+            $minSafeVersion = $fixedVersions['8.2'];
+            $cves = ['CVE-2026-109618', 'CVE-2026-109619'];
+        } else if (isset($fixedVersions[$branch]) && version_compare($version, $fixedVersions[$branch], '<')) {
+            $minSafeVersion = $fixedVersions[$branch];
+            $cves = ['CVE-2026-109618', 'CVE-2026-109619'];
+        }
+
+        $message = null;
+        if (!empty($cves)) {
+            $message = 'Your PHP runtime (' . $version . ') is affected by critical security issues (' . implode(', ', $cves) . ').';
+            if (version_compare($version, '8.2.0', '<')) {
+                $message .= ' This PHP version is end-of-life; upgrade to PHP ' . $minSafeVersion . ' or newer.';
+            } else if ($minSafeVersion !== null) {
+                $message .= ' Please upgrade to PHP ' . $minSafeVersion . ' or newer.';
+            }
+            $message .= ' If your OS vendor backports security fixes, verify against their advisory.';
+        }
+
+        return [
+            'is_vulnerable' => !empty($cves),
+            'current_version' => $version,
+            'min_safe_version' => $minSafeVersion,
+            'fixed_versions' => $fixedVersions,
+            'cves' => $cves,
+            'message' => $message,
+        ];
+    }
+}

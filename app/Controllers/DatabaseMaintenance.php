@@ -310,12 +310,29 @@ class DatabaseMaintenance extends BaseController
         // PHP Version
         $phpVersion = PHP_VERSION;
         $minPhpVersion = '7.4.0';
+        $phpSecurity = check_php_version_security();
+        $suggestedPhpVersion = implode('+, ', $phpSecurity['fixed_versions']) . '+';
+
+        if (version_compare($phpVersion, $minPhpVersion, '<')) {
+            $phpStatus = 'error';
+            $phpMessage = 'PHP version (' . $phpVersion . ') is too old (minimum required is ' . $minPhpVersion . ').';
+        } else if ($phpSecurity['is_vulnerable']) {
+            $phpStatus = 'warning';
+            $phpMessage = 'PHP version meets minimum requirements (' . $minPhpVersion . ') but is affected by critical security issues (' . implode(', ', $phpSecurity['cves']) . ').';
+        } else {
+            $phpStatus = 'success';
+            $phpMessage = 'PHP version is compatible and not affected by the checked CVEs.';
+        }
+
         $checks['php_version'] = [
             'name' => 'PHP Version',
             'current' => $phpVersion,
             'required' => '>= ' . $minPhpVersion,
-            'status' => version_compare($phpVersion, $minPhpVersion, '>=') ? 'success' : 'error',
-            'message' => version_compare($phpVersion, $minPhpVersion, '>=') ? 'PHP version is compatible' : 'PHP version is too old'
+            'suggested' => $suggestedPhpVersion,
+            'status' => $phpStatus,
+            'message' => $phpMessage,
+            'warning' => $phpSecurity['message'],
+            'cves' => $phpSecurity['cves'],
         ];
 
         // Required PHP Extensions
