@@ -98,11 +98,20 @@
                             <p class="mb-1 text-muted small">Free, high quality, open source icon library.</p>
                         </a>
                         <a href="https://www.php.net/" target="_blank" class="list-group-item list-group-item-action">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">PHP</h6>
-                                <small>Language</small>
+                            <?php $phpSec = check_php_version_security(); ?>
+                            <div class="d-flex w-100 justify-content-between align-items-center">
+                                <h6 class="mb-1">PHP (<?= esc(PHP_VERSION) ?>)</h6>
+                                <?php if ($phpSec['is_vulnerable']): ?>
+                                    <span class="badge bg-danger"><i class="bi bi-shield-slash-fill"></i> Vulnerable</span>
+                                <?php else: ?>
+                                    <span class="badge bg-success"><i class="bi bi-shield-check"></i> Supported</span>
+                                <?php endif; ?>
                             </div>
-                            <p class="mb-1 text-muted small">A popular general-purpose scripting language that is especially suited to web development.</p>
+                            <?php if ($phpSec['is_vulnerable']): ?>
+                                <p class="mb-1 text-danger small fw-semibold"><?= esc($phpSec['message']) ?></p>
+                            <?php else: ?>
+                                <p class="mb-1 text-muted small">A popular general-purpose scripting language that is especially suited to web development.</p>
+                            <?php endif; ?>
                         </a>
                         <a href="https://mariadb.org/" target="_blank" class="list-group-item list-group-item-action">
                             <div class="d-flex w-100 justify-content-between">

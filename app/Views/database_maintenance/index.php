@@ -130,12 +130,21 @@
             </div>
 
             <div class="col-md-4 mb-4">
-                <div class="card">
+                <?php
+                $phpSecCard = check_php_version_security();
+                $isPhpVulnerable = $phpSecCard['is_vulnerable'] ?? false;
+                ?>
+                <div class="card <?= $isPhpVulnerable ? 'border-warning' : '' ?>">
                     <div class="card-body text-center">
-                        <i class="bi bi-code-square display-4 text-info"></i>
+                        <i class="bi bi-code-square display-4 <?= $isPhpVulnerable ? 'text-warning' : 'text-info' ?>"></i>
                         <h5 class="card-title mt-3">PHP & Package Environment</h5>
                         <p class="card-text">Check PHP version, extensions, and dependencies.</p>
-                        <button id="check-env-btn" class="btn btn-info">
+                        <?php if ($isPhpVulnerable): ?>
+                            <p class="card-text text-warning small mb-3">
+                                <i class="bi bi-shield-slash-fill"></i> <strong>PHP <?= esc(PHP_VERSION) ?></strong> has known security vulnerabilities.
+                            </p>
+                        <?php endif; ?>
+                        <button id="check-env-btn" class="btn <?= $isPhpVulnerable ? 'btn-warning' : 'btn-info' ?>">
                             <i class="bi bi-code-square"></i> Show Details
                         </button>
                     </div>
@@ -422,6 +431,13 @@ document.addEventListener('DOMContentLoaded', function() {
         resultsArea.scrollIntoView({ behavior: 'smooth' });
     }
 
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     function showEnvironmentResults(data) {
         const statusColors = {
             'success': 'success',
@@ -459,13 +475,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 html += '</td>';
                 html += '<td>';
                 html += check.message;
+                if (check.warning) {
+                    html += `<br><span class="text-danger fw-semibold"><i class="bi bi-shield-slash-fill"></i> ${escapeHtml(check.warning)}</span>`;
+                }
                 if (check.current) {
                     html += `<br><small><strong>Current:</strong> ${check.current}</small>`;
                 }
                 if (check.required) {
                     html += `<br><small><strong>Required:</strong> ${check.required}</small>`;
                 }
-                if (check.recommended) {
+                if (check.suggested) {
+                    html += `<br><small><strong>Suggested:</strong> ${escapeHtml(check.suggested)}</small>`;
+                }
+                if (check.recommended && check.recommended !== check.suggested) {
                     html += `<br><small><strong>Recommended:</strong> ${check.recommended}</small>`;
                 }
                 html += '</td>';
